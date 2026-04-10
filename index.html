@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>scrobbler.mtmn.name</title>
+    <script src="https://unpkg.com/htmx.org@2.0.7"></script>
+    <style>
+        body {
+            font-family: 'Courier New', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #332d38;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #ffffff;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 20px 0;
+        }
+        
+        li {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(80, 68, 127, 0.5);
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        li.success {
+            background: rgba(185, 208, 170, 0.2);
+            border-color: rgba(185, 208, 170, 0.3);
+        }
+        
+        .track-info {
+            flex: 1;
+        }
+        
+        .track-name {
+            font-weight: bold;
+            font-size: 16px;
+            color: #ffffff;
+        }
+        
+        .track-artist {
+            font-size: 14px;
+            color: #a0c0d0;
+            margin-top: 4px;
+        }
+        
+        .track-time {
+            font-size: 12px;
+            color: #9fbfe7;
+            margin-top: 2px;
+        }
+        
+        .status {
+            color: #b9d0aa;
+            font-weight: bold;
+        }
+        
+        .loading {
+            padding: 20px;
+            color: #9fbfe7;
+            text-align: center;
+        }
+        
+        .error {
+            padding: 20px;
+            color: #eca28f;
+            text-align: center;
+        }
+        
+        .small {
+            font-size: 12px;
+            color: #9fbfe7;
+            margin-top: 20px;
+        }
+        
+        .small a {
+            color: #a0c0d0;
+            text-decoration: none;
+        }
+        
+        .small a:hover {
+            color: #ffffff;
+            text-decoration: underline;
+        }
+        
+        .refresh-btn {
+            background: none;
+            border: none;
+            color: #a0c0d0;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: underline;
+        }
+        
+        .refresh-btn:hover {
+            color: #ffffff;
+        }
+        
+        .playing-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #b9d0aa;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <ul>
+            <li class="success">Now Playing</li>
+        </ul>
+        
+        <h1>Recent Tracks</h1>
+        <ul id="tracks-container"
+            hx-get="/api/1/user/mtmn/listens"
+            hx-trigger="load, every 30s"
+            hx-target="#tracks-container"
+            hx-ext="listenbrainz">
+            <li class="loading">Loading recent tracks...</li>
+        </ul>
+        
+        <p class="small">
+            <button class="refresh-btn" hx-get="/api/1/user/mtmn/listens" hx-target="#tracks-container">Refresh</button> • 
+            <a href="https://listenbrainz.org/user/mtmn/">ListenBrainz</a> • 
+        </p>
+        
+        <p class="small" id="last-updated"></p>
+    </div>
+    
+    <script>
+        // Update last updated time
+        function updateLastUpdated() {
+            const now = new Date();
+            document.getElementById('last-updated').textContent = `Last check: ${now.toISOString()}`;
+        }
+        
+        // Handle ListenBrainz API response
+        htmx.defineExtension('listenbrainz', {
+            onEvent: function(name, evt) {
+                if (name === 'htmx:afterRequest') {
+                    const xhr = evt.detail.xhr;
+                    if (xhr.status === 200) {
+                        try {
+                            const data = JSON.parse(xhr.responseText);
+                            if (data.payload && data.payload.listens) {
+                                const html = generateTracksHTML(data.payload.listens);
+                                document.getElementById('tracks-container').innerHTML = html;
+                            } else {
+                                document.getElementById('tracks-container').innerHTML = '<li class="error">No tracks found</li>';
+                            }
+                        } catch (e) {
+                            document.getElementById('tracks-container').innerHTML = '<li class="error">Error parsing response</li>';
+                        }
+                    } else {
+                        document.getElementById('tracks-container').innerHTML = '<li class="error">Error loading tracks</li>';
+                    }
+                    updateLastUpdated();
+                }
+            }
+        });
+        
+        function generateTracksHTML(listens) {
+            let html = '';
+            listens.forEach((listen, index) => {
+                const track = listen.track_metadata;
+                const listenedAt = formatTimeAgo(listen.listened_at);
+                
+                const trackName = track.track_name || 'Unknown Track';
+                const artistName = track.artist_name || 'Unknown Artist';
+                const releaseName = track.release_name || 'Unknown Album';
+                
+                const playingIndicator = index === 0 ? '<span class="playing-indicator"></span>' : '';
+                
+                html += `
+                    <li class="success">
+                        <div class="track-info">
+                            <div class="track-name">${playingIndicator}${escapeHtml(trackName)}</div>
+                            <div class="track-artist">${escapeHtml(artistName)}</div>
+                            <div class="track-time">${escapeHtml(releaseName)} • ${listenedAt}</div>
+                        </div>
+                        <span class="status">Played</span>
+                    </li>
+                `;
+            });
+            return html;
+        }
+        
+        function formatTimeAgo(timestamp) {
+            const now = Math.floor(Date.now() / 1000);
+            const diff = now - timestamp;
+            
+            if (diff < 60) {
+                return 'just now';
+            } else if (diff < 3600) {
+                const minutes = Math.floor(diff / 60);
+                return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+            } else if (diff < 86400) {
+                const hours = Math.floor(diff / 3600);
+                return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+            } else {
+                const days = Math.floor(diff / 86400);
+                return `${days} day${days > 1 ? 's' : ''} ago`;
+            }
+        }
+        
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        // Initial update
+        updateLastUpdated();
+    </script>
+</body>
+</html>
