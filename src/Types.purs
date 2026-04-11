@@ -111,3 +111,48 @@ instance EncodeJson MbidMapping where
     "release_mbid" := encodeJson releaseMbid
       ~> "caa_release_mbid" := encodeJson caaReleaseMbid
       ~> jsonEmptyObject
+
+newtype StatsEntry = StatsEntry
+  { name :: String
+  , count :: Int
+  }
+
+derive instance eqStatsEntry :: Eq StatsEntry
+derive instance genericStatsEntry :: Generic StatsEntry _
+
+instance DecodeJson StatsEntry where
+  decodeJson json = do
+    obj <- decodeJson json
+    name <- obj .: "name"
+    count <- obj .: "count"
+    pure $ StatsEntry { name, count }
+
+instance EncodeJson StatsEntry where
+  encodeJson (StatsEntry { name, count }) =
+    "name" := encodeJson name
+      ~> "count" := encodeJson count
+      ~> jsonEmptyObject
+
+newtype Stats = Stats
+  { genres :: Array StatsEntry
+  , labels :: Array StatsEntry
+  , years :: Array StatsEntry
+  }
+
+derive instance eqStats :: Eq Stats
+derive instance genericStats :: Generic Stats _
+
+instance DecodeJson Stats where
+  decodeJson json = do
+    obj <- decodeJson json
+    genres <- obj .: "genres"
+    labels <- obj .: "labels"
+    years <- obj .: "years"
+    pure $ Stats { genres, labels, years }
+
+instance EncodeJson Stats where
+  encodeJson (Stats { genres, labels, years }) =
+    "genres" := encodeJson genres
+      ~> "labels" := encodeJson labels
+      ~> "years" := encodeJson years
+      ~> jsonEmptyObject
