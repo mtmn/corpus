@@ -10,10 +10,11 @@ import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Exception (Error, error)
 import Foreign (Foreign)
 import Unsafe.Coerce (unsafeCoerce)
-import Types (Listen(..), TrackMetadata(..), MbidMapping(..))
+import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEntry(..))
 import Data.Traversable (traverse)
 import Foreign.Object as Object
-import Data.Nullable (Nullable, toMaybe)
+import Data.Nullable (Nullable, toMaybe, toNullable)
+import Data.Array (mapMaybe)
 
 foreign import data Connection :: Type
 
@@ -79,11 +80,70 @@ upsertScrobble conn (Listen { listenedAt, trackMetadata: TrackMetadata track }) 
       _ <- run conn "INSERT INTO scrobbles SELECT * FROM (SELECT ? as listened_at, ? as track_name, ? as artist_name, ? as release_name, ? as release_mbid, ? as caa_release_mbid) t WHERE NOT EXISTS (SELECT 1 FROM scrobbles WHERE listened_at = t.listened_at)" params
       pure unit
 
-getScrobbles :: Connection -> Int -> Int -> Aff (Array Listen)
-getScrobbles conn limit offset = do
+getScrobbles :: Connection -> Int -> Int -> Maybe { field :: String, value :: String } -> Aff (Array Listen)
+getScrobbles conn limit offset Nothing = do
   rows <- queryAll conn "SELECT listened_at, track_name, artist_name, release_name, release_mbid, caa_release_mbid FROM scrobbles ORDER BY listened_at DESC LIMIT ? OFFSET ?"
     [ unsafeCoerce limit, unsafeCoerce offset ]
   pure $ fromMaybe [] $ traverse rowToListen rows
+getScrobbles conn limit offset (Just { field, value }) = do
+  let
+    col = case field of
+      "label" -> "rm.label"
+      "year" -> "rm.release_year::VARCHAR"
+      _ -> "rm.genre"
+  rows <- queryAll conn
+    ( "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid"
+        <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+        <> " WHERE "
+        <> col
+        <> " = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+    )
+    [ unsafeCoerce value, unsafeCoerce limit, unsafeCoerce offset ]
+  pure $ fromMaybe [] $ traverse rowToListen rows
+
+initReleaseMetadata :: Connection -> Aff Unit
+initReleaseMetadata conn = do
+  run conn "CREATE TABLE IF NOT EXISTS release_metadata (release_mbid VARCHAR PRIMARY KEY, genre VARCHAR, label VARCHAR, release_year INTEGER)" []
+
+getUnenrichedMbids :: Connection -> Int -> Aff (Array String)
+getUnenrichedMbids conn limit = do
+  rows <- queryAll conn
+    "SELECT DISTINCT release_mbid FROM scrobbles WHERE release_mbid != '' AND release_mbid NOT IN (SELECT release_mbid FROM release_metadata) LIMIT ?"
+    [ unsafeCoerce limit ]
+  pure $ mapMaybe extractMbid rows
+  where
+  extractMbid json = do
+    obj <- toObject json
+    Object.lookup "release_mbid" obj >>= toString
+
+upsertReleaseMetadata :: Connection -> String -> Maybe String -> Maybe String -> Maybe Int -> Aff Unit
+upsertReleaseMetadata conn mbid genre label year = do
+  _ <- run conn
+    "INSERT INTO release_metadata (release_mbid, genre, label, release_year) SELECT * FROM (SELECT ? as release_mbid, ? as genre, ? as label, ? as release_year) t WHERE NOT EXISTS (SELECT 1 FROM release_metadata WHERE release_mbid = t.release_mbid)"
+    [ unsafeCoerce mbid
+    , unsafeCoerce (toNullable genre)
+    , unsafeCoerce (toNullable label)
+    , unsafeCoerce (toNullable year)
+    ]
+  pure unit
+
+getStats :: Connection -> Aff Stats
+getStats conn = do
+  genreRows <- queryAll conn "SELECT rm.genre as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.genre IS NOT NULL AND rm.genre != '' GROUP BY rm.genre ORDER BY count DESC LIMIT 50" []
+  labelRows <- queryAll conn "SELECT rm.label as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.label IS NOT NULL AND rm.label != '' GROUP BY rm.label ORDER BY count DESC LIMIT 50" []
+  yearRows <- queryAll conn "SELECT CAST(rm.release_year AS VARCHAR) as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.release_year IS NOT NULL GROUP BY rm.release_year ORDER BY rm.release_year DESC" []
+  pure $ Stats
+    { genres: mapMaybe rowToEntry genreRows
+    , labels: mapMaybe rowToEntry labelRows
+    , years: mapMaybe rowToEntry yearRows
+    }
+
+rowToEntry :: Json -> Maybe StatsEntry
+rowToEntry json = do
+  obj <- toObject json
+  name <- Object.lookup "name" obj >>= toString
+  count <- Object.lookup "count" obj >>= (unsafeCoerce >>> Just)
+  pure $ StatsEntry { name, count }
 
 rowToListen :: Json -> Maybe Listen
 rowToListen json = do

@@ -37,7 +37,8 @@ import Data.Argonaut.Core (toObject, toArray, toString, stringify)
 import Data.Array ((!!), length, uncons)
 import Data.Nullable (Nullable, toMaybe)
 import Data.Tuple (Tuple(..))
-import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run)
+import Data.Foldable (for_)
+import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, upsertReleaseMetadata, getStats)
 import Types (Listen(..), ListenBrainzResponse(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
@@ -160,7 +161,7 @@ indexHtml =
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>scorpus</title>
+    <title>scrobbler</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -353,6 +354,139 @@ indexHtml =
             font-size: 14px;
             color: #9fbfe7;
         }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: 1px solid #50447f;
+            color: #9fbfe7;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        .tab-btn.active {
+            background: #521e40;
+            color: #ffffff;
+            box-shadow: 2px 2px 0px #50447f;
+        }
+
+        .tab-btn:hover {
+            color: #ffffff;
+        }
+
+        .stats-section {
+            margin-bottom: 30px;
+        }
+
+        .stats-section h2 {
+            font-size: 11px;
+            color: #9fbfe7;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin: 0 0 10px 0;
+            border-bottom: 1px solid #50447f;
+            padding-bottom: 5px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 8px;
+            margin-bottom: 3px;
+            position: relative;
+            border-radius: 2px;
+            overflow: hidden;
+            font-size: 13px;
+        }
+
+        .stat-bar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: #521e40;
+            border-right: 1px solid #50447f;
+            z-index: 0;
+        }
+
+        .stat-name {
+            position: relative;
+            z-index: 1;
+            color: #ffffff;
+            flex: 1;
+            padding-right: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stat-count {
+            position: relative;
+            z-index: 1;
+            color: #9fbfe7;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .stats-empty {
+            color: #9fbfe7;
+            font-size: 13px;
+            padding: 10px 0;
+        }
+
+        .stat-row {
+            cursor: pointer;
+        }
+
+        .stat-row:hover .stat-name {
+            color: #a0c0d0;
+        }
+
+        .filter-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #521e40;
+            border: 1px solid #50447f;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #9fbfe7;
+        }
+
+        .filter-label {
+            flex: 1;
+        }
+
+        .filter-label strong {
+            color: #ffffff;
+        }
+
+        .filter-clear {
+            background: none;
+            border: 1px solid #50447f;
+            color: #9fbfe7;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        .filter-clear:hover {
+            color: #ffffff;
+            border-color: #ffffff;
+        }
     </style>
 </head>
 <body>
@@ -374,6 +508,7 @@ handleRequest db req res = do
     "/" -> serveIndex res
     "/proxy" -> serveProxy db url res
     "/cover" -> serveCover url res
+    "/stats" -> serveStats db res
     "/client.js" -> serveClientJs res
     "/favicon.ico" -> serveAsset "image/x-icon" "assets/favicon.ico" res
     "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
@@ -578,11 +713,18 @@ serveProxy db url res = do
   launchAff_ do
     limitStr <- liftEffect $ getQueryParam "limit" url
     offsetStr <- liftEffect $ getQueryParam "offset" url
+    filterFieldStr <- liftEffect $ getQueryParam "filterField" url
+    filterValueStr <- liftEffect $ getQueryParam "filterValue" url
 
     let limit = fromMaybe 25 (toMaybe limitStr >>= fromString)
     let offset = fromMaybe 0 (toMaybe offsetStr >>= fromString)
+    let
+      mFilter = do
+        field <- toMaybe filterFieldStr
+        value <- toMaybe filterValueStr
+        pure { field, value }
 
-    listens <- getScrobbles db limit offset
+    listens <- getScrobbles db limit offset mFilter
     let responseBody = stringify $ encodeJson { payload: { listens: listens } }
 
     liftEffect $ do
@@ -614,11 +756,83 @@ serveNotFound res = do
   void $ writeString w UTF8 "Not Found"
   end w
 
+serveStats :: Connection -> Response -> Effect Unit
+serveStats db res = do
+  setHeader "Content-Type" "application/json" (toOutgoingMessage res)
+  setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
+  launchAff_ do
+    stats <- getStats db
+    let responseBody = stringify $ encodeJson stats
+    liftEffect $ do
+      setStatusCode 200 res
+      let w = toWriteable (toOutgoingMessage res)
+      void $ writeString w UTF8 responseBody
+      end w
+
+type MbData = { genre :: Maybe String, label :: Maybe String, year :: Maybe Int }
+
+fetchMusicBrainzRelease :: String -> Aff (Maybe MbData)
+fetchMusicBrainzRelease mbid = do
+  let url = "https://musicbrainz.org/ws/2/release/" <> mbid <> "?inc=genres+labels+release-groups&fmt=json"
+  result <- try $ fetch url { method: GET, headers: { "User-Agent": "Scorpus/1.0 +https://codeberg.org/mtmn/scorpus" } }
+  case result of
+    Left err -> do
+      Log.error $ "MusicBrainz fetch error for " <> mbid <> ": " <> Exception.message err
+      pure Nothing
+    Right fr | fr.status == 200 -> do
+      jsonResult <- try $ fromJson fr.json
+      case jsonResult of
+        Left _ -> pure $ Just { genre: Nothing, label: Nothing, year: Nothing }
+        Right json -> do
+          let
+            genre = do
+              obj <- toObject json
+              genres <- Object.lookup "genres" obj >>= toArray
+              firstGenre <- genres !! 0 >>= toObject
+              Object.lookup "name" firstGenre >>= toString
+            label = do
+              obj <- toObject json
+              labelInfo <- Object.lookup "label-info" obj >>= toArray
+              firstLabel <- labelInfo !! 0 >>= toObject
+              labelObj <- Object.lookup "label" firstLabel >>= toObject
+              Object.lookup "name" labelObj >>= toString
+            year = do
+              obj <- toObject json
+              rg <- Object.lookup "release-group" obj >>= toObject
+              dateStr <- Object.lookup "first-release-date" rg >>= toString
+              case uncons (split "-" dateStr) of
+                Just { head } -> fromString head
+                Nothing -> Nothing
+          Log.info $ "Enriched " <> mbid <> ": genre=" <> show genre <> " label=" <> show label <> " year=" <> show year
+          pure $ Just { genre, label, year }
+    Right fr | fr.status == 404 -> do
+      Log.info $ "MusicBrainz 404 for " <> mbid
+      pure $ Just { genre: Nothing, label: Nothing, year: Nothing }
+    Right fr -> do
+      Log.warn $ "MusicBrainz " <> show fr.status <> " for " <> mbid <> ", will retry"
+      pure Nothing
+
+enrichMetadata :: Connection -> Aff Unit
+enrichMetadata conn = forever do
+  mbids <- getUnenrichedMbids conn 10
+  if length mbids == 0 then
+    delay (Milliseconds 60000.0)
+  else do
+    for_ mbids \mbid -> do
+      delay (Milliseconds 1100.0)
+      result <- try $ fetchMusicBrainzRelease mbid
+      case result of
+        Left err -> Log.error $ "Enrichment error: " <> Exception.message err
+        Right Nothing -> pure unit
+        Right (Just mbdata) -> upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
+
 startServer :: Int -> String -> Effect Unit
 startServer port dbFile = launchAff_ do
   conn <- connect dbFile
   initDb conn
+  initReleaseMetadata conn
   void $ forkAff $ syncData conn
+  void $ forkAff $ enrichMetadata conn
 
   liftEffect $ do
     server <- createServer
