@@ -96,7 +96,7 @@ component =
   render state =
     HH.div
       [ HP.class_ (H.ClassName "container") ]
-      [ HH.h1_ [ HH.text "scorpus" ]
+      [ HH.h1_ [ HH.text "scrobbler" ]
       , HH.div
           [ HP.class_ (H.ClassName "tabs") ]
           [ HH.button
