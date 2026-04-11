@@ -4,7 +4,7 @@ import Prelude
 
 import Effect (Effect)
 import Effect.Class (liftEffect)
-import Effect.Console as Console
+import Log as Log
 import Node.HTTP (createServer)
 import Node.HTTPS as HTTPS
 import Node.HTTP.Server as Server
@@ -53,12 +53,12 @@ listenBrainzUrl = "https://api.listenbrainz.org/1/user/mtmn/listens"
 fetchListenBrainzData :: Int -> Aff String
 fetchListenBrainzData count = makeAff \callback -> do
   let url = listenBrainzUrl <> "?count=" <> show count
-  Console.log $ "Fetching from ListenBrainz: " <> url
+  Log.info $ "Fetching from ListenBrainz: " <> url
   req <- HTTPS.get url
 
   req # on_ Client.responseH \res -> do
     let sc = IM.statusCode res
-    Console.log $ "ListenBrainz response status: " <> show sc
+    Log.info $ "ListenBrainz response status: " <> show sc
     launchAff_ do
       body <- readableToStringUtf8 (IM.toReadable res)
       liftEffect $ callback (Right body)
@@ -66,7 +66,7 @@ fetchListenBrainzData count = makeAff \callback -> do
   let errorH = EventHandle "error" mkEffectFn1
   on_ errorH
     ( \err -> do
-        Console.log $ "ListenBrainz fetch error: " <> Exception.message err
+        Log.error $ "ListenBrainz fetch error: " <> Exception.message err
         callback (Left err)
     )
     (unsafeCoerce req)
@@ -79,13 +79,13 @@ syncData conn = do
   let shouldInitialSync = Object.lookup "INITIAL_SYNC" env == Just "true"
 
   if shouldInitialSync then do
-    liftEffect $ Console.log "Performing initial sync of 10000 tracks"
-    void $ performSync 10000
+    Log.info "Performing initial sync of 100 tracks"
+    void $ performSync 100
   else
-    liftEffect $ Console.log "Initial sync skipped (INITIAL_SYNC != true)"
+    Log.info "Initial sync skipped (INITIAL_SYNC != true)"
 
   forever do
-    liftEffect $ Console.log "Performing periodic sync..."
+    Log.info "Performing periodic sync..."
     void $ performSync 100
     delay (Milliseconds 60000.0)
 
@@ -95,21 +95,21 @@ syncData conn = do
     case result of
       Right body -> do
         case parseJson body >>= decodeJson of
-          Left err -> liftEffect $ Console.log $ "Sync parse error: " <> show err
+          Left err -> Log.error $ "Sync parse error: " <> show err
           Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
-            liftEffect $ Console.log $ "Processing " <> show (length listens) <> " scrobbles"
+            Log.info $ "Processing " <> show (length listens) <> " scrobbles"
             run conn "BEGIN TRANSACTION" []
             newCount <- syncRecursive 0 listens
             run conn "COMMIT" []
-            liftEffect $ Console.log $ "Sync complete. Added " <> show newCount <> " new scrobbles."
-      Left err -> liftEffect $ Console.log $ "Sync fetch error: " <> Exception.message err
+            Log.info $ "Sync complete. Added " <> show newCount <> " new scrobbles."
+      Left err -> Log.error $ "Sync fetch error: " <> Exception.message err
 
   syncRecursive acc listens = case uncons listens of
     Nothing -> pure acc
     Just { head: l@(Listen { listenedAt: Just ts }), tail } -> do
       exists <- checkExists conn ts
       if exists then do
-        liftEffect $ Console.log $ "Hit existing record at " <> show ts <> ". Stopping sync."
+        Log.info $ "Hit existing record at " <> show ts <> ". Stopping sync."
         pure acc
       else do
         upsertScrobble conn l
@@ -328,7 +328,7 @@ handleRequest db req res = do
   let rawUrl = IM.url req
   url <- new' rawUrl "http://localhost"
   path <- pathname url
-  Console.log $ "Request received: " <> path
+  Log.info $ method <> " " <> rawUrl
 
   case path of
     "/" -> serveIndex res
@@ -382,14 +382,14 @@ serveCaaCover url res = do
             Left _ -> false
 
         if cached then do
-          liftEffect $ Console.log $ "Serving CAA cover from S3: " <> s3Key
+          Log.info $ "Serving CAA cover from S3: " <> s3Key
           liftEffect $ do
             setStatusCode 302 res
             setHeader "Location" (getS3Url s3Key) (toOutgoingMessage res)
             end (toWriteable (toOutgoingMessage res))
         else do
           let caaUrl = "https://coverartarchive.org/release/" <> mbid <> "/front-250"
-          liftEffect $ Console.log $ "Fetching CAA cover: " <> mbid
+          Log.info $ "Fetching CAA cover: " <> mbid
           proxyAndCacheImage caaUrl s3Key res
 
 serveLastfmCover :: URL -> Response -> Effect Unit
@@ -411,7 +411,7 @@ serveLastfmCover url res = do
         Left _ -> false
 
     if cached then do
-      liftEffect $ Console.log $ "Serving Last.fm cover from S3: " <> s3Key
+      Log.info $ "Serving Last.fm cover from S3: " <> s3Key
       liftEffect $ do
         setStatusCode 302 res
         setHeader "Location" (getS3Url s3Key) (toOutgoingMessage res)
@@ -423,7 +423,7 @@ serveLastfmCover url res = do
         Nothing -> liftEffect $ serveNotFound res
         Just k -> do
           let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artistStr) <> "&album=" <> (fromMaybe "" $ encodeURIComponent releaseStr) <> "&format=json"
-          liftEffect $ Console.log $ "Last.fm search: " <> artistStr <> " - " <> releaseStr
+          Log.info $ "Last.fm search: " <> artistStr <> " - " <> releaseStr
 
           result <- try $ fetch searchUrl { method: GET }
           case result of
@@ -440,13 +440,13 @@ serveLastfmCover url res = do
 
               case coverUrl of
                 Just urlStr -> do
-                  liftEffect $ Console.log $ "Found Last.fm cover: " <> urlStr
+                  Log.info $ "Found Last.fm cover: " <> urlStr
                   proxyAndCacheImage urlStr s3Key res
                 Nothing -> do
-                  liftEffect $ Console.log $ "No Last.fm cover found for: " <> artistStr <> " - " <> releaseStr
+                  Log.info $ "No Last.fm cover found for: " <> artistStr <> " - " <> releaseStr
                   liftEffect $ serveNotFound res
             Left err -> do
-              liftEffect $ Console.log $ "Last.fm API error: " <> Exception.message err
+              Log.error $ "Last.fm API error: " <> Exception.message err
               liftEffect $ serveNotFound res
 
 serveDiscogsCover :: URL -> Response -> Effect Unit
@@ -468,7 +468,7 @@ serveDiscogsCover url res = do
         Left _ -> false
 
     if cached then do
-      liftEffect $ Console.log $ "Serving Discogs cover from S3: " <> s3Key
+      Log.info $ "Serving Discogs cover from S3: " <> s3Key
       liftEffect $ do
         setStatusCode 302 res
         setHeader "Location" (getS3Url s3Key) (toOutgoingMessage res)
@@ -478,12 +478,12 @@ serveDiscogsCover url res = do
       let token = Object.lookup "DISCOGS_TOKEN" env
       case token of
         Nothing -> do
-          liftEffect $ Console.log "DISCOGS_TOKEN not found in env"
+          Log.info "DISCOGS_TOKEN not found in env"
           liftEffect $ serveNotFound res
         Just t -> do
           let queryStr = artistStr <> " " <> releaseStr
           let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
-          liftEffect $ Console.log $ "Discogs search (broad): " <> queryStr
+          Log.info $ "Discogs search (broad): " <> queryStr
 
           result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
           case result of
@@ -499,18 +499,18 @@ serveDiscogsCover url res = do
 
               case coverUrl of
                 Just urlStr -> do
-                  liftEffect $ Console.log $ "Found Discogs cover: " <> urlStr
+                  Log.info $ "Found Discogs cover: " <> urlStr
                   proxyAndCacheImage urlStr s3Key res
                 Nothing -> do
-                  liftEffect $ Console.log $ "No Discogs cover found for: " <> queryStr
+                  Log.info $ "No Discogs cover found for: " <> queryStr
                   liftEffect $ serveNotFound res
             Left err -> do
-              liftEffect $ Console.log $ "Discogs API error: " <> Exception.message err
+              Log.error $ "Discogs API error: " <> Exception.message err
               liftEffect $ serveNotFound res
 
 proxyAndCacheImage :: String -> String -> Response -> Aff Unit
 proxyAndCacheImage urlStr s3Key res = do
-  liftEffect $ Console.log $ "Proxying and caching image: " <> urlStr
+  Log.info $ "Proxying and caching image: " <> urlStr
   makeAff \cb -> do
     launchAff_ do
       fetchResult <- try $ fetch urlStr { method: GET }
@@ -529,11 +529,11 @@ proxyAndCacheImage urlStr s3Key res = do
           -- Cache to S3
           uploadResult <- try $ uploadToS3 s3Key (unsafeCoerce buf) contentType
           case uploadResult of
-            Right _ -> liftEffect $ Console.log $ "Cached to S3: " <> s3Key
-            Left err -> liftEffect $ Console.log $ "S3 upload failed: " <> Exception.message err
+            Right _ -> Log.info $ "Cached to S3: " <> s3Key
+            Left err -> Log.error $ "S3 upload failed: " <> Exception.message err
           liftEffect $ cb (Right unit)
         Left err -> do
-          liftEffect $ Console.log $ "Failed to fetch image: " <> Exception.message err
+          Log.error $ "Failed to fetch image: " <> Exception.message err
           liftEffect $ serveNotFound res
           liftEffect $ cb (Right unit)
     pure nonCanceler
@@ -589,7 +589,7 @@ startServer port = launchAff_ do
     let netServer = Server.toNetServer server
 
     netServer # on_ listeningH do
-      Console.log $ "Server is running on port " <> show port
+      Log.info $ "Server is running on port " <> show port
 
     listenTcp netServer { host: "127.0.0.1", port, backlog: 128 }
 

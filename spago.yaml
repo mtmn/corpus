@@ -15,10 +15,12 @@ package:
     - fetch
     - fetch-argonaut
     - foreign-object
+    - formatters
     - halogen
     - http-methods
     - integers
     - js-uri
+    - logging
     - maybe
     - node-buffer
     - node-event-emitter
