@@ -371,9 +371,7 @@ handleRequest db req res = do
   case path of
     "/" -> serveIndex res
     "/proxy" -> serveProxy db url res
-    "/caa-cover" -> serveCaaCover url res
-    "/discogs-cover" -> serveDiscogsCover url res
-    "/lastfm-cover" -> serveLastfmCover url res
+    "/cover" -> serveCover url res
     "/client.js" -> serveClientJs res
     "/favicon.ico" -> serveFavicon res
     _ -> do
@@ -409,188 +407,163 @@ foreign import getQueryParam :: String -> URL -> Effect (Nullable String)
 foreign import writeBuffer :: forall r. Writable r -> Foreign -> Effect Unit
 foreign import sanitizeKey :: String -> String
 
-serveCaaCover :: URL -> Response -> Effect Unit
-serveCaaCover url res = do
+serveCover :: URL -> Response -> Effect Unit
+serveCover url res = do
   launchAff_ do
     mbidMaybe <- liftEffect $ getQueryParam "mbid" url
-    case toMaybe mbidMaybe of
-      Nothing -> do
-        Log.warn "CAA cover request missing mbid"
-        liftEffect $ serveNotFound res
-      Just mbid -> do
-        let s3Key = "covers/caa/" <> mbid <> ".jpg"
-        cachedResult <- try $ existsInS3 s3Key
-        let
-          cached = case cachedResult of
-            Right b -> b
-            Left _ -> false
-
-        if cached then do
-          Log.info $ "Serving CAA cover from S3: " <> s3Key
-          liftEffect $ do
-            setStatusCode 302 res
-            setHeader "Location" (getS3Url s3Key) (toOutgoingMessage res)
-            end (toWriteable (toOutgoingMessage res))
-        else do
-          let caaUrl = "https://coverartarchive.org/release/" <> mbid <> "/front-250"
-          Log.info $ "Fetching CAA cover: " <> mbid
-          proxyAndCacheImage caaUrl s3Key res
-
-serveLastfmCover :: URL -> Response -> Effect Unit
-serveLastfmCover url res = do
-  launchAff_ do
     artistMaybe <- liftEffect $ getQueryParam "artist" url
     releaseMaybe <- liftEffect $ getQueryParam "release" url
+    let mbid = fromMaybe "" (toMaybe mbidMaybe)
     let artistStr = fromMaybe "" (toMaybe artistMaybe)
     let releaseStr = fromMaybe "" (toMaybe releaseMaybe)
 
-    if artistStr == "" || releaseStr == "" then do
-      Log.warn $ "Last.fm cover request missing artist or release: artist=" <> artistStr <> ", release=" <> releaseStr
-      liftEffect $ serveNotFound res
-    else do
-      let safeArtist = sanitizeKey artistStr
-      let safeRelease = sanitizeKey releaseStr
-      let s3Key = "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+    -- Strategy:
+    -- 1. If MBID exists, try CAA (S3 first, then Fetch)
+    -- 2. If CAA fails or no MBID, try Last.fm (S3 first, then Fetch)
+    -- 3. If Last.fm fails, try Discogs (S3 first, then Fetch)
 
-      cachedResult <- try $ existsInS3 s3Key
-      let
-        cached = case cachedResult of
-          Right b -> b
-          Left _ -> false
-
+    if mbid /= "" then do
+      let safeMbid = sanitizeKey mbid
+      let s3Key = "covers/caa/" <> safeMbid <> ".jpg"
+      cached <- checkS3 s3Key
       if cached then do
-        Log.info $ "Serving Last.fm cover from S3: " <> s3Key
-        liftEffect $ do
-          setStatusCode 302 res
-          setHeader "Location" (getS3Url s3Key) (toOutgoingMessage res)
-          end (toWriteable (toOutgoingMessage res))
+        Log.info $ "Serving CAA cover from S3: " <> s3Key
+        serveS3 s3Key res
       else do
-        env <- liftEffect getEnv
-        let apiKey = Object.lookup "LASTFM_API_KEY" env
-        case apiKey of
-          Nothing -> do
-            Log.error "LASTFM_API_KEY not found in env"
-            liftEffect $ serveNotFound res
-          Just k -> do
-            let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artistStr) <> "&album=" <> (fromMaybe "" $ encodeURIComponent releaseStr) <> "&format=json"
-            Log.info $ "Last.fm search: " <> artistStr <> " - " <> releaseStr
-
-            result <- try $ fetch searchUrl { method: GET }
-            case result of
-              Right fetchRes -> do
-                json <- fromJson fetchRes.json
-                let
-                  coverUrl = do
-                    obj <- toObject json
-                    album <- Object.lookup "album" obj >>= toObject
-                    images <- Object.lookup "image" album >>= toArray
-                    imageObj <- images !! 2 >>= toObject
-                    u <- Object.lookup "#text" imageObj >>= toString
-                    if u == "" then Nothing else Just u
-
-                case coverUrl of
-                  Just urlStr -> do
-                    Log.info $ "Found Last.fm cover: " <> urlStr
-                    proxyAndCacheImage urlStr s3Key res
-                  Nothing -> do
-                    Log.info $ "No Last.fm cover found for: " <> artistStr <> " - " <> releaseStr
-                    liftEffect $ serveNotFound res
-              Left err -> do
-                Log.error $ "Last.fm API error: " <> Exception.message err
-                liftEffect $ serveNotFound res
-
-serveDiscogsCover :: URL -> Response -> Effect Unit
-serveDiscogsCover url res = do
-  launchAff_ do
-    artistMaybe <- liftEffect $ getQueryParam "artist" url
-    releaseMaybe <- liftEffect $ getQueryParam "release" url
-    let artistStr = fromMaybe "" (toMaybe artistMaybe)
-    let releaseStr = fromMaybe "" (toMaybe releaseMaybe)
-
-    if artistStr == "" || releaseStr == "" then do
-      Log.warn $ "Discogs cover request missing artist or release: artist=" <> artistStr <> ", release=" <> releaseStr
-      liftEffect $ serveNotFound res
+        Log.info $ "Fetching CAA cover: " <> mbid
+        let caaUrl = "https://coverartarchive.org/release/" <> mbid <> "/front-250"
+        success <- tryProxyAndCache caaUrl s3Key res
+        unless success $ do
+          Log.info $ "CAA cover not found for " <> mbid <> ", falling back to Last.fm"
+          tryLastfm artistStr releaseStr res
     else do
-      let safeArtist = sanitizeKey artistStr
-      let safeRelease = sanitizeKey releaseStr
-      let s3Key = "covers/discogs/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+      Log.info $ "No MBID provided, trying Last.fm for: " <> artistStr <> " - " <> releaseStr
+      tryLastfm artistStr releaseStr res
 
-      cachedResult <- try $ existsInS3 s3Key
-      let
-        cached = case cachedResult of
-          Right b -> b
-          Left _ -> false
+  where
+  checkS3 s3Key = do
+    result <- try $ existsInS3 s3Key
+    pure $ case result of
+      Right b -> b
+      Left _ -> false
 
-      if cached then do
-        Log.info $ "Serving Discogs cover from S3: " <> s3Key
+  serveS3 s3Key response = liftEffect $ do
+    setStatusCode 302 response
+    setHeader "Location" (getS3Url s3Key) (toOutgoingMessage response)
+    end (toWriteable (toOutgoingMessage response))
+
+  tryProxyAndCache urlStr s3Key response = do
+    fetchResult <- try $ fetch urlStr { method: GET }
+    case fetchResult of
+      Right fr | fr.status == 200 -> do
+        Log.info $ "Proxying and caching image: " <> urlStr
+        let contentType = fromMaybe "image/jpeg" $ lookup "content-type" fr.headers
+        buf <- fr.arrayBuffer
         liftEffect $ do
-          setStatusCode 302 res
-          setHeader "Location" (getS3Url s3Key) (toOutgoingMessage res)
-          end (toWriteable (toOutgoingMessage res))
-      else do
-        env <- liftEffect getEnv
-        let token = Object.lookup "DISCOGS_TOKEN" env
-        case token of
-          Nothing -> do
-            Log.error "DISCOGS_TOKEN not found in env"
-            liftEffect $ serveNotFound res
-          Just t -> do
-            let queryStr = artistStr <> " " <> releaseStr
-            let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
-            Log.info $ "Discogs search (broad): " <> queryStr
+          setStatusCode fr.status response
+          setHeader "Content-Type" contentType (toOutgoingMessage response)
+          setHeader "Cache-Control" "public, max-age=86400" (toOutgoingMessage response)
+          let writer = toWriteable (toOutgoingMessage response)
+          writeBuffer writer (unsafeCoerce buf)
+          end writer
 
-            result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
-            case result of
-              Right fetchRes -> do
-                json <- fromJson fetchRes.json
-                let
-                  coverUrl = do
-                    obj <- toObject json
-                    results <- Object.lookup "results" obj >>= toArray
-                    firstResult <- results !! 0 >>= toObject
-                    cover <- Object.lookup "cover_image" firstResult >>= toString
-                    pure cover
-
-                case coverUrl of
-                  Just urlStr -> do
-                    Log.info $ "Found Discogs cover: " <> urlStr
-                    proxyAndCacheImage urlStr s3Key res
-                  Nothing -> do
-                    Log.info $ "No Discogs cover found for: " <> queryStr
-                    liftEffect $ serveNotFound res
-              Left err -> do
-                Log.error $ "Discogs API error: " <> Exception.message err
-                liftEffect $ serveNotFound res
-
-proxyAndCacheImage :: String -> String -> Response -> Aff Unit
-proxyAndCacheImage urlStr s3Key res = do
-  Log.info $ "Proxying and caching image: " <> urlStr
-  makeAff \cb -> do
-    launchAff_ do
-      fetchResult <- try $ fetch urlStr { method: GET }
-      case fetchResult of
-        Right fr -> do
-          let contentType = fromMaybe "image/jpeg" $ lookup "content-type" fr.headers
-          buf <- fr.arrayBuffer
-          liftEffect $ do
-            setStatusCode fr.status res
-            setHeader "Content-Type" contentType (toOutgoingMessage res)
-            setHeader "Cache-Control" "public, max-age=86400" (toOutgoingMessage res)
-            let writer = toWriteable (toOutgoingMessage res)
-            writeBuffer writer (unsafeCoerce buf)
-            end writer
-
-          -- Cache to S3
+        -- Cache to S3 in background
+        void $ forkAff $ do
           uploadResult <- try $ uploadToS3 s3Key (unsafeCoerce buf) contentType
           case uploadResult of
             Right _ -> Log.info $ "Cached to S3: " <> s3Key
             Left err -> Log.error $ "S3 upload failed: " <> Exception.message err
-          liftEffect $ cb (Right unit)
-        Left err -> do
-          Log.error $ "Failed to fetch image: " <> Exception.message err
-          liftEffect $ serveNotFound res
-          liftEffect $ cb (Right unit)
-    pure nonCanceler
+        pure true
+      _ -> pure false
+
+  tryLastfm artist release response
+    | artist == "" || release == "" = do
+        Log.warn $ "Missing artist or release for Last.fm fallback"
+        liftEffect $ serveNotFound response
+    | otherwise = do
+        let safeArtist = sanitizeKey artist
+        let safeRelease = sanitizeKey release
+        let s3Key = "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+        cached <- checkS3 s3Key
+        if cached then do
+          Log.info $ "Serving Last.fm cover from S3: " <> s3Key
+          serveS3 s3Key response
+        else do
+          env <- liftEffect getEnv
+          case Object.lookup "LASTFM_API_KEY" env of
+            Nothing -> do
+              Log.warn "LASTFM_API_KEY missing, falling back to Discogs"
+              tryDiscogs artist release response
+            Just k -> do
+              let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json"
+              Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
+              result <- try $ fetch searchUrl { method: GET }
+              case result of
+                Right fetchRes | fetchRes.status == 200 -> do
+                  json <- fromJson fetchRes.json
+                  let
+                    coverUrl = do
+                      obj <- toObject json
+                      album <- Object.lookup "album" obj >>= toObject
+                      images <- Object.lookup "image" album >>= toArray
+                      imageObj <- images !! 2 >>= toObject
+                      u <- Object.lookup "#text" imageObj >>= toString
+                      if u == "" then Nothing else Just u
+                  case coverUrl of
+                    Just urlStr -> do
+                      Log.info $ "Found Last.fm cover: " <> urlStr
+                      success <- tryProxyAndCache urlStr s3Key response
+                      unless success $ do
+                        Log.info "Last.fm image proxy failed, falling back to Discogs"
+                        tryDiscogs artist release response
+                    Nothing -> do
+                      Log.info "No cover found on Last.fm, falling back to Discogs"
+                      tryDiscogs artist release response
+                _ -> do
+                  Log.info "Last.fm API request failed, falling back to Discogs"
+                  tryDiscogs artist release response
+
+  tryDiscogs artist release response = do
+    let safeArtist = sanitizeKey artist
+    let safeRelease = sanitizeKey release
+    let s3Key = "covers/discogs/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+    cached <- checkS3 s3Key
+    if cached then do
+      Log.info $ "Serving Discogs cover from S3: " <> s3Key
+      serveS3 s3Key response
+    else do
+      env <- liftEffect getEnv
+      case Object.lookup "DISCOGS_TOKEN" env of
+        Nothing -> do
+          Log.warn "DISCOGS_TOKEN missing, cannot fallback further"
+          liftEffect $ serveNotFound response
+        Just t -> do
+          let queryStr = artist <> " " <> release
+          let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
+          Log.info $ "Searching Discogs for: " <> queryStr
+          result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
+          case result of
+            Right fetchRes | fetchRes.status == 200 -> do
+              json <- fromJson fetchRes.json
+              let
+                coverUrl = do
+                  obj <- toObject json
+                  results <- Object.lookup "results" obj >>= toArray
+                  firstResult <- results !! 0 >>= toObject
+                  Object.lookup "cover_image" firstResult >>= toString
+              case coverUrl of
+                Just urlStr -> do
+                  Log.info $ "Found Discogs cover: " <> urlStr
+                  success <- tryProxyAndCache urlStr s3Key response
+                  unless success $ do
+                    Log.info "Discogs image proxy failed"
+                    liftEffect $ serveNotFound response
+                Nothing -> do
+                  Log.info "No cover found on Discogs"
+                  liftEffect $ serveNotFound response
+            _ -> do
+              Log.info "Discogs API request failed"
+              liftEffect $ serveNotFound response
 
 serveProxy :: Connection -> URL -> Response -> Effect Unit
 serveProxy db url res = do

@@ -2,11 +2,10 @@ module Db where
 
 import Prelude
 
-import Data.Argonaut.Core (Json, toObject, toString, toArray)
+import Data.Argonaut.Core (Json, toObject, toString)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Effect (Effect)
-import Effect.Class (liftEffect)
 import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Exception (Error, error)
 import Foreign (Foreign)

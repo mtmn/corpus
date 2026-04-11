@@ -17,5 +17,5 @@ export const writeBuffer = (stream) => (buffer) => () => {
 };
 
 export const sanitizeKey = (str) => {
-  return str.replace(/[^a-z0-9]/gi, '_').replace(/_{2,}/g, '_');
+  return str.replace(/[^a-z0-9.-]/gi, '_').replace(/_{2,}/g, '_');
 };
