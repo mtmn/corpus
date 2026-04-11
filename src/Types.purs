@@ -2,7 +2,8 @@ module Types where
 
 import Prelude
 
-import Data.Argonaut (class DecodeJson, decodeJson, (.:), (.:?))
+import Data.Argonaut (class DecodeJson, class EncodeJson, decodeJson, encodeJson, (.:), (.:?), (:=), (~>))
+import Data.Argonaut.Core (jsonEmptyObject)
 import Data.Maybe (Maybe)
 import Data.Generic.Rep (class Generic)
 
@@ -19,6 +20,11 @@ instance DecodeJson ListenBrainzResponse where
     payload <- obj .: "payload"
     pure $ ListenBrainzResponse { payload }
 
+instance EncodeJson ListenBrainzResponse where
+  encodeJson (ListenBrainzResponse { payload }) =
+    "payload" := encodeJson payload
+      ~> jsonEmptyObject
+
 newtype Payload = Payload
   { listens :: Array Listen
   }
@@ -31,6 +37,11 @@ instance DecodeJson Payload where
     obj <- decodeJson json
     listens <- obj .: "listens"
     pure $ Payload { listens }
+
+instance EncodeJson Payload where
+  encodeJson (Payload { listens }) =
+    "listens" := encodeJson listens
+      ~> jsonEmptyObject
 
 newtype Listen = Listen
   { trackMetadata :: TrackMetadata
@@ -46,6 +57,12 @@ instance DecodeJson Listen where
     trackMetadata <- obj .: "track_metadata"
     listenedAt <- obj .:? "listened_at"
     pure $ Listen { trackMetadata, listenedAt }
+
+instance EncodeJson Listen where
+  encodeJson (Listen { trackMetadata, listenedAt }) =
+    "track_metadata" := encodeJson trackMetadata
+      ~> "listened_at" := encodeJson listenedAt
+      ~> jsonEmptyObject
 
 newtype TrackMetadata = TrackMetadata
   { trackName :: Maybe String
@@ -66,6 +83,14 @@ instance DecodeJson TrackMetadata where
     mbidMapping <- obj .:? "mbid_mapping"
     pure $ TrackMetadata { trackName, artistName, releaseName, mbidMapping }
 
+instance EncodeJson TrackMetadata where
+  encodeJson (TrackMetadata { trackName, artistName, releaseName, mbidMapping }) =
+    "track_name" := encodeJson trackName
+      ~> "artist_name" := encodeJson artistName
+      ~> "release_name" := encodeJson releaseName
+      ~> "mbid_mapping" := encodeJson mbidMapping
+      ~> jsonEmptyObject
+
 newtype MbidMapping = MbidMapping
   { releaseMbid :: Maybe String
   , caaReleaseMbid :: Maybe String
@@ -80,3 +105,9 @@ instance DecodeJson MbidMapping where
     releaseMbid <- obj .:? "release_mbid"
     caaReleaseMbid <- obj .:? "caa_release_mbid"
     pure $ MbidMapping { releaseMbid, caaReleaseMbid }
+
+instance EncodeJson MbidMapping where
+  encodeJson (MbidMapping { releaseMbid, caaReleaseMbid }) =
+    "release_mbid" := encodeJson releaseMbid
+      ~> "caa_release_mbid" := encodeJson caaReleaseMbid
+      ~> jsonEmptyObject

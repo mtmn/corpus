@@ -5,10 +5,9 @@ import Prelude
 import Affjax.Web as AX
 import Affjax.ResponseFormat as ResponseFormat
 import Data.Argonaut (decodeJson)
-import Data.Array (mapWithIndex)
-import Data.DateTime.Instant (unInstant)
+import Data.Array (mapWithIndex, length)
 import Data.Either (Either(..))
-import Data.Int (floor)
+import Data.Int (floor, fromString)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Effect (Effect)
 import Effect.Console as Console
@@ -27,9 +26,15 @@ import JSURI (encodeURIComponent)
 import Web.DOM.ParentNode (QuerySelector(..))
 import Types (Listen(..), ListenBrainzResponse(..), TrackMetadata(..), Payload(..), MbidMapping(..))
 import Data.Time.Duration (Milliseconds(..))
-
+import Data.DateTime.Instant (Instant, unInstant)
 import Data.Set (Set)
 import Data.Set as Set
+import Web.HTML (window)
+import Web.HTML.Window (location, history)
+import Web.HTML.Location (search)
+import Web.HTML.History (pushState, DocumentTitle(..), URL(..))
+import Foreign (unsafeToForeign)
+import Data.Nullable (Nullable, toMaybe)
 
 type State =
   { listens :: Array Listen
@@ -38,6 +43,8 @@ type State =
   , loading :: Boolean
   , currentTime :: Maybe Milliseconds
   , failedCovers :: Set String
+  , offset :: Int
+  , limit :: Int
   }
 
 data Action
@@ -45,6 +52,8 @@ data Action
   | Refresh
   | ReceiveResponse (Either String (Array Listen))
   | ImageError String
+  | NextPage
+  | PrevPage
 
 component :: forall query input output m. MonadAff m => H.Component query input output m
 component =
@@ -64,13 +73,31 @@ component =
     , loading: true
     , currentTime: Nothing
     , failedCovers: Set.empty
+    , offset: 0
+    , limit: 25
     }
 
   render state =
     HH.div
       [ HP.class_ (H.ClassName "container") ]
-      [ HH.h1_ [ HH.text "Recent Tracks" ]
+      [ HH.h1_ [ HH.text "scorpus" ]
       , renderContent state
+      , HH.div
+          [ HP.class_ (H.ClassName "pagination") ]
+          [ HH.button
+              [ HP.class_ (H.ClassName "page-btn")
+              , HP.disabled (state.offset == 0 || state.loading)
+              , HE.onClick \_ -> PrevPage
+              ]
+              [ HH.text "Previous" ]
+          , HH.div [ HP.class_ (H.ClassName "page-indicator") ] [ HH.text $ "Page " <> show (state.offset / state.limit + 1) ]
+          , HH.button
+              [ HP.class_ (H.ClassName "page-btn")
+              , HP.disabled (length state.listens < state.limit || state.loading)
+              , HE.onClick \_ -> NextPage
+              ]
+              [ HH.text "Next" ]
+          ]
       , HH.p
           [ HP.id "last-updated"
           , HP.class_ (H.ClassName "small")
@@ -88,100 +115,118 @@ component =
           (mapWithIndex (renderListen state.currentTime state.failedCovers) state.listens)
 
   renderListen currentTime failedCovers _ (Listen { trackMetadata: TrackMetadata track, listenedAt }) =
-    let 
+    let
       release = fromMaybe "" track.releaseName
       artist = fromMaybe "" track.artistName
-      
-      -- Priority:
-      -- 1. CAA (CAA MBID)
-      -- 2. CAA (Release MBID)
-      -- 3. Last.fm proxy
-      -- 4. Discogs proxy
-      
+
       mbid = case track.mbidMapping of
         Just (MbidMapping { caaReleaseMbid: Just m }) -> Just m
         Just (MbidMapping { releaseMbid: Just m }) -> Just m
         _ -> Nothing
-        
+
       lastfmId = "lastfm-" <> artist <> "-" <> release
       discogsId = "discogs-" <> artist <> "-" <> release
-      
+
       coverInfo = case mbid of
-        Just m -> 
-          if Set.member m failedCovers then 
-            -- Fallback 1: Last.fm
+        Just m ->
+          if Set.member m failedCovers then
             if Set.member lastfmId failedCovers then
-              -- Fallback 2: Discogs
               if Set.member discogsId failedCovers then Nothing
-              else Just { id: discogsId, url: "/discogs?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
-            else Just { id: lastfmId, url: "/lastfm?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
-          else Just { id: m, url: "https://coverartarchive.org/release/" <> m <> "/front-250" }
-        Nothing -> 
-          -- No MBID, try Last.fm then Discogs
+              else Just { id: discogsId, url: "/discogs-cover?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
+            else Just { id: lastfmId, url: "/lastfm-cover?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
+          else Just { id: m, url: "/caa-cover?mbid=" <> m }
+        Nothing ->
           if Set.member lastfmId failedCovers then
             if Set.member discogsId failedCovers then Nothing
-            else Just { id: discogsId, url: "/discogs?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
-          else Just { id: lastfmId, url: "/lastfm?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
+            else Just { id: discogsId, url: "/discogs-cover?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
+          else Just { id: lastfmId, url: "/lastfm-cover?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
     in
-    HH.li
-      [ HP.class_ (H.ClassName "success") ]
-      [ HH.div
-          [ HP.class_ (H.ClassName "track-info") ]
-          [ HH.div
-              [ HP.class_ (H.ClassName "track-name") ]
-              [ HH.text $ fromMaybe "Unknown Track" track.trackName ]
-          , HH.div
-              [ HP.class_ (H.ClassName "track-artist") ]
-              [ HH.text artist ]
-          , HH.div
-              [ HP.class_ (H.ClassName "track-time") ]
-              [ let 
-                  query = fromMaybe "" $ encodeURIComponent (artist <> " " <> release)
-                in
-                HH.span_
-                  [ HH.a
-                      [ HP.href $ "https://www.discogs.com/search/?q=" <> query <> "&type=release"
-                      , HP.target "_blank"
-                      , HP.class_ (H.ClassName "album-link")
+      HH.li
+        [ HP.class_ (H.ClassName "success") ]
+        [ HH.div
+            [ HP.class_ (H.ClassName "track-info") ]
+            [ HH.div
+                [ HP.class_ (H.ClassName "track-name") ]
+                [ HH.text $ fromMaybe "Unknown Track" track.trackName ]
+            , HH.div
+                [ HP.class_ (H.ClassName "track-artist") ]
+                [ HH.text artist ]
+            , HH.div
+                [ HP.class_ (H.ClassName "track-time") ]
+                [ let
+                    query = fromMaybe "" $ encodeURIComponent (artist <> " " <> release)
+                  in
+                    HH.span_
+                      [ HH.a
+                          [ HP.href $ "https://www.discogs.com/search/?q=" <> query <> "&type=release"
+                          , HP.target "_blank"
+                          , HP.class_ (H.ClassName "album-link")
+                          ]
+                          [ HH.text release ]
+                      , HH.text $ " • " <> (fromMaybe "unknown time" $ formatTimeAgo currentTime listenedAt)
                       ]
-                      [ HH.text release ]
-                  , HH.text $ " • " <> (fromMaybe "unknown time" $ formatTimeAgo currentTime listenedAt)
-                  ]
-              ]
-          ]
-      , case coverInfo of
-          Just { id, url } -> 
-            HH.img
-              [ HP.class_ (H.ClassName "track-cover")
-              , HP.src url
-              , HP.alt release
-              , HE.onError \_ -> ImageError id
-              ]
-          Nothing -> HH.text ""
-      ]
+                ]
+            ]
+        , case coverInfo of
+            Just { id, url } ->
+              HH.img
+                [ HP.class_ (H.ClassName "track-cover")
+                , HP.src url
+                , HP.alt release
+                , HE.onError \_ -> ImageError id
+                ]
+            Nothing -> HH.text ""
+        ]
 
   handleAction = case _ of
     Initialize -> do
+      w <- liftEffect window
+      loc <- liftEffect $ location w
+      qs <- liftEffect $ search loc
+      let pageParam = toMaybe $ extractParam "page" qs
+      let initialPage = fromMaybe 1 (pageParam >>= fromString)
+      let initialOffset = max 0 ((initialPage - 1) * 25)
+
+      H.modify_ _ { offset = initialOffset }
+
       void $ H.fork $ forever (H.liftAff (delay (Milliseconds 30000.0)) *> handleAction Refresh)
       handleAction Refresh
     Refresh -> do
+      state <- H.get
       H.modify_ _ { loading = true, error = Nothing }
-      response <- H.liftAff fetchListens
+      response <- H.liftAff $ fetchListens state.limit state.offset
       handleAction (ReceiveResponse response)
     ReceiveResponse result -> do
       nowInstant <- liftEffect now
       let nowMs = unInstant nowInstant
-      let nowStr = "Last check: " <> show nowInstant
+      let nowStr = formatRFC3339 nowInstant
       case result of
         Left err -> H.modify_ _ { loading = false, error = Just err, lastCheck = Just nowStr, currentTime = Just nowMs }
         Right listens -> H.modify_ _ { loading = false, listens = listens, lastCheck = Just nowStr, currentTime = Just nowMs }
     ImageError mbid -> do
       liftEffect $ Console.log $ "Image load failed for: " <> mbid
       H.modify_ \state -> state { failedCovers = Set.insert mbid state.failedCovers }
+    NextPage -> do
+      H.modify_ \state -> state { offset = state.offset + state.limit }
+      updateUrl
+      handleAction Refresh
+    PrevPage -> do
+      H.modify_ \state -> state { offset = max 0 (state.offset - state.limit) }
+      updateUrl
+      handleAction Refresh
 
-  fetchListens :: Aff (Either String (Array Listen))
-  fetchListens = do
-    res <- AX.get ResponseFormat.json "/proxy"
+  updateUrl = do
+    state <- H.get
+    let page = (state.offset / state.limit) + 1
+    liftEffect do
+      w <- window
+      h <- history w
+      pushState (unsafeToForeign {}) (DocumentTitle "") (URL $ "?page=" <> show page) h
+
+  fetchListens :: Int -> Int -> Aff (Either String (Array Listen))
+  fetchListens limit offset = do
+    let url = "/proxy?limit=" <> show limit <> "&offset=" <> show offset
+    res <- AX.get ResponseFormat.json url
     case res of
       Left err -> pure $ Left $ "Network error: " <> AX.printError err
       Right response ->
@@ -196,14 +241,15 @@ component =
     let
       nowSecs = floor (nowMs / 1000.0)
       diff = nowSecs - timestamp
-    in Just $
-      if diff < 60 then "just now"
-      else if diff < 3600 then
-        let mins = diff / 60 in show mins <> " minute" <> (if mins > 1 then "s" else "") <> " ago"
-      else if diff < 86400 then
-        let hours = diff / 3600 in show hours <> " hour" <> (if hours > 1 then "s" else "") <> " ago"
-      else
-        let days = diff / 86400 in show days <> " day" <> (if days > 1 then "s" else "") <> " ago"
+    in
+      Just $
+        if diff < 60 then "just now"
+        else if diff < 3600 then
+          let mins = diff / 60 in show mins <> " minute" <> (if mins > 1 then "s" else "") <> " ago"
+        else if diff < 86400 then
+          let hours = diff / 3600 in show hours <> " hour" <> (if hours > 1 then "s" else "") <> " ago"
+        else
+          let days = diff / 86400 in show days <> " day" <> (if days > 1 then "s" else "") <> " ago"
 
 main :: Effect Unit
 main = HA.runHalogenAff do
@@ -211,3 +257,6 @@ main = HA.runHalogenAff do
   case maybeApp of
     Nothing -> HA.awaitBody >>= runUI component unit
     Just app -> runUI component unit app
+
+foreign import extractParam :: String -> String -> Nullable String
+foreign import formatRFC3339 :: Instant -> String

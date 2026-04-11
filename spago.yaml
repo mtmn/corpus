@@ -1,5 +1,5 @@
 package:
-  name: scrobbler-purescript
+  name: scorpus
   dependencies:
     - aff
     - affjax
@@ -26,6 +26,7 @@ package:
     - node-http
     - node-net
     - node-process
+    - node-sqlite3
     - node-streams
     - node-url
     - now
@@ -35,6 +36,7 @@ package:
     - tailrec
     - unsafe-coerce
     - web-dom
+    - web-html
   test:
     main: Test.Main
     dependencies: []

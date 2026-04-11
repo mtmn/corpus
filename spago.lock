@@ -1,7 +1,7 @@
 {
   "workspace": {
     "packages": {
-      "scrobbler-purescript": {
+      "scorpus": {
         "path": "./",
         "core": {
           "dependencies": [
@@ -30,6 +30,7 @@
             "node-http",
             "node-net",
             "node-process",
+            "node-sqlite3",
             "node-streams",
             "node-url",
             "now",
@@ -38,7 +39,8 @@
             "strings",
             "tailrec",
             "unsafe-coerce",
-            "web-dom"
+            "web-dom",
+            "web-html"
           ]
         },
         "test": {
@@ -1614,6 +1616,19 @@
         "posix-types",
         "prelude",
         "strings"
+      ]
+    },
+    "node-sqlite3": {
+      "type": "registry",
+      "version": "8.0.0",
+      "integrity": "sha256-vmiT8S2dcBO6udUoXn8ppG3FNCEcq6AA1q92memeyWo=",
+      "dependencies": [
+        "aff",
+        "effect",
+        "either",
+        "exceptions",
+        "foreign",
+        "prelude"
       ]
     },
     "node-streams": {
