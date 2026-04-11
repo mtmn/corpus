@@ -1,10 +1,8 @@
 # Scorpus
 
-<div align="right">
-  <img src="docs/korpus.webp" width="50%" alt="Korpus">
-</div>
-
-Scorpus is a ListenBrainz frontend built with PureScript that provides server-side rendering and client-side interactivity using Halogen. It enables music listening tracking with DuckDB/SQLite storage and S3 integration for data management.
+| | |
+| :--- | ---: |
+| Scorpus is a ListenBrainz frontend built with PureScript that provides server-side rendering and client-side interactivity using Halogen. It enables music listening tracking with DuckDB/SQLite storage and S3 integration for data management. | <img src="docs/korpus.webp" width="400" alt="Korpus"> |
 
 ---
 
