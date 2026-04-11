@@ -7,8 +7,10 @@
   };
 
   outputs = {
+    self,
     nixpkgs,
     flake-utils,
+    ...
   }:
     flake-utils.lib.eachDefaultSystem (
       system: let
@@ -16,9 +18,9 @@
         scorpus = pkgs.buildNpmPackage {
           pname = "scorpus";
           version = "1.0.0";
-          src = ./.;
+          src = self;
 
-          npmDepsHash = "sha256-0000000000000000000000000000000000000000000=";
+          npmDepsHash = "sha256-L+9L3RY5CNLudmQL7EZwZO8x0kQ2MKCqSsn37ZIIKWE=";
 
           nativeBuildInputs = with pkgs; [
             purescript
@@ -28,7 +30,6 @@
 
           buildPhase = ''
             export HOME=$TMPDIR
-            # Spago and npm run build setup
             npm run build
           '';
 
@@ -44,7 +45,7 @@
       in {
         packages.default = scorpus;
 
-        packages.container = pkgs.dockerTools.buildLayeredImage {
+        packages.oci = pkgs.dockerTools.buildLayeredImage {
           name = "scorpus";
           tag = "latest";
           contents = [pkgs.nodejs pkgs.cacert];
