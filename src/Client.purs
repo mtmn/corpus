@@ -99,9 +99,9 @@ component =
       [ HH.h1_ [ HH.text "scrobbler" ]
       , HH.div
           [ HP.class_ (H.ClassName "tabs") ]
-          [ HH.button
+          [ HH.a
               [ HP.class_ (H.ClassName $ "tab-btn" <> if state.activeTab == ListensTab then " active" else "")
-              , HE.onClick \_ -> SwitchTab ListensTab
+              , HP.href "/"
               ]
               [ HH.text "listens" ]
           , HH.button

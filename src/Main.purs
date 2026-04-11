@@ -49,12 +49,12 @@ import S3 (existsInS3, uploadToS3, getS3Url)
 type Request = IncomingMessage IMServer
 type Response = ServerResponse
 
-listenBrainzUrl :: String
-listenBrainzUrl = "https://api.listenbrainz.org/1/user/mtmn/listens"
+listenBrainzUrl :: String -> String
+listenBrainzUrl username = "https://api.listenbrainz.org/1/user/" <> username <> "/listens"
 
-fetchListenBrainzData :: Int -> Aff String
-fetchListenBrainzData count = makeAff \callback -> do
-  let url = listenBrainzUrl <> "?count=" <> show count
+fetchListenBrainzData :: String -> Int -> Aff String
+fetchListenBrainzData username count = makeAff \callback -> do
+  let url = listenBrainzUrl username <> "?count=" <> show count
   req <- HTTPS.get url
 
   req # on_ Client.responseH \res -> do
@@ -72,9 +72,9 @@ fetchListenBrainzData count = makeAff \callback -> do
 
   pure nonCanceler
 
-fetchListenBrainzDataBefore :: Int -> Aff String
-fetchListenBrainzDataBefore maxTs = makeAff \callback -> do
-  let url = listenBrainzUrl <> "?count=100&max_ts=" <> show maxTs
+fetchListenBrainzDataBefore :: String -> Int -> Aff String
+fetchListenBrainzDataBefore username maxTs = makeAff \callback -> do
+  let url = listenBrainzUrl username <> "?count=100&max_ts=" <> show maxTs
   req <- HTTPS.get url
 
   req # on_ Client.responseH \res -> do
@@ -92,15 +92,16 @@ fetchListenBrainzDataBefore maxTs = makeAff \callback -> do
 
   pure nonCanceler
 
-syncData :: Connection -> Aff Unit
-syncData conn = do
+syncData :: Connection -> String -> Aff Unit
+syncData conn username | username == "" = pure unit
+syncData conn username = do
   forever do
     void $ performFullSync
     delay (Milliseconds 60000.0)
 
   where
   performFullSync = do
-    result <- try $ fetchListenBrainzData 100
+    result <- try $ fetchListenBrainzData username 100
     case result of
       Right body -> do
         case parseJson body >>= decodeJson of
@@ -119,7 +120,7 @@ syncData conn = do
   paginateUntilDone minTs acc = case minTs of
     Nothing -> pure acc
     Just ts -> do
-      result <- try $ fetchListenBrainzDataBefore ts
+      result <- try $ fetchListenBrainzDataBefore username ts
       case result of
         Right body -> do
           case parseJson body >>= decodeJson of
@@ -369,6 +370,8 @@ indexHtml =
             cursor: pointer;
             font-family: inherit;
             font-size: 12px;
+            text-decoration: none;
+            display: inline-block;
         }
 
         .tab-btn.active {
@@ -845,12 +848,12 @@ enrichMetadata conn = forever do
         Right Nothing -> pure unit
         Right (Just mbdata) -> upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
 
-startServer :: Int -> String -> Effect Unit
-startServer port dbFile = launchAff_ do
+startServer :: Int -> String -> String -> Effect Unit
+startServer port dbFile username = launchAff_ do
   conn <- connect dbFile
   initDb conn
   initReleaseMetadata conn
-  void $ forkAff $ syncData conn
+  void $ forkAff $ syncData conn username
   void $ forkAff $ enrichMetadata conn
 
   liftEffect $ do
@@ -871,6 +874,8 @@ main = do
   env <- getEnv
   let port = fromMaybe 8000 (Object.lookup "PORT" env >>= fromString)
   let dbFile = fromMaybe "scorpus.db" (Object.lookup "DATABASE_FILE" env)
-  startServer port dbFile
+  let username = fromMaybe "" (Object.lookup "LISTENBRAINZ_USER" env)
+  when (username == "") $ Log.warn "LISTENBRAINZ_USER is not set — syncing will be disabled"
+  startServer port dbFile username
 
 foreign import split :: String -> String -> Array String
