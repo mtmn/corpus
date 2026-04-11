@@ -28,11 +28,7 @@
             makeWrapper
             python3
             pkg-config
-            gcc
-            gnumake
           ];
-
-          npmFlags = ["--build-from-source"];
 
           buildPhase = ''
             export HOME=$TMPDIR

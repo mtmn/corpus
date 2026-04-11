@@ -41,7 +41,6 @@ import Types (Listen(..), ListenBrainzResponse(..), Payload(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Int (fromString)
-import Data.Foldable (traverse_)
 import S3 (existsInS3, uploadToS3, getS3Url)
 
 -- Types
@@ -85,7 +84,11 @@ syncData conn = do
   else
     liftEffect $ Console.log "Initial sync skipped (INITIAL_SYNC != true)"
 
-  pure unit
+  forever do
+    liftEffect $ Console.log "Performing periodic sync..."
+    void $ performSync 100
+    delay (Milliseconds 60000.0)
+
   where
   performSync count = do
     result <- try $ fetchListenBrainzData count
