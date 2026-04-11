@@ -109,6 +109,11 @@ initReleaseMetadata conn = do
   _ <- try $ run conn "ALTER TABLE release_metadata ADD COLUMN genre_checked_at INTEGER" []
   pure unit
 
+ping :: Connection -> Aff Unit
+ping conn = do
+  _ <- queryAll conn "SELECT 1" []
+  pure unit
+
 getUnenrichedMbids :: Connection -> Int -> Aff (Array String)
 getUnenrichedMbids conn limit = do
   rows <- queryAll conn
