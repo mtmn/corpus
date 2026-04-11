@@ -18,7 +18,69 @@
     flake-utils.lib.eachDefaultSystem (
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
-        lib = pkgs.lib;
+
+        duckdbPrebuilt = pkgs.fetchurl {
+          url = "https://npm.duckdb.org/duckdb/duckdb-v1.4.4-node-v137-linux-x64.tar.gz";
+          hash = "sha256-Z91EJB81gRaZoLDjkw5lVVQ+jtGIvMV0tMJeOAY7Q3g=";
+        };
+
+        # Pinned registry + registry-index so the spago FOD is deterministic
+        spagoRegistry = pkgs.fetchFromGitHub {
+          owner = "purescript";
+          repo = "registry";
+          rev = "483aaf573663403afdabe20822ac88d565a65746";
+          hash = "sha256-pFVxQzt0+o1+nsCgk+VcprPSmEd8CH3Mkbk0vUy4x3g=";
+        };
+
+        spagoRegistryIndex = pkgs.fetchFromGitHub {
+          owner = "purescript";
+          repo = "registry-index";
+          rev = "77163eff5ea12e25d7391cf52fe5b9178145d843";
+          hash = "sha256-ez73ecGmzf5d7EkamNZ9KT8u7e4yR7jSvdiGu4bGAHs=";
+        };
+
+        # FOD: pre-fetch spago packages (needs network, but is now deterministic)
+        spagoDeps = pkgs.stdenv.mkDerivation {
+          name = "scorpus-spago-deps";
+
+          outputHashAlgo = "sha256";
+          outputHashMode = "recursive";
+          outputHash = "sha256-HCj4zn2E+UpeuMsmvvZe8d9nlkn1YF7vZ/j2I2Uoo20=";
+
+          nativeBuildInputs = with pkgs; [nodejs git cacert purescript];
+
+          dontUnpack = true;
+          dontFixup = true;
+
+          buildPhase = ''
+            export HOME=$TMPDIR
+            export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+            export NODE_EXTRA_CA_CERTS="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+
+            # Pre-populate registry so spago doesn't clone from GitHub
+            mkdir -p $HOME/.cache/spago-nodejs
+            cp -r ${spagoRegistry} $HOME/.cache/spago-nodejs/registry
+            cp -r ${spagoRegistryIndex} $HOME/.cache/spago-nodejs/registry-index
+            chmod -R u+w $HOME/.cache/spago-nodejs
+
+            cp ${self + "/package.json"} package.json
+            cp ${self + "/package-lock.json"} package-lock.json
+            cp ${self + "/spago.yaml"} spago.yaml
+            cp ${self + "/spago.lock"} spago.lock
+
+            npm ci --ignore-scripts
+            mkdir -p node_modules/.bin node_modules/purescript/bin
+            cp ${pkgs.purescript}/bin/purs node_modules/purescript/bin/purs
+            ln -sf ../purescript/bin/purs node_modules/.bin/purs
+            patchShebangs node_modules
+            npx spago install
+          '';
+
+          installPhase = ''
+            mkdir -p $out
+            cp -r .spago/p $out/packages
+          '';
+        };
 
         scorpus = pkgs.buildNpmPackage {
           pname = "scorpus";
@@ -26,42 +88,33 @@
           src = self;
 
           npmDepsHash = "sha256-L+9L3RY5CNLudmQL7EZwZO8x0kQ2MKCqSsn37ZIIKWE=";
+          npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [
-            purescript
-            spago
-            esbuild
             makeWrapper
-            python3
-            pkg-config
             nodejs
-            # Native addon build dependencies
-            gnumake
-            stdenv.cc
-            # DuckDB build dependencies
-            duckdb
-            # Remove duplicates
-          ] ++ lib.optionals stdenv.isLinux [
-            # Linux-specific build tools
-            glibc
-            # Other system dependencies that might be needed
+	    git
+            purescript
           ];
 
           buildPhase = ''
             export HOME="$TMPDIR"
-            # Node-gyp settings
-            export npm_config_nodedir="${pkgs.nodejs}"
-            export npm_config_python="${pkgs.python3}/bin/python"
-            # C/C++ compiler settings
-            export CC="${pkgs.stdenv.cc}/bin/cc"
-            export CXX="${pkgs.stdenv.cc}/bin/c++"
-            export LINK="${pkgs.stdenv.cc}/bin/cc"
-            # Library paths
-            export CFLAGS="-I${pkgs.duckdb}/include"
-            export LDFLAGS="-L${pkgs.duckdb}/lib"
-            # Enable multi-core building
-            export npm_config_jobs="$NIX_BUILD_CORES"
-            
+
+            # Place prebuilt duckdb native addon
+            mkdir -p node_modules/duckdb/lib/binding
+            tar -xf ${duckdbPrebuilt} -C node_modules/duckdb/lib/binding --strip-components=1
+
+            # Restore spago packages
+            mkdir -p .spago
+            cp -r ${spagoDeps}/packages .spago/p
+            chmod -R u+w .spago
+
+            # Provide pinned registry so spago finds package-sets
+            mkdir -p $HOME/.cache/spago-nodejs
+            cp -r ${spagoRegistry} $HOME/.cache/spago-nodejs/registry
+            cp -r ${spagoRegistryIndex} $HOME/.cache/spago-nodejs/registry-index
+            chmod -R u+w $HOME/.cache/spago-nodejs
+
             npm run build
           '';
 
@@ -96,11 +149,12 @@
               "NODE_ENV=production"
             ];
           };
-          extraCommands = ''
-            mkdir -p app/data
-            chown -R 1000:1000 app
-            chmod 700 app/data
+          fakeRootCommands = ''
+            mkdir -p /app/data
+            chown -R 1000:1000 /app
+            chmod 700 /app/data
           '';
+          enableFakechroot = true;
         };
 
         devShells.default = pkgs.mkShell {
@@ -109,13 +163,7 @@
             purescript
             awscli2
             duckdb
-            spago
             esbuild
-            # Native addon build dependencies
-            gnumake
-            stdenv.cc
-            python3
-            pkg-config
           ];
         };
       }

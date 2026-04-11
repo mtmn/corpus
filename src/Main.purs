@@ -614,9 +614,9 @@ serveNotFound res = do
   void $ writeString w UTF8 "Not Found"
   end w
 
-startServer :: Int -> Effect Unit
-startServer port = launchAff_ do
-  conn <- connect "scorpus.db"
+startServer :: Int -> String -> Effect Unit
+startServer port dbFile = launchAff_ do
+  conn <- connect dbFile
   initDb conn
   void $ forkAff $ syncData conn
 
@@ -635,6 +635,9 @@ foreign import dotenvConfig :: Effect Unit
 main :: Effect Unit
 main = do
   dotenvConfig
-  startServer 8000
+  env <- getEnv
+  let port = fromMaybe 8000 (Object.lookup "PORT" env >>= fromString)
+  let dbFile = fromMaybe "scorpus.db" (Object.lookup "DATABASE_FILE" env)
+  startServer port dbFile
 
 foreign import split :: String -> String -> Array String

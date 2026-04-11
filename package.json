@@ -5,9 +5,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "build": "npx spago build && npx esbuild output/Main/index.js --bundle --platform=node --format=esm --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3 && npx spago bundle --module Client --outfile client.js --platform browser",
+    "build": "npx spago build && npx esbuild output/Main/index.js --bundle --platform=node --format=esm --footer:js='main();' --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3 && npx spago bundle --module Client --outfile client.js --platform browser",
     "build-client": "npx spago bundle --module Client --outfile client.js --platform browser",
-    "build-server": "npx esbuild output/Main/index.js --bundle --platform=node --format=esm --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3",
+    "build-server": "npx esbuild output/Main/index.js --bundle --platform=node --format=esm --footer:js='main();' --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3",
     "test": "npx spago test",
     "tidy": "purs-tidy format-in-place src/**/*.purs",
     "serve": "node --no-deprecation server.js 2>&1 | tee server.log",
