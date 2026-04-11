@@ -161,6 +161,8 @@ indexHtml =
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>scorpus</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Intel+One+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
@@ -373,7 +375,8 @@ handleRequest db req res = do
     "/proxy" -> serveProxy db url res
     "/cover" -> serveCover url res
     "/client.js" -> serveClientJs res
-    "/favicon.ico" -> serveFavicon res
+    "/favicon.ico" -> serveAsset "image/x-icon" "assets/favicon.ico" res
+    "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
     _ -> do
       Log.warn $ "Path not found: " <> path
       serveNotFound res
@@ -588,12 +591,19 @@ serveProxy db url res = do
       void $ writeString w UTF8 responseBody
       end w
 
-serveFavicon :: Response -> Effect Unit
-serveFavicon res = do
-  setHeader "Content-Type" "image/x-icon" (toOutgoingMessage res)
+serveAsset :: String -> String -> Response -> Effect Unit
+serveAsset contentType path res = do
+  setHeader "Content-Type" contentType (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
-  setStatusCode 200 res
-  end (toWriteable (toOutgoingMessage res))
+  launchAff_ do
+    result <- try $ FSA.readFile path
+    liftEffect $ case result of
+      Right buf -> do
+        setStatusCode 200 res
+        let w = toWriteable (toOutgoingMessage res)
+        writeBuffer w (unsafeCoerce buf)
+        end w
+      Left _ -> serveNotFound res
 
 serveNotFound :: Response -> Effect Unit
 serveNotFound res = do
