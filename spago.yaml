@@ -1,0 +1,44 @@
+package:
+  name: scrobbler-purescript
+  dependencies:
+    - aff
+    - affjax
+    - affjax-web
+    - argonaut
+    - argonaut-core
+    - arrays
+    - console
+    - datetime
+    - effect
+    - either
+    - exceptions
+    - fetch
+    - fetch-argonaut
+    - foreign-object
+    - halogen
+    - http-methods
+    - integers
+    - js-uri
+    - maybe
+    - node-buffer
+    - node-event-emitter
+    - node-fs
+    - node-http
+    - node-net
+    - node-process
+    - node-streams
+    - node-url
+    - now
+    - ordered-collections
+    - prelude
+    - strings
+    - tailrec
+    - unsafe-coerce
+    - web-dom
+  test:
+    main: Test.Main
+    dependencies: []
+workspace:
+  packageSet:
+    registry: 75.9.0
+  extraPackages: {}
