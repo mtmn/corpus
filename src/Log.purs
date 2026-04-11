@@ -33,21 +33,24 @@ type LogMessage =
 
 formatTimestamp :: DateTime -> String
 formatTimestamp dt =
-  format (fromFoldable
-    [ YearFull
-    , Placeholder "-"
-    , MonthTwoDigits
-    , Placeholder "-"
-    , DayOfMonthTwoDigits
-    , Placeholder " "
-    , Hours24
-    , Placeholder ":"
-    , MinutesTwoDigits
-    , Placeholder ":"
-    , SecondsTwoDigits
-    , Placeholder "."
-    , Milliseconds
-    ]) dt
+  format
+    ( fromFoldable
+        [ YearFull
+        , Placeholder "-"
+        , MonthTwoDigits
+        , Placeholder "-"
+        , DayOfMonthTwoDigits
+        , Placeholder " "
+        , Hours24
+        , Placeholder ":"
+        , MinutesTwoDigits
+        , Placeholder ":"
+        , SecondsTwoDigits
+        , Placeholder "."
+        , Milliseconds
+        ]
+    )
+    dt
 
 logger :: Logger Effect LogMessage
 logger = Logger \{ level, message } -> do

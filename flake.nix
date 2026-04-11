@@ -23,7 +23,6 @@
 
           nativeBuildInputs = with pkgs; [
             purescript
-            spago
             esbuild
             makeWrapper
             python3
@@ -34,7 +33,8 @@
 
           buildPhase = ''
             export HOME=$TMPDIR
-            npm run build
+            export PATH=$PWD/node_modules/.bin:$PATH
+            spago build && esbuild output/Main/index.js --bundle --platform=node --format=esm --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3 && spago bundle --module Client --outfile client.js --platform browser
           '';
 
           installPhase = ''
