@@ -325,6 +325,7 @@ indexHtml =
 -- Request handler
 handleRequest :: Connection -> Request -> Response -> Effect Unit
 handleRequest db req res = do
+  let method = IM.method req
   let rawUrl = IM.url req
   url <- new' rawUrl "http://localhost"
   path <- pathname url
