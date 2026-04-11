@@ -4,6 +4,11 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
+  nixConfig = {
+    extra-substituters = ["https://attic.saatana.cat/tools"];
+    extra-trusted-public-keys = ["tools:jwYUMuvRliZGRiARi2ptFALYDoheCxHI8X4sXWYds/0="];
+  };
+
   outputs = {
     self,
     nixpkgs,
@@ -67,7 +72,8 @@
             mkdir -p $out/bin
             makeWrapper ${pkgs.nodejs}/bin/node $out/bin/scorpus-server \
               --add-flags "--no-deprecation" \
-              --add-flags "$out/lib/scorpus/server.js"
+              --add-flags "$out/lib/scorpus/server.js" \
+              --chdir "$out/lib/scorpus"
           '';
         };
       in {
