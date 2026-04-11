@@ -7,7 +7,6 @@ import Affjax.ResponseFormat as ResponseFormat
 import Data.Argonaut (decodeJson)
 import Data.Array (mapWithIndex, length)
 import Data.Either (Either(..))
-import Log as Log
 import Data.Int (floor, fromString)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Effect (Effect)
@@ -124,22 +123,11 @@ component =
         Just (MbidMapping { releaseMbid: Just m }) -> Just m
         _ -> Nothing
 
-      lastfmId = "lastfm-" <> artist <> "-" <> release
-      discogsId = "discogs-" <> artist <> "-" <> release
-
-      coverInfo = case mbid of
-        Just m ->
-          if Set.member m failedCovers then
-            if Set.member lastfmId failedCovers then
-              if Set.member discogsId failedCovers then Nothing
-              else Just { id: discogsId, url: "/discogs-cover?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
-            else Just { id: lastfmId, url: "/lastfm-cover?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
-          else Just { id: m, url: "/caa-cover?mbid=" <> m }
-        Nothing ->
-          if Set.member lastfmId failedCovers then
-            if Set.member discogsId failedCovers then Nothing
-            else Just { id: discogsId, url: "/discogs-cover?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
-          else Just { id: lastfmId, url: "/lastfm-cover?artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&release=" <> (fromMaybe "" $ encodeURIComponent release) }
+      coverUrl = "/cover?artist=" <> (fromMaybe "" $ encodeURIComponent artist) 
+               <> "&release=" <> (fromMaybe "" $ encodeURIComponent release)
+               <> (case mbid of 
+                     Just m -> "&mbid=" <> m
+                     Nothing -> "")
     in
       HH.li
         [ HP.class_ (H.ClassName "success") ]
@@ -167,16 +155,15 @@ component =
                       ]
                 ]
             ]
-        , case coverInfo of
-            Just { id, url } ->
-              HH.img
-                [ HP.class_ (H.ClassName "track-cover")
-                , HP.src url
-                , HP.alt release
-                , HE.onError \_ -> ImageError id
-                ]
-            Nothing -> HH.text ""
+        , if Set.member coverUrl failedCovers then HH.text ""
+          else HH.img
+            [ HP.class_ (H.ClassName "track-cover")
+            , HP.src coverUrl
+            , HP.alt release
+            , HE.onError \_ -> ImageError coverUrl
+            ]
         ]
+
 
   handleAction = case _ of
     Initialize -> do
@@ -203,9 +190,8 @@ component =
       case result of
         Left err -> H.modify_ _ { loading = false, error = Just err, lastCheck = Just nowStr, currentTime = Just nowMs }
         Right listens -> H.modify_ _ { loading = false, listens = listens, lastCheck = Just nowStr, currentTime = Just nowMs }
-    ImageError mbid -> do
-      Log.error $ "Image load failed for: " <> mbid
-      H.modify_ \state -> state { failedCovers = Set.insert mbid state.failedCovers }
+    ImageError url -> do
+      H.modify_ \state -> state { failedCovers = Set.insert url state.failedCovers }
     NextPage -> do
       H.modify_ \state -> state { offset = state.offset + state.limit }
       updateUrl
