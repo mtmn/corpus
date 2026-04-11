@@ -7,10 +7,10 @@ import Affjax.ResponseFormat as ResponseFormat
 import Data.Argonaut (decodeJson)
 import Data.Array (mapWithIndex, length)
 import Data.Either (Either(..))
+import Log as Log
 import Data.Int (floor, fromString)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Effect (Effect)
-import Effect.Console as Console
 import Effect.Aff (Aff, delay)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
@@ -204,7 +204,7 @@ component =
         Left err -> H.modify_ _ { loading = false, error = Just err, lastCheck = Just nowStr, currentTime = Just nowMs }
         Right listens -> H.modify_ _ { loading = false, listens = listens, lastCheck = Just nowStr, currentTime = Just nowMs }
     ImageError mbid -> do
-      liftEffect $ Console.log $ "Image load failed for: " <> mbid
+      Log.error $ "Image load failed for: " <> mbid
       H.modify_ \state -> state { failedCovers = Set.insert mbid state.failedCovers }
     NextPage -> do
       H.modify_ \state -> state { offset = state.offset + state.limit }
