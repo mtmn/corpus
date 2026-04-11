@@ -8,7 +8,7 @@ build:
     nix build .
 
 container:
-    nix build .#oci
+    nix build .#container
 
 load: container
     podman load < result
