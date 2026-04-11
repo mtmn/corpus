@@ -13,33 +13,36 @@
     flake-utils.lib.eachDefaultSystem (
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
-
-        scorpus = pkgs.buildNpmPackage {
+      in {
+        packages.default = pkgs.buildNpmPackage {
           pname = "scorpus";
           version = "1.0.0";
-          src = self;
+          src = pkgs.lib.cleanSource ./.;
 
           npmDepsHash = "sha256-L+9L3RY5CNLudmQL7EZwZO8x0kQ2MKCqSsn37ZIIKWE=";
 
-          nativeBuildInputs = with pkgs; [
-            purescript
-            esbuild
-            makeWrapper
-            python3
-            pkg-config
-          ];
+          nativeBuildInputs = with pkgs; [ purescript spago esbuild makeWrapper ];
 
-          npmFlags = ["--ignore-scripts"];
+          # npm install will try to download purescript/spago binaries by default.
+          # We want to use the ones from nixpkgs.
+          PURESCRIPT_DOWNLOAD_BINARY = "0";
+          SPAGO_DOWNLOAD_BINARY = "0";
 
+          # We need to run spago build and then esbuild.
+          # buildNpmPackage's buildPhase runs 'npm run build' by default.
+          # We can override it if we want.
           buildPhase = ''
             export HOME=$TMPDIR
-            export PATH=$PWD/node_modules/.bin:$PATH
-            spago build && esbuild output/Main/index.js --bundle --platform=node --format=esm --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3 && spago bundle --module Client --outfile client.js --platform browser
+            # Since we are using pkgs.spago, we might need to tell it where to find packages.
+            # But it will still try to download them if they are not there.
+            # For now, let's see what happens.
+            npm run build
           '';
 
           installPhase = ''
             mkdir -p $out/lib/scorpus
-            cp -r server.js client.js package.json node_modules $out/lib/scorpus/
+            cp server.js client.js package.json $out/lib/scorpus/
+            cp -r node_modules $out/lib/scorpus/
 
             mkdir -p $out/bin
             makeWrapper ${pkgs.nodejs}/bin/node $out/bin/scorpus-server \
@@ -47,43 +50,9 @@
               --add-flags "$out/lib/scorpus/server.js"
           '';
         };
-      in {
-        packages.default = scorpus;
-
-        packages.oci = pkgs.dockerTools.buildLayeredImage {
-          name = "scorpus";
-          tag = "latest";
-          contents = [pkgs.nodejs pkgs.cacert];
-          config = {
-            Cmd = ["${scorpus}/bin/scorpus-server"];
-            WorkingDir = "/app";
-            ExposedPorts = {
-              "8321/tcp" = {};
-            };
-            User = "1000:1000";
-            Env = [
-              "PORT=8321"
-              "DATABASE_FILE=/app/data/scorpus.db"
-              "NODE_ENV=production"
-            ];
-          };
-          extraCommands = ''
-            mkdir -p app/data
-            chown -R 1000:1000 app
-            chmod 700 app/data
-          '';
-        };
 
         devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            nodejs
-            purescript
-            awscli2
-            duckdb
-            spago
-            purs-tidy
-            esbuild
-          ];
+          buildInputs = with pkgs; [ nodejs esbuild purs-tidy ];
         };
       }
     );

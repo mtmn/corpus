@@ -13,7 +13,6 @@ result-*
 .spago/
 .env
 .env.local
-
 server.js
 client.js
 server.log
