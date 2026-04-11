@@ -38,7 +38,7 @@ import Data.Array ((!!), length, uncons)
 import Data.Nullable (Nullable, toMaybe)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
-import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats)
+import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping)
 import Types (Listen(..), ListenBrainzResponse(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
@@ -537,6 +537,7 @@ handleRequest db req res = do
 
   case path of
     "/" -> serveIndex res
+    "/healthz" -> serveHealthz db res
     "/proxy" -> serveProxy db url res
     "/cover" -> serveCover url res
     "/stats" -> serveStats db res
@@ -777,6 +778,23 @@ serveAsset contentType path res = do
         writeBuffer w (unsafeCoerce buf)
         end w
       Left _ -> serveNotFound res
+
+serveHealthz :: Connection -> Response -> Effect Unit
+serveHealthz db res = do
+  setHeader "Content-Type" "application/json" (toOutgoingMessage res)
+  setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
+  launchAff_ do
+    result <- try $ ping db
+    liftEffect $ do
+      let w = toWriteable (toOutgoingMessage res)
+      case result of
+        Right _ -> do
+          setStatusCode 200 res
+          void $ writeString w UTF8 """{"status":"ok"}"""
+        Left err -> do
+          setStatusCode 503 res
+          void $ writeString w UTF8 $ """{"status":"error","message":""" <> show (Exception.message err) <> "}"
+      end w
 
 serveNotFound :: Response -> Effect Unit
 serveNotFound res = do
