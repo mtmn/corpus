@@ -36,6 +36,7 @@ import Data.Argonaut (decodeJson, encodeJson, parseJson)
 import Data.Argonaut.Core (toObject, toArray, toString, stringify)
 import Data.Array ((!!), length, uncons)
 import Data.Nullable (Nullable, toMaybe)
+import Data.Tuple (Tuple(..))
 import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run)
 import Types (Listen(..), ListenBrainzResponse(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
@@ -53,12 +54,29 @@ listenBrainzUrl = "https://api.listenbrainz.org/1/user/mtmn/listens"
 fetchListenBrainzData :: Int -> Aff String
 fetchListenBrainzData count = makeAff \callback -> do
   let url = listenBrainzUrl <> "?count=" <> show count
-  Log.info $ "Fetching from ListenBrainz: " <> url
   req <- HTTPS.get url
 
   req # on_ Client.responseH \res -> do
-    let sc = IM.statusCode res
-    Log.info $ "ListenBrainz response status: " <> show sc
+    launchAff_ do
+      body <- readableToStringUtf8 (IM.toReadable res)
+      liftEffect $ callback (Right body)
+
+  let errorH = EventHandle "error" mkEffectFn1
+  on_ errorH
+    ( \err -> do
+        Log.error $ "ListenBrainz fetch error: " <> Exception.message err
+        callback (Left err)
+    )
+    (unsafeCoerce req)
+
+  pure nonCanceler
+
+fetchListenBrainzDataBefore :: Int -> Aff String
+fetchListenBrainzDataBefore maxTs = makeAff \callback -> do
+  let url = listenBrainzUrl <> "?count=100&max_ts=" <> show maxTs
+  req <- HTTPS.get url
+
+  req # on_ Client.responseH \res -> do
     launchAff_ do
       body <- readableToStringUtf8 (IM.toReadable res)
       liftEffect $ callback (Right body)
@@ -75,49 +93,65 @@ fetchListenBrainzData count = makeAff \callback -> do
 
 syncData :: Connection -> Aff Unit
 syncData conn = do
-  env <- liftEffect getEnv
-  let shouldInitialSync = Object.lookup "INITIAL_SYNC" env == Just "true"
-
-  if shouldInitialSync then do
-    Log.info "Performing initial sync of 100 tracks"
-    void $ performSync 100
-  else
-    Log.info "Initial sync skipped (INITIAL_SYNC != true)"
-
   forever do
-    Log.info "Performing periodic sync..."
-    void $ performSync 100
+    void $ performFullSync
     delay (Milliseconds 60000.0)
 
   where
-  performSync count = do
-    result <- try $ fetchListenBrainzData count
+  performFullSync = do
+    result <- try $ fetchListenBrainzData 100
     case result of
       Right body -> do
         case parseJson body >>= decodeJson of
           Left err -> Log.error $ "Sync parse error: " <> show err
           Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
-            Log.info $ "Processing " <> show (length listens) <> " scrobbles"
             run conn "BEGIN TRANSACTION" []
-            newCount <- syncRecursive 0 listens
+            Tuple added (Tuple minTs hitExisting) <- processListens listens
             run conn "COMMIT" []
-            Log.info $ "Sync complete. Added " <> show newCount <> " new scrobbles."
+            if hitExisting || length listens == 0 then do
+              when (added > 0) $ Log.info $ "Sync complete. Added " <> show added <> " new scrobbles."
+            else do
+              total <- paginateUntilDone minTs added
+              Log.info $ "Sync complete. Added " <> show total <> " new scrobbles."
       Left err -> Log.error $ "Sync fetch error: " <> Exception.message err
 
-  syncRecursive acc listens = case uncons listens of
+  paginateUntilDone minTs acc = case minTs of
     Nothing -> pure acc
-    Just { head: l@(Listen { listenedAt: Just ts, trackMetadata: (TrackMetadata track) }), tail } -> do
+    Just ts -> do
+      result <- try $ fetchListenBrainzDataBefore ts
+      case result of
+        Right body -> do
+          case parseJson body >>= decodeJson of
+            Left err -> do
+              Log.error $ "Sync parse error: " <> show err
+              pure acc
+            Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
+              run conn "BEGIN TRANSACTION" []
+              Tuple added (Tuple newMinTs hitExisting) <- processListens listens
+              run conn "COMMIT" []
+              if hitExisting || length listens == 0 then do
+                pure (acc + added)
+              else do
+                paginateUntilDone newMinTs (acc + added)
+        Left err -> do
+          Log.error $ "Sync fetch error: " <> Exception.message err
+          pure acc
+
+  processListens listens = do
+    syncRecursive 0 Nothing listens
+
+  syncRecursive acc minTs listens = case uncons listens of
+    Nothing -> pure $ Tuple acc (Tuple minTs false)
+    Just { head: l@(Listen { listenedAt: Just ts, trackMetadata: (TrackMetadata _) }), tail } -> do
       exists <- checkExists conn ts
       if exists then do
-        Log.info $ "Hit existing record at " <> show ts <> ". Stopping sync."
-        pure acc
+        pure $ Tuple acc (Tuple minTs true)
       else do
-        Log.info $ "Adding scrobble: " <> fromMaybe "Unknown Track" track.trackName <> " - " <> fromMaybe "Unknown Artist" track.artistName <> " (" <> show ts <> ")"
         upsertScrobble conn l
-        syncRecursive (acc + 1) tail
+        syncRecursive (acc + 1) (Just ts) tail
     Just { head: _, tail } -> do
       Log.warn "Skipping scrobble without timestamp"
-      syncRecursive acc tail
+      syncRecursive acc minTs tail
 
 indexHtml :: String
 indexHtml =
