@@ -1,6 +1,4 @@
 {
-  description = "ListenBrainz frontend in PureScript";
-
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
@@ -15,6 +13,7 @@
     flake-utils.lib.eachDefaultSystem (
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
+
         scorpus = pkgs.buildNpmPackage {
           pname = "scorpus";
           version = "1.0.0";
@@ -26,7 +25,14 @@
             purescript
             spago
             esbuild
+            makeWrapper
+            python3
+            pkg-config
+            gcc
+            gnumake
           ];
+
+          npmFlags = ["--build-from-source"];
 
           buildPhase = ''
             export HOME=$TMPDIR
@@ -34,12 +40,13 @@
           '';
 
           installPhase = ''
-            mkdir -p $out/lib
-            cp server.js client.js package.json $out/lib/
+            mkdir -p $out/lib/scorpus
+            cp -r server.js client.js package.json node_modules $out/lib/scorpus/
+
             mkdir -p $out/bin
-            echo "#!/bin/sh" > $out/bin/scorpus-server
-            echo "${pkgs.nodejs}/bin/node --no-deprecation $out/lib/server.js" >> $out/bin/scorpus-server
-            chmod +x $out/bin/scorpus-server
+            makeWrapper ${pkgs.nodejs}/bin/node $out/bin/scorpus-server \
+              --add-flags "--no-deprecation" \
+              --add-flags "$out/lib/scorpus/server.js"
           '';
         };
       in {
@@ -50,7 +57,7 @@
           tag = "latest";
           contents = [pkgs.nodejs pkgs.cacert];
           config = {
-            Cmd = ["${pkgs.nodejs}/bin/node" "--no-deprecation" "/app/server.js"];
+            Cmd = ["${scorpus}/bin/scorpus-server"];
             WorkingDir = "/app";
             ExposedPorts = {
               "8321/tcp" = {};
@@ -64,9 +71,6 @@
           };
           extraCommands = ''
             mkdir -p app/data
-            cp ${scorpus}/lib/server.js app/
-            cp ${scorpus}/lib/client.js app/
-
             chown -R 1000:1000 app
             chmod 700 app/data
           '';
@@ -76,6 +80,8 @@
           buildInputs = with pkgs; [
             nodejs
             purescript
+            awscli2
+            duckdb
             spago
             purs-tidy
             esbuild

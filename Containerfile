@@ -1,10 +1,8 @@
-FROM docker.io/node:25-slim AS builder
+# docker.io/node:25-slim
+FROM docker.io/library/node@sha256:435f3537a088a01fd208bb629a4b69c28d85deb9a60af8a710cafc3befd6e3be as builder
 
 WORKDIR /app
 
-# Satisfy DL3008 (pin versions) and DL3015 (no-install-recommends)
-# Note: Pinning exact apt versions is often brittle in rolling distros, 
-# but using --no-install-recommends is a standard best practice.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
@@ -19,7 +17,8 @@ COPY src ./src
 
 RUN npm run build
 
-FROM docker.io/node:25-slim
+# docker.io/node:25-slim
+FROM docker.io/library/node@sha256:435f3537a088a01fd208bb629a4b69c28d85deb9a60af8a710cafc3befd6e3be as builder
 
 WORKDIR /app
 
@@ -33,11 +32,8 @@ RUN mkdir -p /app/data && chown -R node:node /app/data
 
 USER node
 
-# Default port for scorched scrobbler
 ENV PORT=8321
 ENV DATABASE_FILE=/app/data/scorpus.db
 ENV NODE_ENV=production
-
-EXPOSE 8321
 
 CMD ["node", "--no-deprecation", "server.js"]
