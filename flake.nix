@@ -30,6 +30,8 @@
             pkg-config
           ];
 
+          npmFlags = ["--ignore-scripts"];
+
           buildPhase = ''
             export HOME=$TMPDIR
             npm run build
