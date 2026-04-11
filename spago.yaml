@@ -26,7 +26,6 @@ package:
     - node-http
     - node-net
     - node-process
-    - node-sqlite3
     - node-streams
     - node-url
     - now
