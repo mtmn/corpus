@@ -19,11 +19,8 @@ export const uploadToS3Impl = (key) => (body) => (contentType) => (cb) => () => 
     ContentType: contentType
   });
 
-  console.log(`S3: Uploading ${key} to bucket ${process.env.S3_BUCKET} at ${process.env.AWS_ENDPOINT_URL}`);
-
   client.send(command)
     .then(() => {
-      console.log(`S3: Successfully uploaded ${key}`);
       cb(null)();
     })
     .catch((err) => {
