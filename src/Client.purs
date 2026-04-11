@@ -50,6 +50,7 @@ type State =
   , loading :: Boolean
   , currentTime :: Maybe Milliseconds
   , failedCovers :: Set String
+  , hoveredCover :: Maybe String
   , offset :: Int
   , limit :: Int
   , activeTab :: Tab
@@ -67,6 +68,8 @@ data Action
   | SwitchTab Tab
   | FilterBy String String
   | ClearFilter
+  | HoverCover String
+  | UnhoverCover
 
 component :: forall query input output m. MonadAff m => H.Component query input output m
 component =
@@ -87,6 +90,7 @@ component =
     , loading: true
     , currentTime: Nothing
     , failedCovers: Set.empty
+    , hoveredCover: Nothing
     , offset: 0
     , limit: 25
     , activeTab: ListensTab
@@ -253,6 +257,8 @@ component =
                 , HP.src coverUrl
                 , HP.alt release
                 , HE.onError \_ -> ImageError coverUrl
+                , HE.onMouseEnter \_ -> HoverCover coverUrl
+                , HE.onMouseLeave \_ -> UnhoverCover
                 ]
             , case track.genre of
                 Just g -> HH.div [ HP.class_ (H.ClassName "genre-tag") ] [ HH.text g ]
@@ -315,6 +321,10 @@ component =
       H.modify_ \state -> state { offset = max 0 (state.offset - state.limit) }
       updateUrl
       handleAction Refresh
+    HoverCover url -> do
+      H.modify_ _ { hoveredCover = Just url }
+    UnhoverCover -> do
+      H.modify_ _ { hoveredCover = Nothing }
 
   updateUrl = do
     state <- H.get

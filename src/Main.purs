@@ -38,7 +38,7 @@ import Data.Array ((!!), length, uncons)
 import Data.Nullable (Nullable, toMaybe)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
-import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, upsertReleaseMetadata, getStats)
+import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats)
 import Types (Listen(..), ListenBrainzResponse(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
@@ -93,7 +93,7 @@ fetchListenBrainzDataBefore username maxTs = makeAff \callback -> do
   pure nonCanceler
 
 syncData :: Connection -> String -> Aff Unit
-syncData conn username | username == "" = pure unit
+syncData _ username | username == "" = pure unit
 syncData conn username = do
   forever do
     void $ performFullSync
@@ -262,6 +262,15 @@ indexHtml =
             border-radius: 4px;
             object-fit: cover;
             background: rgba(255, 255, 255, 0.05);
+            transition: transform 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        
+        .track-cover:hover {
+            transform: scale(5.0);
+            z-index: 10;
+            position: relative;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
         }
         
         .loading {
@@ -804,7 +813,9 @@ fetchMusicBrainzRelease mbid = do
     Right fr | fr.status == 200 -> do
       jsonResult <- try $ fromJson fr.json
       case jsonResult of
-        Left _ -> pure $ Just { genre: Nothing, label: Nothing, year: Nothing }
+        Left err -> do
+          Log.error $ "MusicBrainz JSON parse error for " <> mbid <> ": " <> Exception.message err
+          pure $ Just { genre: Nothing, label: Nothing, year: Nothing }
         Right json -> do
           let
             genre = do
@@ -826,6 +837,11 @@ fetchMusicBrainzRelease mbid = do
                 Just { head } -> fromString head
                 Nothing -> Nothing
           Log.info $ "Enriched " <> mbid <> ": genre=" <> show genre <> " label=" <> show label <> " year=" <> show year
+          
+          -- Warn if all fields are empty
+          when (genre == Nothing && label == Nothing && year == Nothing) $
+            Log.warn $ "All fields empty for " <> mbid <> " - possible parsing issue or missing data"
+          
           pure $ Just { genre, label, year }
     Right fr | fr.status == 404 -> do
       Log.info $ "MusicBrainz 404 for " <> mbid
@@ -834,19 +850,115 @@ fetchMusicBrainzRelease mbid = do
       Log.warn $ "MusicBrainz " <> show fr.status <> " for " <> mbid <> ", will retry"
       pure Nothing
 
+fetchLastfmGenre :: String -> String -> Aff (Maybe String)
+fetchLastfmGenre artist release = do
+  env <- liftEffect getEnv
+  case Object.lookup "LASTFM_API_KEY" env of
+    Nothing -> do
+      Log.warn "LASTFM_API_KEY missing for genre fallback"
+      pure Nothing
+    Just k -> do
+      let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json"
+      Log.info $ "Fetching Last.fm genre for: " <> artist <> " - " <> release
+      result <- try $ fetch searchUrl { method: GET }
+      case result of
+        Right fetchRes | fetchRes.status == 200 -> do
+          jsonResult <- try $ fromJson fetchRes.json
+          case jsonResult of
+            Left err -> do
+              Log.error $ "Last.fm genre JSON error: " <> Exception.message err
+              pure Nothing
+            Right json -> do
+              let genre = do
+                    obj <- toObject json
+                    album <- Object.lookup "album" obj >>= toObject
+                    tags <- Object.lookup "tags" album >>= toObject
+                    tagArray <- Object.lookup "tag" tags >>= toArray
+                    firstTag <- tagArray !! 0 >>= toObject
+                    Object.lookup "name" firstTag >>= toString
+              pure genre
+        _ -> do
+          Log.warn "Last.fm genre API request failed"
+          pure Nothing
+
+fetchDiscogsGenre :: String -> String -> Aff (Maybe String)
+fetchDiscogsGenre artist release = do
+  env <- liftEffect getEnv
+  case Object.lookup "DISCOGS_TOKEN" env of
+    Nothing -> do
+      Log.warn "DISCOGS_TOKEN missing for genre fallback"
+      pure Nothing
+    Just t -> do
+      let queryStr = artist <> " " <> release
+      let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
+      Log.info $ "Fetching Discogs genre for: " <> queryStr
+      result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
+      case result of
+        Right fetchRes | fetchRes.status == 200 -> do
+          jsonResult <- try $ fromJson fetchRes.json
+          case jsonResult of
+            Left err -> do
+              Log.error $ "Discogs genre JSON error: " <> Exception.message err
+              pure Nothing
+            Right json -> do
+              let genre = do
+                    obj <- toObject json
+                    results <- Object.lookup "results" obj >>= toArray
+                    firstResult <- results !! 0 >>= toObject
+                    genres <- Object.lookup "genres" firstResult >>= toArray
+                    genres !! 0 >>= toString
+              pure genre
+        _ -> do
+          Log.warn "Discogs genre API request failed"
+          pure Nothing
+
 enrichMetadata :: Connection -> Aff Unit
 enrichMetadata conn = forever do
-  mbids <- getUnenrichedMbids conn 10
-  if length mbids == 0 then
+  -- Get both unenriched and empty genre MBIDs
+  unenrichedMbids <- getUnenrichedMbids conn 10
+  emptyGenreMbids <- getEmptyGenreMbids conn 10
+  let allMbids = unenrichedMbids <> emptyGenreMbids
+  
+  if length allMbids == 0 then
     delay (Milliseconds 60000.0)
   else do
-    for_ mbids \mbid -> do
+    Log.info $ "Processing " <> show (length unenrichedMbids) <> " unenriched + " <> show (length emptyGenreMbids) <> " empty genre releases"
+    for_ allMbids \mbid -> do
       delay (Milliseconds 1100.0)
       result <- try $ fetchMusicBrainzRelease mbid
       case result of
         Left err -> Log.error $ "Enrichment error: " <> Exception.message err
         Right Nothing -> pure unit
-        Right (Just mbdata) -> upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
+        Right (Just mbdata) -> do
+          -- If genre is empty, try fallback sources
+          if mbdata.genre == Nothing then do
+            artistRelease <- getArtistReleaseByMbid conn mbid
+            case artistRelease of
+              Just { artist, release } -> do
+                -- Try Last.fm first
+                lastfmGenre <- fetchLastfmGenre artist release
+                finalGenre <- case lastfmGenre of
+                  Just _ -> pure lastfmGenre
+                  Nothing -> do
+                    -- Try Discogs as final fallback
+                    fetchDiscogsGenre artist release
+                
+                -- Update with the best genre we found
+                let finalMbdata = mbdata { genre = finalGenre }
+                upsertReleaseMetadata conn mbid finalMbdata.genre finalMbdata.label finalMbdata.year
+                
+                case finalGenre of
+                  Just genre -> Log.info $ "Added fallback genre from " <> (if lastfmGenre /= Nothing then "Last.fm" else "Discogs") <> " for " <> mbid <> ": " <> genre
+                  Nothing -> do
+                    Log.info $ "No genre found in any source for " <> mbid
+                    touchGenreCheckedAt conn mbid
+              Nothing -> do
+                Log.warn $ "No artist/release info found for MBID " <> mbid <> ", cannot use fallback sources"
+                upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
+                touchGenreCheckedAt conn mbid
+          else do
+            -- Genre found in MusicBrainz, just save as usual
+            upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
 
 startServer :: Int -> String -> String -> Effect Unit
 startServer port dbFile username = launchAff_ do

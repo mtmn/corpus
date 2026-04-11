@@ -6,7 +6,7 @@ import Data.Argonaut.Core (Json, toObject, toString)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Effect (Effect)
-import Effect.Aff (Aff, makeAff, nonCanceler)
+import Effect.Aff (Aff, makeAff, nonCanceler, try)
 import Effect.Exception (Error, error)
 import Foreign (Foreign)
 import Unsafe.Coerce (unsafeCoerce)
@@ -14,7 +14,7 @@ import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEn
 import Data.Traversable (traverse)
 import Foreign.Object as Object
 import Data.Nullable (Nullable, toMaybe, toNullable)
-import Data.Array (mapMaybe)
+import Data.Array (mapMaybe, uncons)
 
 foreign import data Connection :: Type
 
@@ -104,7 +104,10 @@ getScrobbles conn limit offset (Just { field, value }) = do
 
 initReleaseMetadata :: Connection -> Aff Unit
 initReleaseMetadata conn = do
-  run conn "CREATE TABLE IF NOT EXISTS release_metadata (release_mbid VARCHAR PRIMARY KEY, genre VARCHAR, label VARCHAR, release_year INTEGER)" []
+  _ <- run conn "CREATE TABLE IF NOT EXISTS release_metadata (release_mbid VARCHAR PRIMARY KEY, genre VARCHAR, label VARCHAR, release_year INTEGER, genre_checked_at INTEGER)" []
+  -- Migration for existing databases; SQLite errors if column already exists, so ignore the failure
+  _ <- try $ run conn "ALTER TABLE release_metadata ADD COLUMN genre_checked_at INTEGER" []
+  pure unit
 
 getUnenrichedMbids :: Connection -> Int -> Aff (Array String)
 getUnenrichedMbids conn limit = do
@@ -117,16 +120,33 @@ getUnenrichedMbids conn limit = do
     obj <- toObject json
     Object.lookup "release_mbid" obj >>= toString
 
+getEmptyGenreMbids :: Connection -> Int -> Aff (Array String)
+getEmptyGenreMbids conn limit = do
+  rows <- queryAll conn
+    "SELECT DISTINCT s.release_mbid FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE (rm.genre IS NULL OR rm.genre = '') AND (rm.genre_checked_at IS NULL OR rm.genre_checked_at < CAST(epoch(now()) AS INTEGER) - 604800) LIMIT ?"
+    [ unsafeCoerce limit ]
+  pure $ mapMaybe extractMbid rows
+  where
+  extractMbid json = do
+    obj <- toObject json
+    Object.lookup "release_mbid" obj >>= toString
+
 upsertReleaseMetadata :: Connection -> String -> Maybe String -> Maybe String -> Maybe Int -> Aff Unit
 upsertReleaseMetadata conn mbid genre label year = do
   _ <- run conn
-    "INSERT INTO release_metadata (release_mbid, genre, label, release_year) SELECT * FROM (SELECT ? as release_mbid, ? as genre, ? as label, ? as release_year) t WHERE NOT EXISTS (SELECT 1 FROM release_metadata WHERE release_mbid = t.release_mbid)"
+    "INSERT INTO release_metadata (release_mbid, genre, label, release_year) VALUES (?, ?, ?, ?) ON CONFLICT(release_mbid) DO UPDATE SET genre=excluded.genre, label=excluded.label, release_year=excluded.release_year"
     [ unsafeCoerce mbid
     , unsafeCoerce (toNullable genre)
     , unsafeCoerce (toNullable label)
     , unsafeCoerce (toNullable year)
     ]
   pure unit
+
+touchGenreCheckedAt :: Connection -> String -> Aff Unit
+touchGenreCheckedAt conn mbid = do
+  run conn
+    "UPDATE release_metadata SET genre_checked_at = CAST(epoch(now()) AS INTEGER) WHERE release_mbid = ?"
+    [ unsafeCoerce mbid ]
 
 getStats :: Connection -> Aff Stats
 getStats conn = do
@@ -145,6 +165,19 @@ rowToEntry json = do
   name <- Object.lookup "name" obj >>= toString
   count <- Object.lookup "count" obj >>= (unsafeCoerce >>> Just)
   pure $ StatsEntry { name, count }
+
+getArtistReleaseByMbid :: Connection -> String -> Aff (Maybe { artist :: String, release :: String })
+getArtistReleaseByMbid conn mbid = do
+  rows <- queryAll conn
+    "SELECT DISTINCT artist_name, release_name FROM scrobbles WHERE release_mbid = ? AND artist_name != '' AND release_name != '' LIMIT 1"
+    [ unsafeCoerce mbid ]
+  pure $ case uncons rows of
+    Just { head: row, tail: _ } -> do
+      obj <- toObject row
+      artist <- Object.lookup "artist_name" obj >>= toString
+      release <- Object.lookup "release_name" obj >>= toString
+      Just { artist, release }
+    Nothing -> Nothing
 
 rowToListen :: Json -> Maybe Listen
 rowToListen json = do
