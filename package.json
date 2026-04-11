@@ -1,17 +1,17 @@
 {
-  "name": "scrobbler-purescript",
+  "name": "scorpus",
   "version": "1.0.0",
-  "description": "ListenBrainz scrobbler in PureScript",
+  "description": "ListenBrainz frontend in PureScript",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "build": "npx spago build && npx esbuild output/Main/index.js --bundle --platform=node --format=esm --outfile=server.js --external:http --external:https --external:xhr2 --external:dotenv --external:url && npx spago bundle --module Client --outfile client.js --platform browser",
+    "build": "npx spago build && npx esbuild output/Main/index.js --bundle --platform=node --format=esm --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3 && npx spago bundle --module Client --outfile client.js --platform browser",
     "build-client": "npx spago bundle --module Client --outfile client.js --platform browser",
-    "build-server": "npx esbuild output/Main/index.js --bundle --platform=node --format=esm --outfile=server.js --external:http --external:https --external:xhr2 --external:dotenv --external:url",
+    "build-server": "npx esbuild output/Main/index.js --bundle --platform=node --format=esm --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3",
     "test": "npx spago test",
     "tidy": "purs-tidy format-in-place src/**/*.purs",
-    "serve": "node server.js 2>&1 | tee server.log",
-    "start": "node server.js 2>&1 | tee server.log"
+    "serve": "node --no-deprecation server.js 2>&1 | tee server.log",
+    "start": "node --no-deprecation server.js 2>&1 | tee server.log"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",
@@ -22,7 +22,10 @@
     "spago": "^1.0.4"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1029.0",
+    "audit": "^0.0.6",
     "dotenv": "^17.4.1",
-    "xhr2": "^0.2.1"
+    "duckdb": "^1.4.4",
+    "fix": "^0.0.6"
   }
 }

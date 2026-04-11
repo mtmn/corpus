@@ -15,26 +15,34 @@ import Node.HTTP.IncomingMessage as IM
 import Node.HTTP.Types (ServerResponse, IncomingMessage, IMServer)
 import Node.HTTP.ServerResponse (setStatusCode, toOutgoingMessage)
 import Node.HTTP.OutgoingMessage (setHeader, toWriteable)
-import Node.Stream (end, writeString, pipe)
+import Node.Stream (Writable, end, writeString)
 import Node.Stream.Aff (readableToStringUtf8)
 import Node.Encoding (Encoding(UTF8))
 import Node.Net.Server (listenTcp, listeningH)
 import Data.Either (Either(..))
 import Effect.Exception as Exception
-import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try)
+import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff)
+import Foreign (Foreign)
 import Unsafe.Coerce (unsafeCoerce)
 import Node.FS.Aff as FSA
 import Node.Process (getEnv)
-import Fetch (fetch, Method(GET))
+import Fetch (fetch, Method(GET), lookup)
 import Fetch.Argonaut.Json (fromJson)
 import Data.Maybe (Maybe(..), fromMaybe)
 import JSURI (encodeURIComponent)
 import Node.URL (URL, new', pathname)
-import Affjax.RequestHeader (RequestHeader(..))
 import Foreign.Object as Object
-import Data.Argonaut.Core (toObject, toArray, toString)
-import Data.Array ((!!))
+import Data.Argonaut (decodeJson, encodeJson, parseJson)
+import Data.Argonaut.Core (toObject, toArray, toString, stringify)
+import Data.Array ((!!), length, uncons)
 import Data.Nullable (Nullable, toMaybe)
+import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run)
+import Types (Listen(..), ListenBrainzResponse(..), Payload(..))
+import Control.Monad.Rec.Class (forever)
+import Data.Time.Duration (Milliseconds(..))
+import Data.Int (fromString)
+import Data.Foldable (traverse_)
+import S3 (existsInS3, uploadToS3, getS3Url)
 
 -- Types
 type Request = IncomingMessage IMServer
@@ -43,10 +51,11 @@ type Response = ServerResponse
 listenBrainzUrl :: String
 listenBrainzUrl = "https://api.listenbrainz.org/1/user/mtmn/listens"
 
-fetchListenBrainzData :: Aff String
-fetchListenBrainzData = makeAff \callback -> do
-  Console.log $ "Fetching from ListenBrainz: " <> listenBrainzUrl
-  req <- HTTPS.get listenBrainzUrl
+fetchListenBrainzData :: Int -> Aff String
+fetchListenBrainzData count = makeAff \callback -> do
+  let url = listenBrainzUrl <> "?count=" <> show count
+  Console.log $ "Fetching from ListenBrainz: " <> url
+  req <- HTTPS.get url
 
   req # on_ Client.responseH \res -> do
     let sc = IM.statusCode res
@@ -65,16 +74,44 @@ fetchListenBrainzData = makeAff \callback -> do
 
   pure nonCanceler
 
-handleApiRequest :: Aff String
-handleApiRequest = do
-  result <- try fetchListenBrainzData
-  case result of
-    Right responseData -> do
-      liftEffect $ Console.log $ "Successfully fetched bytes"
-      pure responseData
-    Left error -> do
-      liftEffect $ Console.log $ "Error in handleApiRequest: " <> Exception.message error
-      pure "{\"error\": \"ListenBrainz fetch failed\"}"
+syncData :: Connection -> Aff Unit
+syncData conn = do
+  env <- liftEffect getEnv
+  let shouldInitialSync = Object.lookup "INITIAL_SYNC" env == Just "true"
+
+  if shouldInitialSync then do
+    liftEffect $ Console.log "Performing initial sync of 10000 tracks"
+    void $ performSync 10000
+  else
+    liftEffect $ Console.log "Initial sync skipped (INITIAL_SYNC != true)"
+
+  pure unit
+  where
+  performSync count = do
+    result <- try $ fetchListenBrainzData count
+    case result of
+      Right body -> do
+        case parseJson body >>= decodeJson of
+          Left err -> liftEffect $ Console.log $ "Sync parse error: " <> show err
+          Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
+            liftEffect $ Console.log $ "Processing " <> show (length listens) <> " scrobbles"
+            run conn "BEGIN TRANSACTION" []
+            newCount <- syncRecursive 0 listens
+            run conn "COMMIT" []
+            liftEffect $ Console.log $ "Sync complete. Added " <> show newCount <> " new scrobbles."
+      Left err -> liftEffect $ Console.log $ "Sync fetch error: " <> Exception.message err
+
+  syncRecursive acc listens = case uncons listens of
+    Nothing -> pure acc
+    Just { head: l@(Listen { listenedAt: Just ts }), tail } -> do
+      exists <- checkExists conn ts
+      if exists then do
+        liftEffect $ Console.log $ "Hit existing record at " <> show ts <> ". Stopping sync."
+        pure acc
+      else do
+        upsertScrobble conn l
+        syncRecursive (acc + 1) tail
+    Just { head: _, tail } -> syncRecursive acc tail
 
 indexHtml :: String
 indexHtml =
@@ -240,6 +277,40 @@ indexHtml =
             50% { opacity: 0.3; }
             100% { opacity: 1; }
         }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .page-btn {
+            background: #521e40;
+            border: 1px solid #50447f;
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            box-shadow: 2px 2px 0px #50447f;
+        }
+
+        .page-btn:hover {
+            background: #50447f;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-indicator {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            color: #9fbfe7;
+        }
     </style>
 </head>
 <body>
@@ -249,8 +320,8 @@ indexHtml =
 </html>"""
 
 -- Request handler
-handleRequest :: Request -> Response -> Effect Unit
-handleRequest req res = do
+handleRequest :: Connection -> Request -> Response -> Effect Unit
+handleRequest db req res = do
   let rawUrl = IM.url req
   url <- new' rawUrl "http://localhost"
   path <- pathname url
@@ -258,7 +329,8 @@ handleRequest req res = do
 
   case path of
     "/" -> serveIndex res
-    "/proxy" -> serveProxy res
+    "/proxy" -> serveProxy db url res
+    "/caa-cover" -> serveCaaCover url res
     "/discogs-cover" -> serveDiscogsCover url res
     "/lastfm-cover" -> serveLastfmCover url res
     "/client.js" -> serveClientJs res
@@ -289,6 +361,33 @@ serveClientJs res = do
       Left _ -> serveNotFound res
 
 foreign import getQueryParam :: String -> URL -> Effect (Nullable String)
+foreign import writeBuffer :: forall r. Writable r -> Foreign -> Effect Unit
+foreign import sanitizeKey :: String -> String
+
+serveCaaCover :: URL -> Response -> Effect Unit
+serveCaaCover url res = do
+  launchAff_ do
+    mbidMaybe <- liftEffect $ getQueryParam "mbid" url
+    case toMaybe mbidMaybe of
+      Nothing -> liftEffect $ serveNotFound res
+      Just mbid -> do
+        let s3Key = "covers/caa/" <> mbid <> ".jpg"
+        cachedResult <- try $ existsInS3 s3Key
+        let
+          cached = case cachedResult of
+            Right b -> b
+            Left _ -> false
+
+        if cached then do
+          liftEffect $ Console.log $ "Serving CAA cover from S3: " <> s3Key
+          liftEffect $ do
+            setStatusCode 302 res
+            setHeader "Location" (getS3Url s3Key) (toOutgoingMessage res)
+            end (toWriteable (toOutgoingMessage res))
+        else do
+          let caaUrl = "https://coverartarchive.org/release/" <> mbid <> "/front-250"
+          liftEffect $ Console.log $ "Fetching CAA cover: " <> mbid
+          proxyAndCacheImage caaUrl s3Key res
 
 serveLastfmCover :: URL -> Response -> Effect Unit
 serveLastfmCover url res = do
@@ -298,113 +397,165 @@ serveLastfmCover url res = do
     let artistStr = fromMaybe "" (toMaybe artistMaybe)
     let releaseStr = fromMaybe "" (toMaybe releaseMaybe)
 
-    env <- liftEffect getEnv
-    let apiKey = Object.lookup "LASTFM_API_KEY" env
-    case apiKey of
-      Nothing -> liftEffect $ serveNotFound res
-      Just k -> do
-        let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artistStr) <> "&album=" <> (fromMaybe "" $ encodeURIComponent releaseStr) <> "&format=json"
-        liftEffect $ Console.log $ "Last.fm search: " <> artistStr <> " - " <> releaseStr
-        
-        result <- try $ fetch searchUrl { method: GET }
-        case result of
-          Right fetchRes -> do
-            json <- fromJson fetchRes.json
-            let coverUrl = do
+    let safeArtist = sanitizeKey artistStr
+    let safeRelease = sanitizeKey releaseStr
+    let s3Key = "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+
+    cachedResult <- try $ existsInS3 s3Key
+    let
+      cached = case cachedResult of
+        Right b -> b
+        Left _ -> false
+
+    if cached then do
+      liftEffect $ Console.log $ "Serving Last.fm cover from S3: " <> s3Key
+      liftEffect $ do
+        setStatusCode 302 res
+        setHeader "Location" (getS3Url s3Key) (toOutgoingMessage res)
+        end (toWriteable (toOutgoingMessage res))
+    else do
+      env <- liftEffect getEnv
+      let apiKey = Object.lookup "LASTFM_API_KEY" env
+      case apiKey of
+        Nothing -> liftEffect $ serveNotFound res
+        Just k -> do
+          let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artistStr) <> "&album=" <> (fromMaybe "" $ encodeURIComponent releaseStr) <> "&format=json"
+          liftEffect $ Console.log $ "Last.fm search: " <> artistStr <> " - " <> releaseStr
+
+          result <- try $ fetch searchUrl { method: GET }
+          case result of
+            Right fetchRes -> do
+              json <- fromJson fetchRes.json
+              let
+                coverUrl = do
                   obj <- toObject json
                   album <- Object.lookup "album" obj >>= toObject
                   images <- Object.lookup "image" album >>= toArray
-                  -- Try to get the large image (index 2 or 3)
                   imageObj <- images !! 2 >>= toObject
                   u <- Object.lookup "#text" imageObj >>= toString
                   if u == "" then Nothing else Just u
-            
-            case coverUrl of
-              Just urlStr -> do
-                liftEffect $ Console.log $ "Found Last.fm cover: " <> urlStr
-                proxyImage urlStr res
-              Nothing -> do
-                liftEffect $ Console.log $ "No Last.fm cover found for: " <> artistStr <> " - " <> releaseStr
-                liftEffect $ serveNotFound res
-          Left err -> do
-            liftEffect $ Console.log $ "Last.fm API error: " <> Exception.message err
-            liftEffect $ serveNotFound res
+
+              case coverUrl of
+                Just urlStr -> do
+                  liftEffect $ Console.log $ "Found Last.fm cover: " <> urlStr
+                  proxyAndCacheImage urlStr s3Key res
+                Nothing -> do
+                  liftEffect $ Console.log $ "No Last.fm cover found for: " <> artistStr <> " - " <> releaseStr
+                  liftEffect $ serveNotFound res
+            Left err -> do
+              liftEffect $ Console.log $ "Last.fm API error: " <> Exception.message err
+              liftEffect $ serveNotFound res
 
 serveDiscogsCover :: URL -> Response -> Effect Unit
 serveDiscogsCover url res = do
   launchAff_ do
     artistMaybe <- liftEffect $ getQueryParam "artist" url
     releaseMaybe <- liftEffect $ getQueryParam "release" url
-    
     let artistStr = fromMaybe "" (toMaybe artistMaybe)
     let releaseStr = fromMaybe "" (toMaybe releaseMaybe)
 
-    env <- liftEffect getEnv
-    let token = Object.lookup "DISCOGS_TOKEN" env
-    case token of
-      Nothing -> do
-        liftEffect $ Console.log "DISCOGS_TOKEN not found in env"
-        liftEffect $ serveNotFound res
-      Just t -> do
-        let queryStr = artistStr <> " " <> releaseStr
-        let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
-        liftEffect $ Console.log $ "Discogs search (broad): " <> queryStr
-        
-        result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
-        case result of
-          Right fetchRes -> do
-            json <- fromJson fetchRes.json
-            let coverUrl = do
+    let safeArtist = sanitizeKey artistStr
+    let safeRelease = sanitizeKey releaseStr
+    let s3Key = "covers/discogs/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+
+    cachedResult <- try $ existsInS3 s3Key
+    let
+      cached = case cachedResult of
+        Right b -> b
+        Left _ -> false
+
+    if cached then do
+      liftEffect $ Console.log $ "Serving Discogs cover from S3: " <> s3Key
+      liftEffect $ do
+        setStatusCode 302 res
+        setHeader "Location" (getS3Url s3Key) (toOutgoingMessage res)
+        end (toWriteable (toOutgoingMessage res))
+    else do
+      env <- liftEffect getEnv
+      let token = Object.lookup "DISCOGS_TOKEN" env
+      case token of
+        Nothing -> do
+          liftEffect $ Console.log "DISCOGS_TOKEN not found in env"
+          liftEffect $ serveNotFound res
+        Just t -> do
+          let queryStr = artistStr <> " " <> releaseStr
+          let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
+          liftEffect $ Console.log $ "Discogs search (broad): " <> queryStr
+
+          result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
+          case result of
+            Right fetchRes -> do
+              json <- fromJson fetchRes.json
+              let
+                coverUrl = do
                   obj <- toObject json
                   results <- Object.lookup "results" obj >>= toArray
                   firstResult <- results !! 0 >>= toObject
                   cover <- Object.lookup "cover_image" firstResult >>= toString
                   pure cover
-            
-            case coverUrl of
-              Just urlStr -> do
-                liftEffect $ Console.log $ "Found Discogs cover: " <> urlStr
-                proxyImage urlStr res
-              Nothing -> do
-                liftEffect $ Console.log $ "No Discogs cover found for: " <> queryStr
-                liftEffect $ serveNotFound res
-          Left err -> do
-            liftEffect $ Console.log $ "Discogs API error: " <> Exception.message err
-            liftEffect $ serveNotFound res
 
-proxyImage :: String -> Response -> Aff Unit
-proxyImage urlStr res = liftEffect $ do
-  imgReq <- HTTPS.get urlStr
-  imgReq # on_ Client.responseH \imgRes -> do
-    let imgSc = IM.statusCode imgRes
-    setStatusCode imgSc res
-    setHeader "Content-Type" (fromMaybe "image/jpeg" $ Object.lookup "content-type" (IM.headers imgRes)) (toOutgoingMessage res)
-    setHeader "Cache-Control" "public, max-age=86400" (toOutgoingMessage res)
-    
-    let reader = IM.toReadable imgRes
-    let writer = toWriteable (toOutgoingMessage res)
-    void $ pipe reader writer
-  
-  let errorH = EventHandle "error" mkEffectFn1
-  on_ errorH (\err -> do
-    Console.log $ "Image proxy error: " <> Exception.message err
-    serveNotFound res
-  ) (unsafeCoerce imgReq)
+              case coverUrl of
+                Just urlStr -> do
+                  liftEffect $ Console.log $ "Found Discogs cover: " <> urlStr
+                  proxyAndCacheImage urlStr s3Key res
+                Nothing -> do
+                  liftEffect $ Console.log $ "No Discogs cover found for: " <> queryStr
+                  liftEffect $ serveNotFound res
+            Left err -> do
+              liftEffect $ Console.log $ "Discogs API error: " <> Exception.message err
+              liftEffect $ serveNotFound res
 
-serveProxy :: Response -> Effect Unit
-serveProxy res = do
+proxyAndCacheImage :: String -> String -> Response -> Aff Unit
+proxyAndCacheImage urlStr s3Key res = do
+  liftEffect $ Console.log $ "Proxying and caching image: " <> urlStr
+  makeAff \cb -> do
+    launchAff_ do
+      fetchResult <- try $ fetch urlStr { method: GET }
+      case fetchResult of
+        Right fr -> do
+          let contentType = fromMaybe "image/jpeg" $ lookup "content-type" fr.headers
+          buf <- fr.arrayBuffer
+          liftEffect $ do
+            setStatusCode fr.status res
+            setHeader "Content-Type" contentType (toOutgoingMessage res)
+            setHeader "Cache-Control" "public, max-age=86400" (toOutgoingMessage res)
+            let writer = toWriteable (toOutgoingMessage res)
+            writeBuffer writer (unsafeCoerce buf)
+            end writer
+
+          -- Cache to S3
+          uploadResult <- try $ uploadToS3 s3Key (unsafeCoerce buf) contentType
+          case uploadResult of
+            Right _ -> liftEffect $ Console.log $ "Cached to S3: " <> s3Key
+            Left err -> liftEffect $ Console.log $ "S3 upload failed: " <> Exception.message err
+          liftEffect $ cb (Right unit)
+        Left err -> do
+          liftEffect $ Console.log $ "Failed to fetch image: " <> Exception.message err
+          liftEffect $ serveNotFound res
+          liftEffect $ cb (Right unit)
+    pure nonCanceler
+
+serveProxy :: Connection -> URL -> Response -> Effect Unit
+serveProxy db url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Methods" "GET, POST, OPTIONS" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Headers" "*" (toOutgoingMessage res)
 
-  -- Launch the Aff action to fetch data from ListenBrainz
   launchAff_ do
-    body <- handleApiRequest
+    limitStr <- liftEffect $ getQueryParam "limit" url
+    offsetStr <- liftEffect $ getQueryParam "offset" url
+
+    let limit = fromMaybe 25 (toMaybe limitStr >>= fromString)
+    let offset = fromMaybe 0 (toMaybe offsetStr >>= fromString)
+
+    listens <- getScrobbles db limit offset
+    let responseBody = stringify $ encodeJson { payload: { listens: listens } }
+
     liftEffect $ do
       setStatusCode 200 res
       let w = toWriteable (toOutgoingMessage res)
-      void $ writeString w UTF8 body
+      void $ writeString w UTF8 responseBody
       end w
 
 serveFavicon :: Response -> Effect Unit
@@ -424,15 +575,20 @@ serveNotFound res = do
   end w
 
 startServer :: Int -> Effect Unit
-startServer port = do
-  server <- createServer
-  server # on_ Server.requestH handleRequest
-  let netServer = Server.toNetServer server
+startServer port = launchAff_ do
+  conn <- connect "scorpus.db"
+  initDb conn
+  void $ forkAff $ syncData conn
 
-  netServer # on_ listeningH do
-    Console.log $ "Server is running on port " <> show port
+  liftEffect $ do
+    server <- createServer
+    server # on_ Server.requestH (handleRequest conn)
+    let netServer = Server.toNetServer server
 
-  listenTcp netServer { host: "127.0.0.1", port, backlog: 128 }
+    netServer # on_ listeningH do
+      Console.log $ "Server is running on port " <> show port
+
+    listenTcp netServer { host: "127.0.0.1", port, backlog: 128 }
 
 foreign import dotenvConfig :: Effect Unit
 
@@ -440,3 +596,5 @@ main :: Effect Unit
 main = do
   dotenvConfig
   startServer 8000
+
+foreign import split :: String -> String -> Array String
