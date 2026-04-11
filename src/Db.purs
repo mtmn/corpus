@@ -82,7 +82,8 @@ upsertScrobble conn (Listen { listenedAt, trackMetadata: TrackMetadata track }) 
 
 getScrobbles :: Connection -> Int -> Int -> Maybe { field :: String, value :: String } -> Aff (Array Listen)
 getScrobbles conn limit offset Nothing = do
-  rows <- queryAll conn "SELECT listened_at, track_name, artist_name, release_name, release_mbid, caa_release_mbid FROM scrobbles ORDER BY listened_at DESC LIMIT ? OFFSET ?"
+  rows <- queryAll conn
+    "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
     [ unsafeCoerce limit, unsafeCoerce offset ]
   pure $ fromMaybe [] $ traverse rowToListen rows
 getScrobbles conn limit offset (Just { field, value }) = do
@@ -92,7 +93,7 @@ getScrobbles conn limit offset (Just { field, value }) = do
       "year" -> "rm.release_year::VARCHAR"
       _ -> "rm.genre"
   rows <- queryAll conn
-    ( "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid"
+    ( "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
         <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
         <> " WHERE "
         <> col
@@ -154,6 +155,7 @@ rowToListen json = do
   releaseName <- Object.lookup "release_name" obj >>= toString
   releaseMbid <- Object.lookup "release_mbid" obj >>= toString
   caaReleaseMbid <- Object.lookup "caa_release_mbid" obj >>= toString
+  let genre = Object.lookup "genre" obj >>= toString
 
   pure $ Listen
     { listenedAt: Just listenedAt
@@ -161,6 +163,7 @@ rowToListen json = do
         { trackName: Just trackName
         , artistName: Just artistName
         , releaseName: Just releaseName
+        , genre
         , mbidMapping: Just $ MbidMapping
             { releaseMbid: if releaseMbid == "" then Nothing else Just releaseMbid
             , caaReleaseMbid: if caaReleaseMbid == "" then Nothing else Just caaReleaseMbid

@@ -69,6 +69,7 @@ newtype TrackMetadata = TrackMetadata
   , artistName :: Maybe String
   , releaseName :: Maybe String
   , mbidMapping :: Maybe MbidMapping
+  , genre :: Maybe String
   }
 
 derive instance eqTrackMetadata :: Eq TrackMetadata
@@ -81,14 +82,16 @@ instance DecodeJson TrackMetadata where
     artistName <- obj .:? "artist_name"
     releaseName <- obj .:? "release_name"
     mbidMapping <- obj .:? "mbid_mapping"
-    pure $ TrackMetadata { trackName, artistName, releaseName, mbidMapping }
+    genre <- obj .:? "genre"
+    pure $ TrackMetadata { trackName, artistName, releaseName, mbidMapping, genre }
 
 instance EncodeJson TrackMetadata where
-  encodeJson (TrackMetadata { trackName, artistName, releaseName, mbidMapping }) =
+  encodeJson (TrackMetadata { trackName, artistName, releaseName, mbidMapping, genre }) =
     "track_name" := encodeJson trackName
       ~> "artist_name" := encodeJson artistName
       ~> "release_name" := encodeJson releaseName
       ~> "mbid_mapping" := encodeJson mbidMapping
+      ~> "genre" := encodeJson genre
       ~> jsonEmptyObject
 
 newtype MbidMapping = MbidMapping

@@ -258,7 +258,6 @@ indexHtml =
         .track-cover {
             width: 60px;
             height: 60px;
-            margin-left: 15px;
             border-radius: 4px;
             object-fit: cover;
             background: rgba(255, 255, 255, 0.05);
@@ -441,6 +440,26 @@ indexHtml =
             color: #9fbfe7;
             font-size: 13px;
             padding: 10px 0;
+        }
+
+        .cover-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-left: 15px;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .genre-tag {
+            font-size: 10px;
+            color: #9fbfe7;
+            text-align: center;
+            max-width: 60px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            opacity: 0.8;
         }
 
         .stat-row {

@@ -246,12 +246,17 @@ component =
                       ]
                 ]
             ]
-        , if Set.member coverUrl failedCovers then HH.text ""
-          else HH.img
-            [ HP.class_ (H.ClassName "track-cover")
-            , HP.src coverUrl
-            , HP.alt release
-            , HE.onError \_ -> ImageError coverUrl
+        , HH.div [ HP.class_ (H.ClassName "cover-wrapper") ]
+            [ if Set.member coverUrl failedCovers then HH.text ""
+              else HH.img
+                [ HP.class_ (H.ClassName "track-cover")
+                , HP.src coverUrl
+                , HP.alt release
+                , HE.onError \_ -> ImageError coverUrl
+                ]
+            , case track.genre of
+                Just g -> HH.div [ HP.class_ (H.ClassName "genre-tag") ] [ HH.text g ]
+                Nothing -> HH.text ""
             ]
         ]
 
