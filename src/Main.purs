@@ -474,6 +474,19 @@ indexHtml =
             opacity: 0.8;
         }
 
+        .genre-tag:hover {
+            max-width: none;
+            overflow: visible;
+            text-overflow: clip;
+            position: absolute;
+            background: #521e40;
+            border: 1px solid #50447f;
+            border-radius: 4px;
+            padding: 2px 6px;
+            z-index: 100;
+            white-space: nowrap;
+        }
+
         .stat-row {
             cursor: pointer;
         }
