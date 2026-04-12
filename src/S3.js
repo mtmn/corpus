@@ -49,8 +49,8 @@ export const existsInS3Impl = (key) => (cb) => () => {
 };
 
 export const getS3UrlImpl = (key) => {
-  const endpoint = process.env.AWS_ENDPOINT_URL;
-  const bucket = process.env.S3_BUCKET;
+  const endpoint = process.env.AWS_ENDPOINT_URL || "";
+  const bucket = process.env.S3_BUCKET || "";
   if (process.env.AWS_S3_ADDRESSING_STYLE === "path") {
     return `${endpoint}/${bucket}/${key}`;
   } else {

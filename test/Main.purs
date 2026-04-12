@@ -15,7 +15,7 @@ import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..))
 import Db (connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats)
-import Main (split, sanitizeKey, listenBrainzUrl)
+import Main (sanitizeKey, listenBrainzUrl)
 import S3 (getS3Url)
 
 main :: Effect Unit
@@ -32,10 +32,6 @@ main = do
         sanitizeKey "hello world!" `shouldEqual` "hello_world_"
         sanitizeKey "T.est-123" `shouldEqual` "T.est-123"
         sanitizeKey "multiple   spaces" `shouldEqual` "multiple_spaces"
-
-      it "should split strings correctly" do
-        split "-" "2023-05-12" `shouldEqual` ["2023", "05", "12"]
-        split " " "hello world" `shouldEqual` ["hello", "world"]
 
     describe "Scorpus Types" do
       describe "MbidMapping Codecs" do

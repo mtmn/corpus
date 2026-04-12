@@ -62,12 +62,11 @@ When a cover is requested:
 
 ## Foreign Function Interface (FFI)
 
-Scorpus relies on FFI to interact with the Node.js and browser ecosystems. Key FFI integrations include:
+Scorpus relies on FFI to interact with the Node.js and browser ecosystems where native PureScript wrappers are unavailable or where direct JS access is required. Key FFI integrations include:
 
 - **Database (`Db.js`)**: Provides a high-performance interface to the native `duckdb` library. It includes custom logic to handle BigInt conversions, ensuring database results are compatible with standard JSON serialization.
 - **Cloud Storage (`S3.js`)**: Leverages the official AWS SDK (`@aws-sdk/client-s3`) to manage cover art caching in S3-compatible storage.
-- **System Utilities (`Main.js`)**: Bridges PureScript with essential Node.js functionality, including environment variable management (`dotenv`), buffer operations, and URL parsing.
-- **Browser Integration (`Client.js`)**: Manages client-side concerns such as URL parameter extraction and history state manipulation.
+- **System Utilities (`Main.js`)**: Bridges PureScript with essential Node.js functionality, including environment variable management (`dotenv`) and raw buffer operations.
 
 ## System Flow
 

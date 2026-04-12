@@ -38,6 +38,7 @@ package:
     - unsafe-coerce
     - web-dom
     - web-html
+    - web-url
   test:
     main: Test.Main
     dependencies:

@@ -4,14 +4,6 @@ export const dotenvConfig = () => {
   config();
 };
 
-export const getQueryParam = (name) => (url) => () => {
-  return url.searchParams.get(name);
-};
-
-export const split = (sep) => (str) => {
-  return str.split(sep);
-};
-
 export const writeBuffer = (stream) => (buffer) => () => {
   stream.write(Buffer.from(buffer));
 };
