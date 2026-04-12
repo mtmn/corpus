@@ -172,7 +172,6 @@ indexHtml =
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>scrobbler</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -585,7 +584,6 @@ handleRequest db isSyncing req res = do
         "/cover" -> serveCover isSyncing url res
         "/stats" -> serveStats db isSyncing res
         "/client.js" -> serveClientJs res
-        "/favicon.ico" -> serveAsset "image/x-icon" "assets/favicon.ico" res
         "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
         _ -> do
           Log.warn $ "Path not found: " <> path
@@ -814,6 +812,7 @@ serveAsset :: String -> String -> Response -> Effect Unit
 serveAsset contentType path res = do
   setHeader "Content-Type" contentType (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
+  setHeader "Cache-Control" "public, max-age=86400" (toOutgoingMessage res)
   launchAff_ do
     result <- try $ FSA.readFile path
     liftEffect $ case result of
