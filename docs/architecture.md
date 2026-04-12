@@ -53,12 +53,12 @@ When a cover is requested:
 
 ## Tech Stack
 
-- **Language**: [PureScript](https://purescript.org) (strongly typed functional programming).
-- **Frontend Framework**: [Halogen](https://github.com/purescript-halogen/purescript-halogen).
-- **Runtime**: [Node.js](https://nodejs.org).
-- **Database**: [DuckDB](https://duckdb.org).
-- **Bundling**: [spago](https://github.com/purescript/spago) and [esbuild](https://esbuild.github.io/).
-- **Environment**: [Nix](https://nixos.org) for reproducible development shells and container builds.
+- **Language**: [PureScript](https://purescript.org)
+- **Frontend Framework**: [Halogen](https://github.com/purescript-halogen/purescript-halogen)
+- **Runtime**: [Node.js](https://nodejs.org)
+- **Database**: [DuckDB](https://duckdb.org)
+- **Bundling**: [spago](https://github.com/purescript/spago) and [esbuild](https://esbuild.github.io/)
+- **Environment**: [Nix](https://nixos.org) for reproducible development shells and container builds
 
 ## Foreign Function Interface (FFI)
 
