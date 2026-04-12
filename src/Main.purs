@@ -15,16 +15,16 @@ import Node.HTTP.IncomingMessage as IM
 import Node.HTTP.Types (ServerResponse, IncomingMessage, IMServer)
 import Node.HTTP.ServerResponse (setStatusCode, toOutgoingMessage)
 import Node.HTTP.OutgoingMessage (setHeader, toWriteable)
-import Node.Stream (Writable, end, writeString)
+import Node.Stream (end, write, writeString)
 import Node.Stream.Aff (readableToStringUtf8)
 import Node.Encoding (Encoding(UTF8))
 import Node.Net.Server (listenTcp, listeningH)
+import Node.Buffer (fromArrayBuffer)
 import Data.Either (Either(..))
 import Effect.Exception as Exception
 import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff)
 import Effect.Ref as Ref
 import Effect.Ref (Ref)
-import Foreign (Foreign)
 import Unsafe.Coerce (unsafeCoerce)
 import Node.FS.Aff as FSA
 import Node.Process (getEnv)
@@ -45,6 +45,8 @@ import Data.Time.Duration (Milliseconds(..))
 import Data.Int (fromString)
 import Data.String (Pattern(..))
 import Data.String.Common (split) as String
+import Data.String.Regex (replace, parseFlags)
+import Data.String.Regex.Unsafe (unsafeRegex)
 import S3 (existsInS3, uploadToS3, getS3Url)
 import Web.URL (URL)
 import Web.URL as URL
@@ -617,8 +619,13 @@ serveClientJs res = do
 getQueryParam :: String -> URL -> Maybe String
 getQueryParam name url = URLSearchParams.get name (URL.searchParams url)
 
-foreign import writeBuffer :: forall r. Writable r -> Foreign -> Effect Unit
-foreign import sanitizeKey :: String -> String
+sanitizeKey :: String -> String
+sanitizeKey str =
+  let
+    re1 = unsafeRegex "[^a-z0-9.-]" (parseFlags "gi")
+    re2 = unsafeRegex "_{2,}" (parseFlags "g")
+  in
+    replace re2 "_" (replace re1 "_" str)
 
 serveCover :: Ref Boolean -> URL -> Response -> Effect Unit
 serveCover isSyncing url res = do
@@ -675,7 +682,8 @@ serveCover isSyncing url res = do
           setHeader "Content-Type" contentType (toOutgoingMessage response)
           setHeader "Cache-Control" "public, max-age=86400" (toOutgoingMessage response)
           let writer = toWriteable (toOutgoingMessage response)
-          writeBuffer writer (unsafeCoerce buf)
+          nativeBuf <- fromArrayBuffer buf
+          void $ write writer nativeBuf
           end writer
 
         -- Cache to S3 in background
@@ -812,7 +820,7 @@ serveAsset contentType path res = do
       Right buf -> do
         setStatusCode 200 res
         let w = toWriteable (toOutgoingMessage res)
-        writeBuffer w (unsafeCoerce buf)
+        void $ write w buf
         end w
       Left _ -> serveNotFound res
 
