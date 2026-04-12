@@ -19,3 +19,4 @@ client.js
 server.log
 scrobbler.db*
 scorpus.db*
+.devenv
