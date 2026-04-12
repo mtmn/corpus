@@ -31,7 +31,7 @@ Stores enriched metadata fetched from MusicBrainz, Last.fm, and Discogs.
 
 ## Application Usage
 
-The application interacts with DuckDB via a PureScript FFI layer (`src/Db.js` and `src/Db.purs`). 
+The application interacts with DuckDB via a PureScript FFI layer (`src/Db.js` and `src/Db.purs`).
 - **BigInt Handling**: Since DuckDB returns `BIGINT` as JavaScript `BigInt`, the FFI layer converts these to `Number` to ensure compatibility with standard JSON serialization.
 - **Background Enrichment**: The server identifies "unenriched" scrobbles (those with an MBID but no metadata) and performs background updates to the `release_metadata` table.
 
@@ -50,8 +50,8 @@ LIMIT 10;
 
 ### Listening Activity by Hour
 ```sql
-SELECT 
-    extract('hour' from to_timestamp(listened_at)) as hour, 
+SELECT
+    extract('hour' from to_timestamp(listened_at)) as hour,
     count(*) as count
 FROM scrobbles
 GROUP BY hour
@@ -70,7 +70,7 @@ ORDER BY count DESC;
 
 ### MBID Enrichment Coverage
 ```sql
-SELECT 
+SELECT
     count(*) as total,
     count(release_mbid) FILTER (WHERE release_mbid != '') as with_mbid,
     (count(release_mbid) FILTER (WHERE release_mbid != '')::FLOAT / count(*)) * 100 as percentage
