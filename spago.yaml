@@ -42,6 +42,7 @@ package:
     main: Test.Main
     dependencies:
       - spec
+      - spec-node
       - aff
       - argonaut
       - argonaut-core
@@ -49,6 +50,7 @@ package:
       - maybe
       - transformers
       - arrays
+      - node-process
 workspace:
   packageSet:
     registry: 75.9.0
