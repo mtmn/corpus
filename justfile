@@ -39,9 +39,9 @@ nix command:
 
 # Run quality and security checks
 check:
-    npx spago build --purs-args "--fail-on-warnings"
+    npx spago build --strict
     npx purs-tidy check "src/**/*.purs"
-    npm audit
+    statix check .
 
 # Manage the container image (build, load, push)
 container command:
