@@ -121,6 +121,11 @@
           installPhase = ''
             mkdir -p $out/lib/scorpus
             cp -r server.js client.js package.json node_modules assets $out/lib/scorpus/
+            if [ -f .env ]; then
+              cp .env $out/lib/scorpus/
+            else
+              cp .env.example $out/lib/scorpus/.env
+            fi
 
             mkdir -p $out/bin
             makeWrapper ${pkgs.nodejs}/bin/node $out/bin/scorpus-server \
@@ -145,7 +150,6 @@
             User = "1000:1000";
             Env = [
               "PORT=8321"
-              "DATABASE_FILE=/app/data/scorpus.db"
               "NODE_ENV=production"
             ];
           };
