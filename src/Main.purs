@@ -895,11 +895,12 @@ fetchMusicBrainzRelease mbid = do
                 Just { head } -> fromString head
                 Nothing -> Nothing
           Log.info $ "Enriched " <> mbid <> ": genre=" <> show genre <> " label=" <> show label <> " year=" <> show year
-          
+
           -- Warn if all fields are empty
-          when (genre == Nothing && label == Nothing && year == Nothing) $
-            Log.warn $ "All fields empty for " <> mbid <> " - possible parsing issue or missing data"
-          
+          when (genre == Nothing && label == Nothing && year == Nothing)
+            $ Log.warn
+            $ "All fields empty for " <> mbid <> " - possible parsing issue or missing data"
+
           pure $ Just { genre, label, year }
     Right fr | fr.status == 404 -> do
       Log.info $ "MusicBrainz 404 for " <> mbid
@@ -927,13 +928,14 @@ fetchLastfmGenre artist release = do
               Log.error $ "Last.fm genre JSON error: " <> Exception.message err
               pure Nothing
             Right json -> do
-              let genre = do
-                    obj <- toObject json
-                    album <- Object.lookup "album" obj >>= toObject
-                    tags <- Object.lookup "tags" album >>= toObject
-                    tagArray <- Object.lookup "tag" tags >>= toArray
-                    firstTag <- tagArray !! 0 >>= toObject
-                    Object.lookup "name" firstTag >>= toString
+              let
+                genre = do
+                  obj <- toObject json
+                  album <- Object.lookup "album" obj >>= toObject
+                  tags <- Object.lookup "tags" album >>= toObject
+                  tagArray <- Object.lookup "tag" tags >>= toArray
+                  firstTag <- tagArray !! 0 >>= toObject
+                  Object.lookup "name" firstTag >>= toString
               pure genre
         _ -> do
           Log.warn "Last.fm genre API request failed"
@@ -959,12 +961,13 @@ fetchDiscogsGenre artist release = do
               Log.error $ "Discogs genre JSON error: " <> Exception.message err
               pure Nothing
             Right json -> do
-              let genre = do
-                    obj <- toObject json
-                    results <- Object.lookup "results" obj >>= toArray
-                    firstResult <- results !! 0 >>= toObject
-                    genres <- Object.lookup "genres" firstResult >>= toArray
-                    genres !! 0 >>= toString
+              let
+                genre = do
+                  obj <- toObject json
+                  results <- Object.lookup "results" obj >>= toArray
+                  firstResult <- results !! 0 >>= toObject
+                  genres <- Object.lookup "genres" firstResult >>= toArray
+                  genres !! 0 >>= toString
               pure genre
         _ -> do
           Log.warn "Discogs genre API request failed"
@@ -1007,11 +1010,11 @@ enrichMetadata conn isSyncing = forever do
                   Nothing -> do
                     -- Try Discogs as final fallback
                     fetchDiscogsGenre artist release
-                
+
                 -- Update with the best genre we found
                 let finalMbdata = mbdata { genre = finalGenre }
                 upsertReleaseMetadata conn mbid finalMbdata.genre finalMbdata.label finalMbdata.year
-                
+
                 case finalGenre of
                   Just genre -> Log.info $ "Added fallback genre from " <> (if lastfmGenre /= Nothing then "Last.fm" else "Discogs") <> " for " <> mbid <> ": " <> genre
                   Nothing -> do
