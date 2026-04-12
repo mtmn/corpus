@@ -5,7 +5,7 @@ import Prelude
 import Affjax.Web as AX
 import Affjax.ResponseFormat as ResponseFormat
 import Data.Argonaut (decodeJson)
-import Data.Array (mapWithIndex, length)
+import Data.Array (mapWithIndex, length, take)
 import Data.Either (Either(..))
 import Data.Int (floor, fromString, toNumber)
 import Data.Foldable (maximum)
@@ -51,6 +51,7 @@ type State =
   , currentTime :: Maybe Milliseconds
   , failedCovers :: Set String
   , hoveredCover :: Maybe Int
+  , expandedSections :: Set String
   , offset :: Int
   , limit :: Int
   , activeTab :: Tab
@@ -70,6 +71,7 @@ data Action
   | ClearFilter
   | HoverCover Int
   | UnhoverCover
+  | ToggleSection String
 
 component :: forall query input output m. MonadAff m => H.Component query input output m
 component =
@@ -91,6 +93,7 @@ component =
     , currentTime: Nothing
     , failedCovers: Set.empty
     , hoveredCover: Nothing
+    , expandedSections: Set.empty
     , offset: 0
     , limit: 25
     , activeTab: ListensTab
@@ -150,7 +153,7 @@ component =
                   ]
               ]
           StatsTab ->
-            renderStatsView state.stats
+            renderStatsView state.expandedSections state.stats
       , HH.p
           [ HP.id "last-updated"
           , HP.class_ (H.ClassName "small")
@@ -158,25 +161,36 @@ component =
           [ HH.text $ fromMaybe "" state.lastCheck ]
       ]
 
-  renderStatsView Nothing =
+  renderStatsView _ Nothing =
     HH.div [ HP.class_ (H.ClassName "loading") ] [ HH.text "Loading stats..." ]
-  renderStatsView (Just (Stats { genres, labels, years })) =
+  renderStatsView expandedSections (Just (Stats { genres, labels, years })) =
     HH.div_
-      [ renderStatSection "genre" "genres" genres
-      , renderStatSection "label" "labels" labels
-      , renderStatSection "year" "years" years
+      [ renderStatSection expandedSections "genre" "genres" genres
+      , renderStatSection expandedSections "label" "labels" labels
+      , renderStatSection expandedSections "year" "years" years
       ]
 
-  renderStatSection field title entries =
+  renderStatSection expandedSections field title entries =
     let
       maxCount = fromMaybe 1 (maximum (map (\(StatsEntry e) -> e.count) entries))
+      expanded = Set.member field expandedSections
+      visible = if expanded then entries else take 10 entries
+      hasMore = length entries > 10
     in
       HH.div [ HP.class_ (H.ClassName "stats-section") ]
         [ HH.h2_ [ HH.text title ]
         , if entries == [] then
             HH.div [ HP.class_ (H.ClassName "stats-empty") ] [ HH.text "no data yet — enrichment in progress" ]
           else
-            HH.ul_ (map (renderStatEntry maxCount field) entries)
+            HH.ul_ (map (renderStatEntry maxCount field) visible)
+        , if hasMore then
+            HH.button
+              [ HP.class_ (H.ClassName "show-all-btn")
+              , HE.onClick \_ -> ToggleSection field
+              ]
+              [ HH.text $ if expanded then "show less" else "show all (" <> show (length entries) <> ")" ]
+          else
+            HH.text ""
         ]
 
   renderStatEntry maxCount field (StatsEntry { name, count }) =
@@ -324,6 +338,8 @@ component =
       H.modify_ _ { hoveredCover = Just url }
     UnhoverCover -> do
       H.modify_ _ { hoveredCover = Nothing }
+    ToggleSection field -> do
+      H.modify_ \s -> s { expandedSections = if Set.member field s.expandedSections then Set.delete field s.expandedSections else Set.insert field s.expandedSections }
 
   updateUrl = do
     state <- H.get

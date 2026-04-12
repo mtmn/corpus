@@ -535,6 +535,21 @@ indexHtml =
             color: #ffffff;
             border-color: #ffffff;
         }
+
+        .show-all-btn {
+            background: none;
+            border: none;
+            color: #9fbfe7;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            padding: 4px 0;
+            text-decoration: underline;
+        }
+
+        .show-all-btn:hover {
+            color: #ffffff;
+        }
     </style>
 </head>
 <body>
