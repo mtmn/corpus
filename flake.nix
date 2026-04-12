@@ -28,14 +28,14 @@
         spagoRegistry = pkgs.fetchFromGitHub {
           owner = "purescript";
           repo = "registry";
-          rev = "483aaf573663403afdabe20822ac88d565a65746";
-          hash = "sha256-pFVxQzt0+o1+nsCgk+VcprPSmEd8CH3Mkbk0vUy4x3g=";
+          rev = "main"; # Use latest for rework
+          hash = "sha256-xC8+jSfKM/MmdmAqRQ44ccRFTAvpwAnnAVs4IRoDhL4=";
         };
 
         spagoRegistryIndex = pkgs.fetchFromGitHub {
           owner = "purescript";
           repo = "registry-index";
-          rev = "77163eff5ea12e25d7391cf52fe5b9178145d843";
+          rev = "main"; # Use latest for rework
           hash = "sha256-ez73ecGmzf5d7EkamNZ9KT8u7e4yR7jSvdiGu4bGAHs=";
         };
 
@@ -43,19 +43,22 @@
         spagoDeps = pkgs.stdenv.mkDerivation {
           name = "scorpus-spago-deps";
 
+          # Rework: only rebuild when dependency specs change
+          src = pkgs.lib.cleanSourceWith {
+            src = self;
+            filter = name: type: let baseName = baseNameOf (toString name); in
+              pkgs.lib.elem baseName [ "package.json" "package-lock.json" "spago.yaml" "spago.lock" ];
+          };
+
+          nativeBuildInputs = with pkgs; [ nodejs git cacert purescript ];
+
           outputHashAlgo = "sha256";
           outputHashMode = "recursive";
-          outputHash = "sha256-HCj4zn2E+UpeuMsmvvZe8d9nlkn1YF7vZ/j2I2Uoo20=";
-
-          nativeBuildInputs = with pkgs; [nodejs git cacert purescript];
-
-          dontUnpack = true;
-          dontFixup = true;
+          outputHash = "sha256-zHJu96X0JNRndeGdRcTC0BGjtOI8AE4juJi6izIJJAE=";
 
           buildPhase = ''
             export HOME=$TMPDIR
             export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-            export NODE_EXTRA_CA_CERTS="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
 
             # Pre-populate registry so spago doesn't clone from GitHub
             mkdir -p $HOME/.cache/spago-nodejs
@@ -63,16 +66,14 @@
             cp -r ${spagoRegistryIndex} $HOME/.cache/spago-nodejs/registry-index
             chmod -R u+w $HOME/.cache/spago-nodejs
 
-            cp ${self + "/package.json"} package.json
-            cp ${self + "/package-lock.json"} package-lock.json
-            cp ${self + "/spago.yaml"} spago.yaml
-            cp ${self + "/spago.lock"} spago.lock
-
+            # We need the local spago version to ensure compatibility
             npm ci --ignore-scripts
-            mkdir -p node_modules/.bin node_modules/purescript/bin
-            cp ${pkgs.purescript}/bin/purs node_modules/purescript/bin/purs
-            ln -sf ../purescript/bin/purs node_modules/.bin/purs
             patchShebangs node_modules
+
+            # Use the purs provided by Nix
+            mkdir -p node_modules/.bin
+            ln -sf ${pkgs.purescript}/bin/purs node_modules/.bin/purs
+
             npx spago install
           '';
 
@@ -82,12 +83,25 @@
           '';
         };
 
+        src = pkgs.lib.cleanSourceWith {
+          src = self;
+          filter = name: type: let baseName = baseNameOf (toString name); in !(
+            (type == "directory" && (baseName == "docs" || baseName == ".git")) ||
+            (type == "regular" && (
+              pkgs.lib.hasSuffix ".md" baseName ||
+              baseName == "justfile" ||
+              baseName == "flake.nix" ||
+              baseName == "flake.lock"
+            ))
+          );
+        };
+
         scorpus = pkgs.buildNpmPackage {
           pname = "scorpus";
           version = "1.0.0";
-          src = self;
+          inherit src;
 
-          npmDepsHash = "sha256-L+9L3RY5CNLudmQL7EZwZO8x0kQ2MKCqSsn37ZIIKWE=";
+          npmDepsHash = "sha256-eDc4ckDWvMb3EaDf6GclXxglsd1ZYHhEkHggBG+vcaA=";
           npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [
