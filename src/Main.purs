@@ -190,12 +190,12 @@ indexHtml =
             background: #50447f;
             color: #ffffff;
         }
-        
+
         .container {
             max-width: 800px;
             margin: 0 auto;
         }
-        
+
         h1 {
             color: #ffffff;
             margin-bottom: 20px;
@@ -204,13 +204,13 @@ indexHtml =
             display: inline-block;
             padding-bottom: 5px;
         }
-        
+
         ul {
             list-style: none;
             padding: 0;
             margin: 0 0 20px 0;
         }
-        
+
         li {
             background: #521e40;
             border: 1px solid #50447f;
@@ -222,28 +222,28 @@ indexHtml =
             align-items: center;
             box-shadow: 4px 4px 0px #50447f;
         }
-        
+
         li.success {
             background: #521e40;
             border-color: #50447f;
         }
-        
+
         .track-info {
             flex: 1;
         }
-        
+
         .track-name {
             font-weight: bold;
             font-size: 16px;
             color: #ffffff;
         }
-        
+
         .track-artist {
             font-size: 14px;
             color: #a0c0d0;
             margin-top: 1px;
         }
-        
+
         .track-time {
             font-size: 12px;
             color: #9fbfe7;
@@ -258,7 +258,7 @@ indexHtml =
         .album-link:hover {
             color: #ffffff;
         }
-        
+
         .status {
             color: #b9d0aa;
             font-weight: bold;
@@ -273,42 +273,42 @@ indexHtml =
             transition: transform 0.2s ease-in-out;
             cursor: pointer;
         }
-        
+
         .track-cover.zoomed {
             transform: scale(5.0);
             z-index: 10;
             position: relative;
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
         }
-        
+
         .loading {
             padding: 20px;
             color: #9fbfe7;
             text-align: center;
         }
-        
+
         .error {
             padding: 20px;
             color: #eca28f;
             text-align: center;
         }
-        
+
         .small {
             font-size: 12px;
             color: #9fbfe7;
             margin-top: 20px;
         }
-        
+
         .small a {
             color: #a0c0d0;
             text-decoration: none;
         }
-        
+
         .small a:hover {
             color: #ffffff;
             text-decoration: underline;
         }
-        
+
         .refresh-btn {
             background: none;
             border: none;
@@ -317,11 +317,11 @@ indexHtml =
             font-size: 12px;
             text-decoration: underline;
         }
-        
+
         .refresh-btn:hover {
             color: #ffffff;
         }
-        
+
         .playing-indicator {
             display: inline-block;
             width: 8px;
@@ -331,7 +331,7 @@ indexHtml =
             margin-right: 8px;
             animation: pulse 2s infinite;
         }
-        
+
         @keyframes pulse {
             0% { opacity: 1; }
             50% { opacity: 0.3; }
