@@ -266,7 +266,7 @@ indexHtml =
             cursor: pointer;
         }
         
-        .track-cover:hover {
+        .track-cover.zoomed {
             transform: scale(5.0);
             z-index: 10;
             position: relative;
@@ -461,9 +461,14 @@ indexHtml =
             margin-left: 15px;
             gap: 4px;
             flex-shrink: 0;
+            position: relative;
         }
 
         .genre-tag {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
             font-size: 10px;
             color: #9fbfe7;
             text-align: center;
@@ -478,13 +483,12 @@ indexHtml =
             max-width: none;
             overflow: visible;
             text-overflow: clip;
-            position: absolute;
             background: #521e40;
             border: 1px solid #50447f;
             border-radius: 4px;
             padding: 2px 6px;
             z-index: 100;
-            white-space: nowrap;
+            opacity: 1;
         }
 
         .stat-row {

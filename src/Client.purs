@@ -50,7 +50,7 @@ type State =
   , loading :: Boolean
   , currentTime :: Maybe Milliseconds
   , failedCovers :: Set String
-  , hoveredCover :: Maybe String
+  , hoveredCover :: Maybe Int
   , offset :: Int
   , limit :: Int
   , activeTab :: Tab
@@ -68,7 +68,7 @@ data Action
   | SwitchTab Tab
   | FilterBy String String
   | ClearFilter
-  | HoverCover String
+  | HoverCover Int
   | UnhoverCover
 
 component :: forall query input output m. MonadAff m => H.Component query input output m
@@ -203,9 +203,9 @@ component =
         HH.ul_ [ HH.li [ HP.class_ (H.ClassName "error") ] [ HH.text err ] ]
     | otherwise =
         HH.ul [ HP.id "tracks-container" ]
-          (mapWithIndex (renderListen state.currentTime state.failedCovers) state.listens)
+          (mapWithIndex (renderListen state.currentTime state.failedCovers state.hoveredCover) state.listens)
 
-  renderListen currentTime failedCovers _ (Listen { trackMetadata: TrackMetadata track, listenedAt }) =
+  renderListen currentTime failedCovers hoveredCover idx (Listen { trackMetadata: TrackMetadata track, listenedAt }) =
     let
       release = fromMaybe "" track.releaseName
       artist = fromMaybe "" track.artistName
@@ -253,12 +253,11 @@ component =
         , HH.div [ HP.class_ (H.ClassName "cover-wrapper") ]
             [ if Set.member coverUrl failedCovers then HH.text ""
               else HH.img
-                [ HP.class_ (H.ClassName "track-cover")
+                [ HP.class_ (H.ClassName $ "track-cover" <> if hoveredCover == Just idx then " zoomed" else "")
                 , HP.src coverUrl
                 , HP.alt release
                 , HE.onError \_ -> ImageError coverUrl
-                , HE.onMouseEnter \_ -> HoverCover coverUrl
-                , HE.onMouseLeave \_ -> UnhoverCover
+                , HE.onClick \_ -> if hoveredCover == Just idx then UnhoverCover else HoverCover idx
                 ]
             , case track.genre of
                 Just g -> HH.div [ HP.class_ (H.ClassName "genre-tag") ] [ HH.text g ]
