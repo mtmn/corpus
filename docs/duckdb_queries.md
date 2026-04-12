@@ -51,8 +51,8 @@ LIMIT 10;
 
 ### Scrobbles per day (Last 30 days)
 ```sql
-SELECT 
-    to_timestamp(listened_at)::DATE as date, 
+SELECT
+    to_timestamp(listened_at)::DATE as date,
     count(*) as count
 FROM scrobbles
 WHERE to_timestamp(listened_at) > now() - INTERVAL '30 days'
@@ -62,8 +62,8 @@ ORDER BY date DESC;
 
 ### Scrobbles per month
 ```sql
-SELECT 
-    date_trunc('month', to_timestamp(listened_at)) as month, 
+SELECT
+    date_trunc('month', to_timestamp(listened_at)) as month,
     count(*) as count
 FROM scrobbles
 GROUP BY month
@@ -72,8 +72,8 @@ ORDER BY month DESC;
 
 ### Listening activity by hour of day
 ```sql
-SELECT 
-    extract('hour' from to_timestamp(listened_at)) as hour, 
+SELECT
+    extract('hour' from to_timestamp(listened_at)) as hour,
     count(*) as count
 FROM scrobbles
 GROUP BY hour
@@ -82,8 +82,8 @@ ORDER BY hour;
 
 ### Most active day of the week
 ```sql
-SELECT 
-    dayname(to_timestamp(listened_at)) as day, 
+SELECT
+    dayname(to_timestamp(listened_at)) as day,
     count(*) as count
 FROM scrobbles
 GROUP BY day, dayofweek(to_timestamp(listened_at))
@@ -102,9 +102,9 @@ HAVING count(*) > 1;
 
 ### Recent scrobbles with human-readable timestamps
 ```sql
-SELECT 
-    to_timestamp(listened_at) as time, 
-    artist_name, 
+SELECT
+    to_timestamp(listened_at) as time,
+    artist_name,
     track_name
 FROM scrobbles
 ORDER BY listened_at DESC
@@ -113,7 +113,7 @@ LIMIT 20;
 
 ### Check MBID coverage
 ```sql
-SELECT 
+SELECT
     count(*) as total,
     count(release_mbid) FILTER (WHERE release_mbid != '') as with_mbid,
     (count(release_mbid) FILTER (WHERE release_mbid != '')::FLOAT / count(*)) * 100 as percentage
