@@ -1,14 +1,9 @@
-# Useful DuckDB Queries for scorpus
-
-This project uses DuckDB to store scrobbles. The main table is `scrobbles` with the following schema:
 - `listened_at`: BIGINT (Unix timestamp)
 - `track_name`: VARCHAR
 - `artist_name`: VARCHAR
 - `release_name`: VARCHAR
 - `release_mbid`: VARCHAR
 - `caa_release_mbid`: VARCHAR
-
-Below are some useful queries for analyzing your listening data.
 
 ## General Statistics
 
