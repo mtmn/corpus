@@ -6,6 +6,7 @@ import Data.Argonaut (class DecodeJson, class EncodeJson, decodeJson, encodeJson
 import Data.Argonaut.Core (jsonEmptyObject)
 import Data.Maybe (Maybe)
 import Data.Generic.Rep (class Generic)
+import Data.Show.Generic (genericShow)
 
 newtype ListenBrainzResponse = ListenBrainzResponse
   { payload :: Payload
@@ -13,6 +14,8 @@ newtype ListenBrainzResponse = ListenBrainzResponse
 
 derive instance eqListenBrainzResponse :: Eq ListenBrainzResponse
 derive instance genericListenBrainzResponse :: Generic ListenBrainzResponse _
+instance showListenBrainzResponse :: Show ListenBrainzResponse where
+  show = genericShow
 
 instance DecodeJson ListenBrainzResponse where
   decodeJson json = do
@@ -31,6 +34,8 @@ newtype Payload = Payload
 
 derive instance eqPayload :: Eq Payload
 derive instance genericPayload :: Generic Payload _
+instance showPayload :: Show Payload where
+  show = genericShow
 
 instance DecodeJson Payload where
   decodeJson json = do
@@ -50,6 +55,8 @@ newtype Listen = Listen
 
 derive instance eqListen :: Eq Listen
 derive instance genericListen :: Generic Listen _
+instance showListen :: Show Listen where
+  show = genericShow
 
 instance DecodeJson Listen where
   decodeJson json = do
@@ -74,6 +81,8 @@ newtype TrackMetadata = TrackMetadata
 
 derive instance eqTrackMetadata :: Eq TrackMetadata
 derive instance genericTrackMetadata :: Generic TrackMetadata _
+instance showTrackMetadata :: Show TrackMetadata where
+  show = genericShow
 
 instance DecodeJson TrackMetadata where
   decodeJson json = do
@@ -101,6 +110,8 @@ newtype MbidMapping = MbidMapping
 
 derive instance eqMbidMapping :: Eq MbidMapping
 derive instance genericMbidMapping :: Generic MbidMapping _
+instance showMbidMapping :: Show MbidMapping where
+  show = genericShow
 
 instance DecodeJson MbidMapping where
   decodeJson json = do
@@ -122,6 +133,8 @@ newtype StatsEntry = StatsEntry
 
 derive instance eqStatsEntry :: Eq StatsEntry
 derive instance genericStatsEntry :: Generic StatsEntry _
+instance showStatsEntry :: Show StatsEntry where
+  show = genericShow
 
 instance DecodeJson StatsEntry where
   decodeJson json = do
@@ -144,6 +157,8 @@ newtype Stats = Stats
 
 derive instance eqStats :: Eq Stats
 derive instance genericStats :: Generic Stats _
+instance showStats :: Show Stats where
+  show = genericShow
 
 instance DecodeJson Stats where
   decodeJson json = do
