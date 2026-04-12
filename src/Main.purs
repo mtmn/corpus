@@ -22,6 +22,8 @@ import Node.Net.Server (listenTcp, listeningH)
 import Data.Either (Either(..))
 import Effect.Exception as Exception
 import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff)
+import Effect.Ref as Ref
+import Effect.Ref (Ref)
 import Foreign (Foreign)
 import Unsafe.Coerce (unsafeCoerce)
 import Node.FS.Aff as FSA
@@ -92,11 +94,13 @@ fetchListenBrainzDataBefore username maxTs = makeAff \callback -> do
 
   pure nonCanceler
 
-syncData :: Connection -> String -> Aff Unit
-syncData _ username | username == "" = pure unit
-syncData conn username = do
+syncData :: Connection -> String -> Ref Boolean -> Aff Unit
+syncData _ username _ | username == "" = pure unit
+syncData conn username isSyncing = do
   forever do
+    liftEffect $ Ref.write true isSyncing
     void $ performFullSync
+    liftEffect $ Ref.write false isSyncing
     delay (Milliseconds 60000.0)
 
   where
@@ -559,8 +563,8 @@ indexHtml =
 </html>"""
 
 -- Request handler
-handleRequest :: Connection -> Request -> Response -> Effect Unit
-handleRequest db req res = do
+handleRequest :: Connection -> Ref Boolean -> Request -> Response -> Effect Unit
+handleRequest db isSyncing req res = do
   let method = IM.method req
   let rawUrl = IM.url req
   url <- new' rawUrl "http://localhost"
@@ -569,10 +573,10 @@ handleRequest db req res = do
 
   case path of
     "/" -> serveIndex res
-    "/healthz" -> serveHealthz db res
-    "/proxy" -> serveProxy db url res
-    "/cover" -> serveCover url res
-    "/stats" -> serveStats db res
+    "/healthz" -> serveHealthz db isSyncing res
+    "/proxy" -> serveProxy db isSyncing url res
+    "/cover" -> serveCover isSyncing url res
+    "/stats" -> serveStats db isSyncing res
     "/client.js" -> serveClientJs res
     "/favicon.ico" -> serveAsset "image/x-icon" "assets/favicon.ico" res
     "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
@@ -609,9 +613,10 @@ foreign import getQueryParam :: String -> URL -> Effect (Nullable String)
 foreign import writeBuffer :: forall r. Writable r -> Foreign -> Effect Unit
 foreign import sanitizeKey :: String -> String
 
-serveCover :: URL -> Response -> Effect Unit
-serveCover url res = do
+serveCover :: Ref Boolean -> URL -> Response -> Effect Unit
+serveCover isSyncing url res = do
   launchAff_ do
+    yieldToSync isSyncing
     mbidMaybe <- liftEffect $ getQueryParam "mbid" url
     artistMaybe <- liftEffect $ getQueryParam "artist" url
     releaseMaybe <- liftEffect $ getQueryParam "release" url
@@ -767,14 +772,15 @@ serveCover url res = do
               Log.info "Discogs API request failed"
               liftEffect $ serveNotFound response
 
-serveProxy :: Connection -> URL -> Response -> Effect Unit
-serveProxy db url res = do
+serveProxy :: Connection -> Ref Boolean -> URL -> Response -> Effect Unit
+serveProxy db isSyncing url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Methods" "GET, POST, OPTIONS" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Headers" "*" (toOutgoingMessage res)
 
   launchAff_ do
+    yieldToSync isSyncing
     limitStr <- liftEffect $ getQueryParam "limit" url
     offsetStr <- liftEffect $ getQueryParam "offset" url
     filterFieldStr <- liftEffect $ getQueryParam "filterField" url
@@ -811,11 +817,12 @@ serveAsset contentType path res = do
         end w
       Left _ -> serveNotFound res
 
-serveHealthz :: Connection -> Response -> Effect Unit
-serveHealthz db res = do
+serveHealthz :: Connection -> Ref Boolean -> Response -> Effect Unit
+serveHealthz db isSyncing res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   launchAff_ do
+    yieldToSync isSyncing
     result <- try $ ping db
     liftEffect $ do
       let w = toWriteable (toOutgoingMessage res)
@@ -837,11 +844,12 @@ serveNotFound res = do
   void $ writeString w UTF8 "Not Found"
   end w
 
-serveStats :: Connection -> Response -> Effect Unit
-serveStats db res = do
+serveStats :: Connection -> Ref Boolean -> Response -> Effect Unit
+serveStats db isSyncing res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   launchAff_ do
+    yieldToSync isSyncing
     stats <- getStats db
     let responseBody = stringify $ encodeJson stats
     liftEffect $ do
@@ -962,18 +970,25 @@ fetchDiscogsGenre artist release = do
           Log.warn "Discogs genre API request failed"
           pure Nothing
 
-enrichMetadata :: Connection -> Aff Unit
-enrichMetadata conn = forever do
+yieldToSync :: Ref Boolean -> Aff Unit
+yieldToSync isSyncing = do
+  syncing <- liftEffect $ Ref.read isSyncing
+  when syncing $ delay (Milliseconds 200.0) *> yieldToSync isSyncing
+
+enrichMetadata :: Connection -> Ref Boolean -> Aff Unit
+enrichMetadata conn isSyncing = forever do
+  yieldToSync isSyncing
   -- Get both unenriched and empty genre MBIDs
   unenrichedMbids <- getUnenrichedMbids conn 10
   emptyGenreMbids <- getEmptyGenreMbids conn 10
   let allMbids = unenrichedMbids <> emptyGenreMbids
-  
+
   if length allMbids == 0 then
     delay (Milliseconds 60000.0)
   else do
     Log.info $ "Processing " <> show (length unenrichedMbids) <> " unenriched + " <> show (length emptyGenreMbids) <> " empty genre releases"
     for_ allMbids \mbid -> do
+      yieldToSync isSyncing
       delay (Milliseconds 1100.0)
       result <- try $ fetchMusicBrainzRelease mbid
       case result of
@@ -1015,12 +1030,13 @@ startServer port dbFile username = launchAff_ do
   conn <- connect dbFile
   initDb conn
   initReleaseMetadata conn
-  void $ forkAff $ syncData conn username
-  void $ forkAff $ enrichMetadata conn
+  isSyncing <- liftEffect $ Ref.new false
+  void $ forkAff $ syncData conn username isSyncing
+  void $ forkAff $ enrichMetadata conn isSyncing
 
   liftEffect $ do
     server <- createServer
-    server # on_ Server.requestH (handleRequest conn)
+    server # on_ Server.requestH (handleRequest conn isSyncing)
     let netServer = Server.toNetServer server
 
     netServer # on_ listeningH do
