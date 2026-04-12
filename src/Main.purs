@@ -32,12 +32,10 @@ import Fetch (fetch, Method(GET), lookup)
 import Fetch.Argonaut.Json (fromJson)
 import Data.Maybe (Maybe(..), fromMaybe)
 import JSURI (encodeURIComponent)
-import Node.URL (URL, new', pathname)
 import Foreign.Object as Object
 import Data.Argonaut (decodeJson, encodeJson, parseJson)
 import Data.Argonaut.Core (toObject, toArray, toString, stringify)
 import Data.Array ((!!), length, uncons)
-import Data.Nullable (Nullable, toMaybe)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
 import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping)
@@ -45,7 +43,12 @@ import Types (Listen(..), ListenBrainzResponse(..), Payload(..), TrackMetadata(.
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Int (fromString)
+import Data.String (Pattern(..))
+import Data.String.Common (split) as String
 import S3 (existsInS3, uploadToS3, getS3Url)
+import Web.URL (URL)
+import Web.URL as URL
+import Web.URL.URLSearchParams as URLSearchParams
 
 -- Types
 type Request = IncomingMessage IMServer
@@ -567,22 +570,24 @@ handleRequest :: Connection -> Ref Boolean -> Request -> Response -> Effect Unit
 handleRequest db isSyncing req res = do
   let method = IM.method req
   let rawUrl = IM.url req
-  url <- new' rawUrl "http://localhost"
-  path <- pathname url
-  Log.info $ method <> " " <> rawUrl
+  case URL.fromRelative rawUrl "http://localhost" of
+    Nothing -> serveNotFound res
+    Just url -> do
+      let path = URL.pathname url
+      Log.info $ method <> " " <> rawUrl
 
-  case path of
-    "/" -> serveIndex res
-    "/healthz" -> serveHealthz db isSyncing res
-    "/proxy" -> serveProxy db isSyncing url res
-    "/cover" -> serveCover isSyncing url res
-    "/stats" -> serveStats db isSyncing res
-    "/client.js" -> serveClientJs res
-    "/favicon.ico" -> serveAsset "image/x-icon" "assets/favicon.ico" res
-    "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
-    _ -> do
-      Log.warn $ "Path not found: " <> path
-      serveNotFound res
+      case path of
+        "/" -> serveIndex res
+        "/healthz" -> serveHealthz db isSyncing res
+        "/proxy" -> serveProxy db isSyncing url res
+        "/cover" -> serveCover isSyncing url res
+        "/stats" -> serveStats db isSyncing res
+        "/client.js" -> serveClientJs res
+        "/favicon.ico" -> serveAsset "image/x-icon" "assets/favicon.ico" res
+        "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
+        _ -> do
+          Log.warn $ "Path not found: " <> path
+          serveNotFound res
 
 serveIndex :: Response -> Effect Unit
 serveIndex res = do
@@ -609,7 +614,9 @@ serveClientJs res = do
         Log.error $ "Failed to read client.js: " <> Exception.message err
         serveNotFound res
 
-foreign import getQueryParam :: String -> URL -> Effect (Nullable String)
+getQueryParam :: String -> URL -> Maybe String
+getQueryParam name url = URLSearchParams.get name (URL.searchParams url)
+
 foreign import writeBuffer :: forall r. Writable r -> Foreign -> Effect Unit
 foreign import sanitizeKey :: String -> String
 
@@ -617,12 +624,9 @@ serveCover :: Ref Boolean -> URL -> Response -> Effect Unit
 serveCover isSyncing url res = do
   launchAff_ do
     yieldToSync isSyncing
-    mbidMaybe <- liftEffect $ getQueryParam "mbid" url
-    artistMaybe <- liftEffect $ getQueryParam "artist" url
-    releaseMaybe <- liftEffect $ getQueryParam "release" url
-    let mbid = fromMaybe "" (toMaybe mbidMaybe)
-    let artistStr = fromMaybe "" (toMaybe artistMaybe)
-    let releaseStr = fromMaybe "" (toMaybe releaseMaybe)
+    let mbid = fromMaybe "" (getQueryParam "mbid" url)
+    let artistStr = fromMaybe "" (getQueryParam "artist" url)
+    let releaseStr = fromMaybe "" (getQueryParam "release" url)
 
     -- Strategy:
     -- 1. If MBID exists, try CAA (S3 first, then Fetch)
@@ -781,17 +785,12 @@ serveProxy db isSyncing url res = do
 
   launchAff_ do
     yieldToSync isSyncing
-    limitStr <- liftEffect $ getQueryParam "limit" url
-    offsetStr <- liftEffect $ getQueryParam "offset" url
-    filterFieldStr <- liftEffect $ getQueryParam "filterField" url
-    filterValueStr <- liftEffect $ getQueryParam "filterValue" url
-
-    let limit = fromMaybe 25 (toMaybe limitStr >>= fromString)
-    let offset = fromMaybe 0 (toMaybe offsetStr >>= fromString)
+    let limit = fromMaybe 25 (getQueryParam "limit" url >>= fromString)
+    let offset = fromMaybe 0 (getQueryParam "offset" url >>= fromString)
     let
       mFilter = do
-        field <- toMaybe filterFieldStr
-        value <- toMaybe filterValueStr
+        field <- getQueryParam "filterField" url
+        value <- getQueryParam "filterValue" url
         pure { field, value }
 
     listens <- getScrobbles db limit offset mFilter
@@ -891,7 +890,7 @@ fetchMusicBrainzRelease mbid = do
               obj <- toObject json
               rg <- Object.lookup "release-group" obj >>= toObject
               dateStr <- Object.lookup "first-release-date" rg >>= toString
-              case uncons (split "-" dateStr) of
+              case uncons (String.split (Pattern "-") dateStr) of
                 Just { head } -> fromString head
                 Nothing -> Nothing
           Log.info $ "Enriched " <> mbid <> ": genre=" <> show genre <> " label=" <> show label <> " year=" <> show year
@@ -1058,5 +1057,3 @@ main = do
   let username = fromMaybe "" (Object.lookup "LISTENBRAINZ_USER" env)
   when (username == "") $ Log.warn "LISTENBRAINZ_USER is not set — syncing will be disabled"
   startServer port dbFile username
-
-foreign import split :: String -> String -> Array String
