@@ -154,12 +154,14 @@ component =
               ]
           StatsTab ->
             renderStatsView state.expandedSections state.stats
-      , HH.p
-          [ HP.id "last-updated"
+      , HH.div
+          [ HP.id "footer"
           , HP.class_ (H.ClassName "small")
           ]
-          [ HH.text $ fromMaybe "" state.lastCheck ]
+          [ HH.span_ [ HH.text $ fromMaybe "" state.lastCheck ]
+          ]
       ]
+
 
   renderStatsView _ Nothing =
     HH.div [ HP.class_ (H.ClassName "loading") ] [ HH.text "Loading stats..." ]
