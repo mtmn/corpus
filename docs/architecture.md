@@ -103,8 +103,8 @@ graph TD
     %% Enrichment Flow
     DB -- "Get MBIDs" --> Enrich
     Enrich -- "Metadata" --> MB
-    Enrich -- "Fallback Genre" --> LF
-    Enrich -- "Fallback Genre" --> DC
+    Enrich -- "1. Fallback Genre" --> LF
+    Enrich -- "2. Fallback Genre" --> DC
     Enrich -- "Store Metadata" --> DB
 
     %% Web UI Flow
