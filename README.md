@@ -20,10 +20,10 @@ This project uses [just](https://github.com/casey/just) and [Nix](https://nixos.
 just shell
 
 # Build the project (server and client)
-just build
+just nix build
 
 # Run the binary built by Nix
-./result/bin/scorpus-server
+just nix run
 ```
 
 ### Spago Build (PureScript)
