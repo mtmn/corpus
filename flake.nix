@@ -24,29 +24,26 @@
           hash = "sha256-Z91EJB81gRaZoLDjkw5lVVQ+jtGIvMV0tMJeOAY7Q3g=";
         };
 
-        # Pinned registry + registry-index so the spago FOD is deterministic
         spagoRegistry = pkgs.fetchFromGitHub {
           owner = "purescript";
           repo = "registry";
-          rev = "main"; # Use latest for rework
+          rev = "19f237b9f13c7b286ce2e7129d25d575db787bee";
           hash = "sha256-xC8+jSfKM/MmdmAqRQ44ccRFTAvpwAnnAVs4IRoDhL4=";
         };
 
         spagoRegistryIndex = pkgs.fetchFromGitHub {
           owner = "purescript";
           repo = "registry-index";
-          rev = "main"; # Use latest for rework
+          rev = "77163eff5ea12e25d7391cf52fe5b9178145d843";
           hash = "sha256-ez73ecGmzf5d7EkamNZ9KT8u7e4yR7jSvdiGu4bGAHs=";
         };
 
-        # FOD: pre-fetch spago packages (needs network, but is now deterministic)
         spagoDeps = pkgs.stdenv.mkDerivation {
           name = "scorpus-spago-deps";
 
-          # Rework: only rebuild when dependency specs change
           src = pkgs.lib.cleanSourceWith {
             src = self;
-            filter = name: type: let baseName = baseNameOf (toString name); in
+            filter = name: _type: let baseName = baseNameOf (toString name); in
               pkgs.lib.elem baseName [ "package.json" "package-lock.json" "spago.yaml" "spago.lock" ];
           };
 
@@ -114,7 +111,7 @@
           buildPhase = ''
             export HOME="$TMPDIR"
 
-            # Place prebuilt duckdb native addon
+            # Copy duckdb bindings to avoid native extension compilation
             mkdir -p node_modules/duckdb/lib/binding
             tar -xf ${duckdbPrebuilt} -C node_modules/duckdb/lib/binding --strip-components=1
 
