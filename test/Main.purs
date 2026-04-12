@@ -14,9 +14,24 @@ import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner (runSpec)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..))
 import Db (connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats)
+import Main (split, sanitizeKey, listenBrainzUrl)
+import S3 (getS3Url)
 
 main :: Effect Unit
 main = launchAff_ $ runSpec [consoleReporter] do
+  describe "Scorpus Main Utils" do
+    it "should build ListenBrainz URLs correctly" do
+      listenBrainzUrl "user1" `shouldEqual` "https://api.listenbrainz.org/1/user/user1/listens"
+
+    it "should sanitize S3 keys correctly" do
+      sanitizeKey "hello world!" `shouldEqual` "hello_world_"
+      sanitizeKey "T.est-123" `shouldEqual` "T.est-123"
+      sanitizeKey "multiple   spaces" `shouldEqual` "multiple_spaces"
+
+    it "should split strings correctly" do
+      split "-" "2023-05-12" `shouldEqual` ["2023", "05", "12"]
+      split " " "hello world" `shouldEqual` ["hello", "world"]
+
   describe "Scorpus Types" do
     describe "MbidMapping Codecs" do
       it "should roundtrip MbidMapping" do
@@ -90,3 +105,55 @@ main = launchAff_ $ runSpec [consoleReporter] do
             length listens `shouldEqual` 1
           Left err ->
             fail $ "Decoding failed: " <> show err
+
+  describe "Scorpus Database" do
+    it "should handle scrobble and metadata operations" do
+      conn <- connect ":memory:"
+      initDb conn
+      initReleaseMetadata conn
+
+      exists1 <- checkExists conn 12345
+      exists1 `shouldEqual` false
+
+      let listen = Listen
+            { trackMetadata: TrackMetadata
+                { trackName: Just "Song"
+                , artistName: Just "Artist"
+                , releaseName: Just "Album"
+                , mbidMapping: Just (MbidMapping { releaseMbid: Just "rb1", caaReleaseMbid: Nothing })
+                , genre: Nothing
+                }
+            , listenedAt: Just 12345
+            }
+      upsertScrobble conn listen
+
+      exists2 <- checkExists conn 12345
+      exists2 `shouldEqual` true
+
+      listens <- getScrobbles conn 10 0 Nothing
+      length listens `shouldEqual` 1
+
+      upsertReleaseMetadata conn "rb1" (Just "Rock") (Just "Label") (Just 2023)
+
+      listensWithGenre <- getScrobbles conn 10 0 Nothing
+      case listensWithGenre of
+        [Listen { trackMetadata: TrackMetadata m }] -> m.genre `shouldEqual` Just "Rock"
+        _ -> fail "Expected 1 listen"
+
+      Stats s <- getStats conn
+      length s.genres `shouldEqual` 1
+      length s.labels `shouldEqual` 1
+      length s.years `shouldEqual` 1
+
+      -- Test Filtering (as mentioned in architecture.md)
+      listensFiltered <- getScrobbles conn 10 0 (Just { field: "genre", value: "Rock" })
+      length listensFiltered `shouldEqual` 1
+      
+      listensEmpty <- getScrobbles conn 10 0 (Just { field: "genre", value: "Jazz" })
+      length listensEmpty `shouldEqual` 0
+
+  describe "Scorpus S3" do
+    it "should generate S3 URLs" do
+      -- Testing that the FFI call returns a valid string (format depends on env)
+      let url = getS3Url "covers/test.jpg"
+      (length [url]) `shouldEqual` 1

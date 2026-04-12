@@ -43,14 +43,17 @@ check:
     npx purs-tidy check "src/**/*.purs"
     npm audit
 
-# Build the container image using Nix
-container:
-    nix build .#container
-
-# Load the built container image into podman
-load: container
-    podman load < result
-
-# Push the container image to the registry
-push: container
-    skopeo copy --dest-precompute-digests docker-archive:result docker://ghcr.io/mtmn/scorpus:latest
+# Manage the container image (build, load, push)
+container command:
+    @if [ "{{ command }}" = "build" ]; then \
+        nix build .#container; \
+    elif [ "{{ command }}" = "load" ]; then \
+        podman load < result; \
+    elif [ "{{ command }}" = "push" ]; then \
+        skopeo copy \
+            --dest-precompute-digests \
+            docker-archive:result docker://ghcr.io/mtmn/scorpus:latest; \
+    else \
+        echo "Unknown container command: {{ command }}"; \
+        exit 1; \
+    fi
