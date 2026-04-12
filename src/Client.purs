@@ -162,7 +162,6 @@ component =
           ]
       ]
 
-
   renderStatsView _ Nothing =
     HH.div [ HP.class_ (H.ClassName "loading") ] [ HH.text "Loading stats..." ]
   renderStatsView expandedSections (Just (Stats { genres, labels, years })) =
