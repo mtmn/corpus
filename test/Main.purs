@@ -22,7 +22,7 @@ main :: Effect Unit
 main = do
   Process.setEnv "AWS_ENDPOINT_URL" "https://s3.example.com"
   Process.setEnv "S3_BUCKET" "my-bucket"
-  
+
   runSpecAndExitProcess [consoleReporter] do
     describe "Scorpus Main Utils" do
       it "should build ListenBrainz URLs correctly" do
@@ -149,7 +149,7 @@ main = do
         -- Test Filtering (as mentioned in architecture.md)
         listensFiltered <- getScrobbles conn 10 0 (Just { field: "genre", value: "Rock" })
         length listensFiltered `shouldEqual` 1
-        
+
         listensEmpty <- getScrobbles conn 10 0 (Just { field: "genre", value: "Jazz" })
         length listensEmpty `shouldEqual` 0
 
