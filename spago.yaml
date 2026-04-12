@@ -40,7 +40,15 @@ package:
     - web-html
   test:
     main: Test.Main
-    dependencies: []
+    dependencies:
+      - spec
+      - aff
+      - argonaut
+      - argonaut-core
+      - either
+      - maybe
+      - transformers
+      - arrays
 workspace:
   packageSet:
     registry: 75.9.0
