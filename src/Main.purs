@@ -1036,7 +1036,7 @@ type MbData = { genre :: Maybe String, label :: Maybe String, year :: Maybe Int 
 fetchMusicBrainzRelease :: String -> Aff (Maybe MbData)
 fetchMusicBrainzRelease mbid = do
   let url = "https://musicbrainz.org/ws/2/release/" <> mbid <> "?inc=genres+labels+release-groups&fmt=json"
-  result <- try $ fetch url { method: GET, headers: { "User-Agent": "Scorpus/1.0 +https://codeberg.org/mtmn/scorpus" } }
+  result <- try $ fetch url { method: GET, headers: { "User-Agent": "corpus/1.0 +https://codeberg.org/mtmn/corpus" } }
   case result of
     Left err -> do
       Log.error $ "MusicBrainz fetch error for " <> mbid <> ": " <> Exception.message err
@@ -1257,7 +1257,7 @@ main = do
   env <- getEnv
   let
     port = getEnvInt env "PORT" 8000
-    dbFile = getEnvStr env "DATABASE_FILE" "scorpus.db"
+    dbFile = getEnvStr env "DATABASE_FILE" "corpus.db"
     username = getEnvStr env "LISTENBRAINZ_USER" ""
     backupEnabled = getEnvBool env "BACKUP_ENABLED" false
     backupIntervalHours = getEnvInt env "BACKUP_INTERVAL_HOURS" 1

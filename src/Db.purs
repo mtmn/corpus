@@ -73,7 +73,7 @@ performBackup conn dbFile = do
       Left _ -> "unknown"
   let dir = dirName dbFile <> "backup/"
   void $ try $ FSA.mkdir' dir { recursive: true, mode: Perms.mkPerms Perms.all Perms.all Perms.read }
-  let dest = dir <> "scorpus-" <> ts <> ".db"
+  let dest = dir <> "corpus-" <> ts <> ".db"
   FSA.copyFile dbFile dest
   Log.info $ "Backup saved locally: " <> dest
 

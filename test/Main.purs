@@ -28,7 +28,7 @@ main = do
   Process.setEnv "S3_BUCKET" "my-bucket"
 
   runSpecAndExitProcess [consoleReporter] do
-    describe "Scorpus Main Utils" do
+    describe "Corpus Main Utils" do
       it "should build ListenBrainz URLs correctly" do
         listenBrainzUrl "user1" `shouldEqual` "https://api.listenbrainz.org/1/user/user1/listens"
 
@@ -37,7 +37,7 @@ main = do
         sanitizeKey "T.est-123" `shouldEqual` "T.est-123"
         sanitizeKey "multiple   spaces" `shouldEqual` "multiple_spaces"
 
-    describe "Scorpus Types" do
+    describe "Corpus Types" do
       describe "MbidMapping Codecs" do
         it "should roundtrip MbidMapping" do
           let mbid = MbidMapping { releaseMbid: Just "release-123", caaReleaseMbid: Just "caa-456" }
@@ -111,7 +111,7 @@ main = do
             Left err ->
               fail $ "Decoding failed: " <> show err
 
-    describe "Scorpus Database" do
+    describe "Corpus Database" do
       it "should handle scrobble and metadata operations" do
         conn <- connect ":memory:"
         initDb conn
@@ -157,18 +157,18 @@ main = do
         listensEmpty <- getScrobbles conn 10 0 (Just { field: "genre", value: "Jazz" })
         length listensEmpty `shouldEqual` 0
 
-    describe "Scorpus Backup" do
+    describe "Corpus Backup" do
       describe "dirName" do
         it "extracts directory from an absolute path" do
-          dirName "/app/data/scorpus.db" `shouldEqual` "/app/data/"
+          dirName "/app/data/corpus.db" `shouldEqual` "/app/data/"
         it "extracts directory from a nested path" do
-          dirName "/tmp/test/scorpus.db" `shouldEqual` "/tmp/test/"
+          dirName "/tmp/test/corpus.db" `shouldEqual` "/tmp/test/"
         it "returns ./ for a bare filename" do
-          dirName "scorpus.db" `shouldEqual` "./"
+          dirName "corpus.db" `shouldEqual` "./"
 
       it "local backup creates a file in backup/ alongside the db" do
-        let testDir = "/tmp/scorpus-backup-test"
-        let dbPath = testDir <> "/scorpus.db"
+        let testDir = "/tmp/corpus-backup-test"
+        let dbPath = testDir <> "/corpus.db"
         let backupDir = testDir <> "/backup"
         -- clean up any previous run
         void $ try $ FSA.rm' testDir { force: true, recursive: true, maxRetries: 0, retryDelay: 100 }
@@ -288,7 +288,7 @@ main = do
               listens <- getScrobbles conn 10 0 Nothing
               length listens `shouldEqual` 1
 
-    describe "Scorpus S3" do
+    describe "Corpus S3" do
       it "should generate virtual-host style S3 URLs" do
         liftEffect $ Process.setEnv "AWS_S3_ADDRESSING_STYLE" "virtual"
         let url = getS3Url "covers/test.jpg"
