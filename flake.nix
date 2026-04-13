@@ -5,8 +5,8 @@
   };
 
   nixConfig = {
-    extra-substituters = ["https://attic.saatana.cat/tools"];
-    extra-trusted-public-keys = ["tools:jwYUMuvRliZGRiARi2ptFALYDoheCxHI8X4sXWYds/0="];
+    extra-substituters = ["https://attic.saatana.cat/scorpus"];
+    extra-trusted-public-keys = ["scorpus:mtDW9MGPAwrpye91ZDh3dMPBBzyz597OHNs4KempuLY="];
   };
 
   outputs = {
