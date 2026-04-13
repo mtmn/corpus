@@ -6,6 +6,7 @@
         "core": {
           "dependencies": [
             "aff",
+            "aff-retry",
             "affjax",
             "affjax-web",
             "argonaut",
@@ -724,6 +725,26 @@
         "tailrec",
         "transformers",
         "unsafe-coerce"
+      ]
+    },
+    "aff-retry": {
+      "type": "registry",
+      "version": "2.0.0",
+      "integrity": "sha256-rKZNcP4IKSyBFQBVzrCvE0ULoJt0N/uDLLJ0dPotr4k=",
+      "dependencies": [
+        "aff",
+        "arrays",
+        "datetime",
+        "effect",
+        "either",
+        "exceptions",
+        "integers",
+        "maybe",
+        "newtype",
+        "numbers",
+        "prelude",
+        "random",
+        "transformers"
       ]
     },
     "affjax": {
@@ -2033,6 +2054,16 @@
         "safe-coerce",
         "transformers",
         "tuples"
+      ]
+    },
+    "random": {
+      "type": "registry",
+      "version": "6.0.0",
+      "integrity": "sha256-7sZRo6P9UIiXDZ9s2QL9T8h3wlIwLdQrR4+oZKOijQw=",
+      "dependencies": [
+        "effect",
+        "integers",
+        "prelude"
       ]
     },
     "record": {

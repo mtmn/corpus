@@ -22,7 +22,7 @@ import Node.Net.Server (listenTcp, listeningH)
 import Node.Buffer (fromArrayBuffer)
 import Data.Either (Either(..))
 import Effect.Exception as Exception
-import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff)
+import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff, joinFiber)
 import Effect.Ref as Ref
 import Effect.Ref (Ref)
 import Unsafe.Coerce (unsafeCoerce)
@@ -38,7 +38,7 @@ import Data.Argonaut.Core (Json, toObject, toArray, toString, stringify)
 import Data.Array ((!!), length, uncons, mapMaybe)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
-import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb)
+import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, getOldestTs, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
@@ -48,6 +48,7 @@ import Data.String.Common (split) as String
 import Data.String.Regex (replace, parseFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import S3 (existsInS3, uploadToS3, getS3Url)
+import Effect.Aff.Retry (RetryStatus(..), exponentialBackoff, limitRetries, recovering)
 import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
@@ -60,19 +61,23 @@ listenBrainzUrl :: String -> String
 listenBrainzUrl username = "https://api.listenbrainz.org/1/user/" <> username <> "/listens"
 
 fetchListenBrainzData :: String -> Int -> Aff String
-fetchListenBrainzData username count = makeAff \callback -> do
+fetchListenBrainzData username count = withRetry "ListenBrainz fetch" $ makeAff \callback -> do
   let url = listenBrainzUrl username <> "?count=" <> show count
   req <- HTTPS.get url
 
   req # on_ Client.responseH \res -> do
     launchAff_ do
       body <- readableToStringUtf8 (IM.toReadable res)
-      liftEffect $ callback (Right body)
+      let statusCode = IM.statusCode res
+      liftEffect $
+        if statusCode == 200 then
+          callback (Right body)
+        else
+          callback (Left $ Exception.error $ "ListenBrainz API returned status " <> show statusCode)
 
   let errorH = EventHandle "error" mkEffectFn1
   on_ errorH
     ( \err -> do
-        Log.error $ "ListenBrainz fetch error: " <> Exception.message err
         callback (Left err)
     )
     (unsafeCoerce req)
@@ -80,59 +85,68 @@ fetchListenBrainzData username count = makeAff \callback -> do
   pure nonCanceler
 
 fetchListenBrainzDataBefore :: String -> Int -> Aff String
-fetchListenBrainzDataBefore username maxTs = makeAff \callback -> do
+fetchListenBrainzDataBefore username maxTs = withRetry "ListenBrainz fetch" $ makeAff \callback -> do
   let url = listenBrainzUrl username <> "?count=100&max_ts=" <> show maxTs
   req <- HTTPS.get url
 
   req # on_ Client.responseH \res -> do
     launchAff_ do
       body <- readableToStringUtf8 (IM.toReadable res)
-      liftEffect $ callback (Right body)
+      let statusCode = IM.statusCode res
+      liftEffect $
+        if statusCode == 200 then
+          callback (Right body)
+        else
+          callback (Left $ Exception.error $ "ListenBrainz API returned status " <> show statusCode)
 
   let errorH = EventHandle "error" mkEffectFn1
   on_ errorH
     ( \err -> do
-        Log.error $ "ListenBrainz fetch error: " <> Exception.message err
         callback (Left err)
     )
     (unsafeCoerce req)
 
   pure nonCanceler
 
-fetchLastfmPage :: String -> String -> Int -> Aff { tracks :: Array Json, totalPages :: Int }
-fetchLastfmPage apiKey lfmUser page = do
+withRetry :: forall a. String -> Aff a -> Aff a
+withRetry label action = recovering policy [ \_ _ -> pure true ] \(RetryStatus status) -> do
+  when (status.iterNumber > 0)
+    $ Log.warn
+    $ label <> " failed, retry attempt " <> show status.iterNumber
+  action
+  where
+  policy = exponentialBackoff (Milliseconds 1000.0) <> limitRetries 5
+
+fetchLastfmPage :: String -> String -> Int -> Maybe Int -> Aff { tracks :: Array Json, totalPages :: Int }
+fetchLastfmPage apiKey lfmUser page mTo = withRetry "Last.fm fetch" do
   let
+    toParam = case mTo of
+      Just ts -> "&to=" <> show ts
+      Nothing -> ""
     url = "https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user="
       <> (fromMaybe lfmUser $ encodeURIComponent lfmUser)
       <> "&api_key="
       <> apiKey
       <> "&format=json&limit=200&page="
       <> show page
-  result <- try $ fetch url { method: GET }
-  case result of
-    Left err -> do
-      Log.error $ "Last.fm fetch error: " <> Exception.message err
-      pure { tracks: [], totalPages: 0 }
-    Right fr | fr.status == 200 -> do
-      jsonResult <- try $ fromJson fr.json
-      case jsonResult of
-        Left err -> do
-          Log.error $ "Last.fm JSON parse error: " <> Exception.message err
-          pure { tracks: [], totalPages: 0 }
-        Right json -> do
-          let
-            parsed = do
-              obj <- toObject json
-              rt <- Object.lookup "recenttracks" obj >>= toObject
-              tracks <- Object.lookup "track" rt >>= toArray
-              attr <- Object.lookup "@attr" rt >>= toObject
-              totalPagesStr <- Object.lookup "totalPages" attr >>= toString
-              totalPages <- fromString totalPagesStr
-              pure { tracks, totalPages }
-          pure $ fromMaybe { tracks: [], totalPages: 0 } parsed
-    Right fr -> do
-      Log.warn $ "Last.fm API returned status " <> show fr.status
-      pure { tracks: [], totalPages: 0 }
+      <> toParam
+  fr <- fetch url { method: GET }
+  if fr.status == 200 then do
+    json <- fromJson fr.json
+    let
+      parsed = do
+        obj <- toObject json
+        rt <- Object.lookup "recenttracks" obj >>= toObject
+        tracks <- Object.lookup "track" rt >>= toArray
+        attr <- Object.lookup "@attr" rt >>= toObject
+        totalPagesStr <- Object.lookup "totalPages" attr >>= toString
+        totalPages <- fromString totalPagesStr
+        pure { tracks, totalPages }
+    case parsed of
+      Just result -> pure result
+      Nothing -> liftEffect $ Exception.error "Last.fm: Failed to parse JSON response" # Exception.throwException
+  else do
+    liftEffect $ Exception.error ("Last.fm API returned status " <> show fr.status) # Exception.throwException
 
 lastfmTrackToListen :: Json -> Maybe Listen
 lastfmTrackToListen json = do
@@ -164,17 +178,15 @@ lastfmTrackToListen json = do
         }
     }
 
-syncData :: Connection -> String -> Ref Boolean -> Aff Unit
-syncData _ username _ | username == "" = pure unit
-syncData conn username isSyncing = do
-  forever do
-    liftEffect $ Ref.write true isSyncing
-    void $ performFullSync
-    liftEffect $ Ref.write false isSyncing
-    delay (Milliseconds 60000.0)
-
+-- One complete paginated pass; used for both initial and recurring syncs.
+lbSyncOnce :: Connection -> String -> Ref Boolean -> Boolean -> Aff Unit
+lbSyncOnce conn username isSyncing initialSyncEnabled = do
+  liftEffect $ Ref.write true isSyncing
+  void $ performFullSync
+  liftEffect $ Ref.write false isSyncing
   where
   performFullSync = do
+    when initialSyncEnabled $ Log.info $ "Starting ListenBrainz sync for " <> username
     result <- try $ fetchListenBrainzData username 100
     case result of
       Right body -> do
@@ -182,18 +194,22 @@ syncData conn username isSyncing = do
           Left err -> Log.error $ "Sync parse error: " <> show err
           Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
             run conn "BEGIN TRANSACTION" []
-            Tuple added (Tuple minTs hitExisting) <- processListens listens
+            Tuple added (Tuple minTs hitCount) <- processListens listens
             run conn "COMMIT" []
-            if hitExisting || length listens == 0 then do
-              when (added > 0) $ Log.info $ "Sync complete. Added " <> show added <> " new scrobbles."
+            when (added > 0 || initialSyncEnabled) $
+              Log.info $ "ListenBrainz batch: added " <> show added <> ", " <> show hitCount <> " already present."
+            let allExist = hitCount == length listens && length listens > 0
+            if allExist || length listens == 0 || not initialSyncEnabled then do
+              when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
             else do
-              total <- paginateUntilDone minTs added
-              Log.info $ "Sync complete. Added " <> show total <> " new scrobbles."
+              total <- paginateUntilDone 2 minTs added
+              Log.info $ "ListenBrainz sync complete. Added " <> show total <> " new scrobbles."
       Left err -> Log.error $ "Sync fetch error: " <> Exception.message err
 
-  paginateUntilDone minTs acc = case minTs of
+  paginateUntilDone batchNum minTs acc = case minTs of
     Nothing -> pure acc
     Just ts -> do
+      Log.info $ "Fetching ListenBrainz batch " <> show batchNum <> " (before " <> show ts <> ")..."
       result <- try $ fetchListenBrainzDataBefore username ts
       case result of
         Right body -> do
@@ -203,73 +219,113 @@ syncData conn username isSyncing = do
               pure acc
             Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
               run conn "BEGIN TRANSACTION" []
-              Tuple added (Tuple newMinTs hitExisting) <- processListens listens
+              Tuple added (Tuple newMinTs hitCount) <- processListens listens
               run conn "COMMIT" []
-              if hitExisting || length listens == 0 then do
+              Log.info $ "ListenBrainz batch " <> show batchNum <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+              let allExist = hitCount == length listens && length listens > 0
+              if allExist || length listens == 0 then do
                 pure (acc + added)
               else do
-                paginateUntilDone newMinTs (acc + added)
+                paginateUntilDone (batchNum + 1) newMinTs (acc + added)
         Left err -> do
           Log.error $ "Sync fetch error: " <> Exception.message err
           pure acc
 
   processListens listens = do
-    syncRecursive 0 Nothing listens
+    syncRecursive 0 Nothing 0 listens
 
-  syncRecursive acc minTs listens = case uncons listens of
-    Nothing -> pure $ Tuple acc (Tuple minTs false)
+  syncRecursive acc minTs hitCount listens = case uncons listens of
+    Nothing -> pure $ Tuple acc (Tuple minTs hitCount)
     Just { head: l@(Listen { listenedAt: Just ts, trackMetadata: (TrackMetadata _) }), tail } -> do
       exists <- checkExists conn ts
       if exists then do
-        pure $ Tuple acc (Tuple minTs true)
+        syncRecursive acc (Just ts) (hitCount + 1) tail
       else do
         upsertScrobble conn l
-        syncRecursive (acc + 1) (Just ts) tail
+        syncRecursive (acc + 1) (Just ts) hitCount tail
     Just { head: _, tail } -> do
       Log.warn "Skipping scrobble without timestamp"
-      syncRecursive acc minTs tail
+      syncRecursive acc minTs hitCount tail
 
-syncLastfmData :: Connection -> String -> String -> Ref Boolean -> Aff Unit
-syncLastfmData conn apiKey lfmUser isSyncing = do
-  Log.info $ "Starting Last.fm sync for user: " <> lfmUser
-  forever do
-    liftEffect $ Ref.write true isSyncing
-    void $ performLastfmSync
-    liftEffect $ Ref.write false isSyncing
-    delay (Milliseconds 60000.0)
+lbSyncLoop :: Connection -> String -> Ref Boolean -> Boolean -> Aff Unit
+lbSyncLoop conn username isSyncing initialSyncEnabled = forever do
+  delay (Milliseconds 60000.0)
+  lbSyncOnce conn username isSyncing initialSyncEnabled
+
+lfSyncOnce :: Connection -> String -> String -> Ref Boolean -> Boolean -> Aff Unit
+lfSyncOnce conn apiKey lfmUser isSyncing initialSyncEnabled = do
+  liftEffect $ Ref.write true isSyncing
+  void $ performLastfmSync
+  when initialSyncEnabled $ void $ performLastfmBackfill
+  liftEffect $ Ref.write false isSyncing
   where
   performLastfmSync = do
-    { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1
+    when initialSyncEnabled $ Log.info $ "Starting Last.fm sync for " <> lfmUser
+    { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1 Nothing
     run conn "BEGIN TRANSACTION" []
-    Tuple added hitExisting <- processLastfmTracks tracks
+    Tuple added hitCount <- processLastfmTracks tracks
     run conn "COMMIT" []
-    if hitExisting || totalPages <= 1 then
+    when (added > 0 || initialSyncEnabled) $
+      Log.info $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+    let
+      validTracks = mapMaybe lastfmTrackToListen tracks
+      allExist = hitCount == length validTracks && length validTracks > 0
+    if allExist || totalPages <= 1 || not initialSyncEnabled then
       when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
     else do
-      total <- paginateLastfmUntilDone 2 totalPages added
+      total <- paginateLastfmUntilDone 2 totalPages Nothing added
       Log.info $ "Last.fm sync complete. Added " <> show total <> " new scrobbles."
 
-  paginateLastfmUntilDone page totalPages acc
+  paginateLastfmUntilDone page totalPages mTo acc
     | page > totalPages = pure acc
     | otherwise = do
-        { tracks } <- fetchLastfmPage apiKey lfmUser page
+        when initialSyncEnabled $ Log.info $ "Fetching Last.fm page " <> show page <> "/" <> show totalPages <> "..."
+        { tracks } <- fetchLastfmPage apiKey lfmUser page mTo
         run conn "BEGIN TRANSACTION" []
-        Tuple added hitExisting <- processLastfmTracks tracks
+        Tuple added hitCount <- processLastfmTracks tracks
         run conn "COMMIT" []
-        if hitExisting || length tracks == 0 then pure (acc + added)
-        else paginateLastfmUntilDone (page + 1) totalPages (acc + added)
+        Log.info $ "Last.fm page " <> show page <> "/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+        let
+          validTracks = mapMaybe lastfmTrackToListen tracks
+          allExist = hitCount == length validTracks && length validTracks > 0
+        if allExist || length tracks == 0 then pure (acc + added)
+        else paginateLastfmUntilDone (page + 1) totalPages mTo (acc + added)
 
-  processLastfmTracks tracks = syncLastfmRecursive 0 (mapMaybe lastfmTrackToListen tracks)
+  performLastfmBackfill = do
+    mOldest <- getOldestTs conn
+    case mOldest of
+      Nothing -> pure unit
+      Just oldestTs -> do
+        when initialSyncEnabled $ Log.info $ "Checking for Last.fm history before " <> show oldestTs <> "..."
+        { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1 (Just (oldestTs - 1))
+        if length tracks == 0 then do
+          when initialSyncEnabled $ Log.info "No older Last.fm history found."
+          pure unit
+        else do
+          Log.info $ "Backfilling " <> show totalPages <> " pages of Last.fm history before " <> show oldestTs
+          run conn "BEGIN TRANSACTION" []
+          Tuple added hitCount <- processLastfmTracks tracks
+          run conn "COMMIT" []
+          Log.info $ "Last.fm backfill page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+          total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
+          Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
 
-  syncLastfmRecursive acc listens = case uncons listens of
-    Nothing -> pure $ Tuple acc false
+  processLastfmTracks tracks = syncLastfmRecursive 0 0 (mapMaybe lastfmTrackToListen tracks)
+
+  syncLastfmRecursive acc hitCount listens = case uncons listens of
+    Nothing -> pure $ Tuple acc hitCount
     Just { head: l@(Listen { listenedAt: Just ts }), tail } -> do
       exists <- checkExists conn ts
-      if exists then pure $ Tuple acc true
+      if exists then syncLastfmRecursive acc (hitCount + 1) tail
       else do
         upsertScrobble conn l
-        syncLastfmRecursive (acc + 1) tail
-    Just { head: _, tail } -> syncLastfmRecursive acc tail
+        syncLastfmRecursive (acc + 1) hitCount tail
+    Just { head: _, tail } -> syncLastfmRecursive acc hitCount tail
+
+lfSyncLoop :: Connection -> String -> String -> Ref Boolean -> Boolean -> Aff Unit
+lfSyncLoop conn apiKey lfmUser isSyncing initialSyncEnabled = forever do
+  delay (Milliseconds 60000.0)
+  lfSyncOnce conn apiKey lfmUser isSyncing initialSyncEnabled
 
 indexHtml :: String
 indexHtml =
@@ -1143,23 +1199,30 @@ enrichMetadata conn isSyncing = forever do
             -- Genre found in MusicBrainz, just save as usual
             upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
 
-startServer :: Int -> String -> String -> Boolean -> Number -> Boolean -> Effect Unit
-startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnabled = launchAff_ do
+startServer :: Int -> String -> String -> Boolean -> Number -> Boolean -> Boolean -> Effect Unit
+startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnabled initialSyncEnabled = launchAff_ do
   conn <- connect dbFile
   initDb conn
   initReleaseMetadata conn
   isSyncing <- liftEffect $ Ref.new false
-  when (username /= "") $ void $ forkAff $ syncData conn username isSyncing
   env <- liftEffect getEnv
   let
-    lfmUser = fromMaybe "" $ Object.lookup "LASTFM_USER" env
-    lfmApiKey = fromMaybe "" $ Object.lookup "LASTFM_API_KEY" env
-  when (lfmUser /= "") $
-    if lfmApiKey == "" then
-      Log.warn "LASTFM_USER is set but LASTFM_API_KEY is missing — Last.fm syncing disabled"
-    else
-      void $ forkAff $ syncLastfmData conn lfmApiKey lfmUser isSyncing
+    lfmUser = getEnvStr env "LASTFM_USER" ""
+    lfmApiKey = getEnvStr env "LASTFM_API_KEY" ""
+    lbEnabled = username /= ""
+    lfEnabled = lfmUser /= "" && lfmApiKey /= ""
+  when (lfmUser /= "" && not lfEnabled) $
+    Log.warn "LASTFM_USER is set but LASTFM_API_KEY is missing — Last.fm syncing disabled"
+  -- Fork initial syncs in parallel; both run concurrently
+  lbFiber <- if lbEnabled then Just <$> forkAff (lbSyncOnce conn username isSyncing initialSyncEnabled) else pure Nothing
+  lfFiber <- if lfEnabled then Just <$> forkAff (lfSyncOnce conn lfmApiKey lfmUser isSyncing initialSyncEnabled) else pure Nothing
+  -- Block until both initial syncs have fully paginated through history
+  for_ lbFiber joinFiber
+  for_ lfFiber joinFiber
+  -- Only now start enrichment and the recurring sync loops
   void $ forkAff $ enrichMetadata conn isSyncing
+  when lbEnabled $ void $ forkAff $ lbSyncLoop conn username isSyncing initialSyncEnabled
+  when lfEnabled $ void $ forkAff $ lfSyncLoop conn lfmApiKey lfmUser isSyncing initialSyncEnabled
   when backupEnabled $ void $ forkAff $ backupDb conn dbFile backupIntervalMs
 
   liftEffect $ do
@@ -1174,16 +1237,31 @@ startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnable
 
 foreign import dotenvConfig :: Effect Unit
 
+getEnvStr :: Object.Object String -> String -> String -> String
+getEnvStr env key def = fromMaybe def (Object.lookup key env)
+
+getEnvInt :: Object.Object String -> String -> Int -> Int
+getEnvInt env key def = fromMaybe def (Object.lookup key env >>= fromString)
+
+getEnvBool :: Object.Object String -> String -> Boolean -> Boolean
+getEnvBool env key def = case Object.lookup key env of
+  Just "true" -> true
+  Just "false" -> false
+  _ -> def
+
 main :: Effect Unit
 main = do
   dotenvConfig
   env <- getEnv
-  let port = fromMaybe 8000 (Object.lookup "PORT" env >>= fromString)
-  let dbFile = fromMaybe "scorpus.db" (Object.lookup "DATABASE_FILE" env)
-  let username = fromMaybe "" (Object.lookup "LISTENBRAINZ_USER" env)
-  let backupEnabled = Object.lookup "BACKUP_ENABLED" env == Just "true"
-  let backupIntervalHours = fromMaybe 1 (Object.lookup "BACKUP_INTERVAL_HOURS" env >>= fromString)
-  let backupIntervalMs = toNumber backupIntervalHours * 3600000.0
-  let coverCacheEnabled = Object.lookup "COVER_CACHE_ENABLED" env /= Just "false"
-  when (username == "") $ Log.warn "LISTENBRAINZ_USER is not set — syncing will be disabled"
-  startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnabled
+  let
+    port = getEnvInt env "PORT" 8000
+    dbFile = getEnvStr env "DATABASE_FILE" "scorpus.db"
+    username = getEnvStr env "LISTENBRAINZ_USER" ""
+    backupEnabled = getEnvBool env "BACKUP_ENABLED" false
+    backupIntervalHours = getEnvInt env "BACKUP_INTERVAL_HOURS" 1
+    backupIntervalMs = toNumber backupIntervalHours * 3600000.0
+    coverCacheEnabled = getEnvBool env "COVER_CACHE_ENABLED" true
+    initialSyncEnabled = getEnvBool env "INITIAL_SYNC" false
+
+  when (username == "") $ Log.warn "LISTENBRAINZ_USER is not set — ListenBrainz syncing will be disabled"
+  startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnabled initialSyncEnabled

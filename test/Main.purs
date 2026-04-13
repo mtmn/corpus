@@ -15,7 +15,8 @@ import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..))
 import Db (connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dirName, performBackup)
-import Main (sanitizeKey, listenBrainzUrl)
+import Data.Argonaut.Core (Json)
+import Main (sanitizeKey, listenBrainzUrl, lastfmTrackToListen)
 import S3 (getS3Url)
 import Node.FS.Aff as FSA
 import Node.FS.Perms (mkPerms, all, read) as Perms
@@ -180,6 +181,112 @@ main = do
         length files `shouldEqual` 1
         -- cleanup
         void $ try $ FSA.rm' testDir { force: true, recursive: true, maxRetries: 0, retryDelay: 100 }
+
+    describe "Last.fm Support" do
+      let parseTrack :: String -> Json
+          parseTrack s = case parseJson s of
+            Right j -> j
+            Left _ -> encodeJson ([] :: Array Int)  -- fallback that will produce Nothing
+
+      describe "lastfmTrackToListen" do
+        it "parses a valid track with MBID" do
+          let j = parseTrack """
+            {
+              "name": "Test Track",
+              "artist": { "#text": "Test Artist" },
+              "album": { "#text": "Test Album", "mbid": "album-mbid-123" },
+              "date": { "uts": "1600000000", "#text": "13 Sep 2020, 12:00" }
+            }
+          """
+          case lastfmTrackToListen j of
+            Nothing -> fail "Expected Just Listen, got Nothing"
+            Just (Listen { listenedAt, trackMetadata: TrackMetadata m }) -> do
+              listenedAt `shouldEqual` Just 1600000000
+              m.trackName `shouldEqual` Just "Test Track"
+              m.artistName `shouldEqual` Just "Test Artist"
+              m.releaseName `shouldEqual` Just "Test Album"
+              m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Just "album-mbid-123", caaReleaseMbid: Just "album-mbid-123" })
+
+        it "treats empty album MBID as Nothing" do
+          let j = parseTrack """
+            {
+              "name": "Track",
+              "artist": { "#text": "Artist" },
+              "album": { "#text": "Album", "mbid": "" },
+              "date": { "uts": "1600000001", "#text": "13 Sep 2020, 12:01" }
+            }
+          """
+          case lastfmTrackToListen j of
+            Nothing -> fail "Expected Just Listen, got Nothing"
+            Just (Listen { trackMetadata: TrackMetadata m }) ->
+              m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Nothing, caaReleaseMbid: Nothing })
+
+        it "skips nowplaying tracks (no date field)" do
+          let j = parseTrack """
+            {
+              "@attr": { "nowplaying": "true" },
+              "name": "Now Playing Track",
+              "artist": { "#text": "Artist" },
+              "album": { "#text": "Album", "mbid": "" }
+            }
+          """
+          lastfmTrackToListen j `shouldEqual` Nothing
+
+        it "returns Nothing when artist field is missing" do
+          let j = parseTrack """
+            {
+              "name": "Track",
+              "album": { "#text": "Album", "mbid": "" },
+              "date": { "uts": "1600000002", "#text": "13 Sep 2020, 12:02" }
+            }
+          """
+          lastfmTrackToListen j `shouldEqual` Nothing
+
+        it "returns Nothing when date.uts is not a valid integer" do
+          let j = parseTrack """
+            {
+              "name": "Track",
+              "artist": { "#text": "Artist" },
+              "album": { "#text": "Album", "mbid": "" },
+              "date": { "uts": "not-a-number", "#text": "?" }
+            }
+          """
+          lastfmTrackToListen j `shouldEqual` Nothing
+
+        it "uses album MBID for both releaseMbid and caaReleaseMbid" do
+          let j = parseTrack """
+            {
+              "name": "Track",
+              "artist": { "#text": "Artist" },
+              "album": { "#text": "Album", "mbid": "mbid-xyz" },
+              "date": { "uts": "1600000003", "#text": "13 Sep 2020, 12:03" }
+            }
+          """
+          case lastfmTrackToListen j of
+            Nothing -> fail "Expected Just Listen, got Nothing"
+            Just (Listen { trackMetadata: TrackMetadata m }) ->
+              m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Just "mbid-xyz", caaReleaseMbid: Just "mbid-xyz" })
+
+        it "inserts and retrieves a Last.fm-style listen from the database" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          let j = parseTrack """
+            {
+              "name": "Last.fm Track",
+              "artist": { "#text": "Last.fm Artist" },
+              "album": { "#text": "Last.fm Album", "mbid": "" },
+              "date": { "uts": "1700000000", "#text": "14 Nov 2023, 22:13" }
+            }
+          """
+          case lastfmTrackToListen j of
+            Nothing -> fail "lastfmTrackToListen returned Nothing"
+            Just listen -> do
+              upsertScrobble conn listen
+              exists <- checkExists conn 1700000000
+              exists `shouldEqual` true
+              listens <- getScrobbles conn 10 0 Nothing
+              length listens `shouldEqual` 1
 
     describe "Scorpus S3" do
       it "should generate virtual-host style S3 URLs" do

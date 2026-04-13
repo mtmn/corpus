@@ -2,7 +2,7 @@
 
 | | |
 | :--- | ---: |
-| **Scorpus** is an alternative [ListenBrainz](https://listenbrainz.org) (Last.fm planned for the future) frontend that stores metadata and cover images.<br><br>Includes scrobbles fetching, metadata enrichment, and an interactive [PureScript](https://purescript.org) frontend for exploration of your listening habits.<br><br>[Live instance running here.](https://scrobbler.mtmn.name) | <img src="docs/korpus.webp" width="400" alt="Korpus"> |
+| **Scorpus** is an alternative [ListenBrainz](https://listenbrainz.org) and [Last.fm](https://last.fm) frontend that stores metadata and cover images.<br><br>Includes scrobbles fetching, metadata enrichment, and an interactive [PureScript](https://purescript.org) frontend for exploration of your listening habits.<br><br>[Live instance running here.](https://scrobbler.mtmn.name) | <img src="docs/korpus.webp" width="400" alt="Korpus"> |
 
 ## Documentation
 
@@ -47,10 +47,11 @@ npx spago bundle --module Client --outfile client.js --platform browser
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `LISTENBRAINZ_USER` | — | Your ListenBrainz username (required for syncing) |
+| `LISTENBRAINZ_USER` | — | ListenBrainz username — enables scrobble sync when set |
+| `LASTFM_USER` | — | Last.fm username — enables scrobble sync when set |
+| `LASTFM_API_KEY` | — | Last.fm API key (required when `LASTFM_USER` is set; also used for genre and cover art fallback) |
 | `DATABASE_FILE` | `scorpus.db` | Path to the DuckDB database file |
 | `PORT` | `8000` | HTTP port to listen on |
-| `INITIAL_SYNC` | — | Set to `true` to perform a full historical sync on startup |
 | `COVER_CACHE_ENABLED` | `true` | Set to `false` to disable S3 cover art caching |
 | `S3_BUCKET` | — | S3 bucket name for cover art caching |
 | `S3_REGION` | `us-east-1` | S3 region |
@@ -58,8 +59,7 @@ npx spago bundle --module Client --outfile client.js --platform browser
 | `AWS_SECRET_ACCESS_KEY` | — | S3 credentials |
 | `AWS_ENDPOINT_URL` | — | S3-compatible endpoint (e.g. for MinIO) |
 | `AWS_S3_ADDRESSING_STYLE` | — | Set to `path` for path-style S3 URLs |
-| `LASTFM_API_KEY` | — | Last.fm API key for cover art fallback |
-| `DISCOGS_TOKEN` | — | Discogs token for cover art fallback |
+| `DISCOGS_TOKEN` | — | Discogs token for cover art and genre fallback |
 | `BACKUP_ENABLED` | — | Set to `true` to enable periodic local database backups |
 | `BACKUP_INTERVAL_HOURS` | `1` | How often to back up the database (in hours) |
 
