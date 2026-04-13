@@ -43,7 +43,24 @@ npx spago bundle --module Client --outfile client.js --platform browser
 ```
 
 
-Required environment variables:
-- `LISTENBRAINZ_USER`: Your ListenBrainz username
-- `DATABASE_FILE`: Path to the DuckDB file (defaults to `scorpus.db`)
-- `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc. (for cover art caching)
+### Environment variables
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `LISTENBRAINZ_USER` | — | Your ListenBrainz username (required for syncing) |
+| `DATABASE_FILE` | `scorpus.db` | Path to the DuckDB database file |
+| `PORT` | `8000` | HTTP port to listen on |
+| `INITIAL_SYNC` | — | Set to `true` to perform a full historical sync on startup |
+| `COVER_CACHE_ENABLED` | `true` | Set to `false` to disable S3 cover art caching |
+| `S3_BUCKET` | — | S3 bucket name for cover art caching |
+| `S3_REGION` | `us-east-1` | S3 region |
+| `AWS_ACCESS_KEY_ID` | — | S3 credentials |
+| `AWS_SECRET_ACCESS_KEY` | — | S3 credentials |
+| `AWS_ENDPOINT_URL` | — | S3-compatible endpoint (e.g. for MinIO) |
+| `AWS_S3_ADDRESSING_STYLE` | — | Set to `path` for path-style S3 URLs |
+| `LASTFM_API_KEY` | — | Last.fm API key for cover art fallback |
+| `DISCOGS_TOKEN` | — | Discogs token for cover art fallback |
+| `BACKUP_ENABLED` | — | Set to `true` to enable periodic local database backups |
+| `BACKUP_INTERVAL_HOURS` | `1` | How often to back up the database (in hours) |
+
+Backups are written to a `backup/` directory alongside `DATABASE_FILE`, named `scorpus-<timestamp>.db`.
