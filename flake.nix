@@ -5,8 +5,8 @@
   };
 
   nixConfig = {
-    extra-substituters = ["https://attic.saatana.cat/scorpus"];
-    extra-trusted-public-keys = ["scorpus:mtDW9MGPAwrpye91ZDh3dMPBBzyz597OHNs4KempuLY="];
+    extra-substituters = ["https://attic.saatana.cat/corpus"];
+    extra-trusted-public-keys = ["corpus:mtDW9MGPAwrpye91ZDh3dMPBBzyz597OHNs4KempuLY="];
   };
 
   outputs = {
@@ -39,7 +39,7 @@
         };
 
         spagoDeps = pkgs.stdenv.mkDerivation {
-          name = "scorpus-spago-deps";
+          name = "corpus-spago-deps";
 
           src = pkgs.lib.cleanSourceWith {
             src = self;
@@ -93,12 +93,12 @@
           );
         };
 
-        scorpus = pkgs.buildNpmPackage {
-          pname = "scorpus";
+        corpus = pkgs.buildNpmPackage {
+          pname = "corpus";
           version = "1.0.0";
           inherit src;
 
-          npmDepsHash = "sha256-eDc4ckDWvMb3EaDf6GclXxglsd1ZYHhEkHggBG+vcaA=";
+          npmDepsHash = "sha256-q7+quD9rN0eTyPOLxjDvjQgFDnQtJanvSXzJEvMQfFk=";
           npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [
@@ -130,30 +130,30 @@
           '';
 
           installPhase = ''
-            mkdir -p $out/lib/scorpus
-            cp -r server.js client.js package.json node_modules assets $out/lib/scorpus/
+            mkdir -p $out/lib/corpus
+            cp -r server.js client.js package.json node_modules assets $out/lib/corpus/
             if [ -f .env ]; then
-              cp .env $out/lib/scorpus/
+              cp .env $out/lib/corpus/
             else
-              cp .env.example $out/lib/scorpus/.env
+              cp .env.example $out/lib/corpus/.env
             fi
 
             mkdir -p $out/bin
-            makeWrapper ${pkgs.nodejs}/bin/node $out/bin/scorpus-server \
+            makeWrapper ${pkgs.nodejs}/bin/node $out/bin/corpus-server \
               --add-flags "--no-deprecation" \
-              --add-flags "$out/lib/scorpus/server.js" \
-              --chdir "$out/lib/scorpus"
+              --add-flags "$out/lib/corpus/server.js" \
+              --chdir "$out/lib/corpus"
           '';
         };
       in {
-        packages.default = scorpus;
+        packages.default = corpus;
 
         packages.container = pkgs.dockerTools.buildLayeredImage {
-          name = "scorpus";
+          name = "corpus";
           tag = "latest";
           contents = [pkgs.nodejs pkgs.cacert];
           config = {
-            Cmd = ["${scorpus}/bin/scorpus-server"];
+            Cmd = ["${corpus}/bin/scorpus-server"];
             WorkingDir = "/app";
             ExposedPorts = {
               "8321/tcp" = {};

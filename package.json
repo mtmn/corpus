@@ -1,5 +1,5 @@
 {
-	"name": "scorpus",
+	"name": "corpus",
 	"version": "1.0.0",
 	"description": "ListenBrainz frontend in PureScript",
 	"main": "index.js",

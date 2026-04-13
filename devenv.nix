@@ -1,3 +1,3 @@
 {
-  cachix.push = "scorpus";
+  cachix.push = "corpus";
 }

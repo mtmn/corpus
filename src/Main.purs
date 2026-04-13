@@ -869,7 +869,7 @@ type MbData = { genre :: Maybe String, label :: Maybe String, year :: Maybe Int 
 fetchMusicBrainzRelease :: String -> Aff (Maybe MbData)
 fetchMusicBrainzRelease mbid = do
   let url = "https://musicbrainz.org/ws/2/release/" <> mbid <> "?inc=genres+labels+release-groups&fmt=json"
-  result <- try $ fetch url { method: GET, headers: { "User-Agent": "Scorpus/1.0 +https://codeberg.org/mtmn/scorpus" } }
+  result <- try $ fetch url { method: GET, headers: { "User-Agent": "corpus/1.0 +https://codeberg.org/mtmn/scorpus" } }
   case result of
     Left err -> do
       Log.error $ "MusicBrainz fetch error for " <> mbid <> ": " <> Exception.message err
@@ -1060,7 +1060,7 @@ main = do
   dotenvConfig
   env <- getEnv
   let port = fromMaybe 8000 (Object.lookup "PORT" env >>= fromString)
-  let dbFile = fromMaybe "scorpus.db" (Object.lookup "DATABASE_FILE" env)
+  let dbFile = fromMaybe "corpus.db" (Object.lookup "DATABASE_FILE" env)
   let username = fromMaybe "" (Object.lookup "LISTENBRAINZ_USER" env)
   when (username == "") $ Log.warn "LISTENBRAINZ_USER is not set — syncing will be disabled"
   startServer port dbFile username
