@@ -31,7 +31,12 @@ export const uploadToS3Impl =
 				cb(null)();
 			})
 			.catch((err) => {
-				console.error(`S3: Upload failed for ${key}`, err);
+				const msg =
+					`S3: Upload failed for ${key} ${err.message || err}`.replace(
+						/\n/g,
+						" ",
+					);
+				console.error(msg);
 				cb(err)();
 			});
 	};
@@ -50,7 +55,12 @@ export const existsInS3Impl = (key) => (cb) => () => {
 			if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) {
 				cb(false)();
 			} else {
-				console.error(`S3: exists check failed for ${key}`, err);
+				const msg =
+					`S3: exists check failed for ${key} ${err.message || err}`.replace(
+						/\n/g,
+						" ",
+					);
+				console.error(msg);
 				cb(false)();
 			}
 		});
