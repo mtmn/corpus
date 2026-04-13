@@ -1,8 +1,8 @@
-# Corpus
+# Scorpus
 
 | | |
 | :--- | ---: |
-| **Corpus** is an alternative [ListenBrainz](https://listenbrainz.org) (Last.fm planned for the future) frontend that stores metadata and cover images.<br><br>Includes scrobbles fetching, metadata enrichment, and an interactive [PureScript](https://purescript.org) frontend for exploration of your listening habits.<br><br>[Live instance running here.](https://scrobbler.mtmn.name) | <img src="docs/korpus.webp" width="400" alt="Korpus"> |
+| **Scorpus** is an alternative [ListenBrainz](https://listenbrainz.org) (Last.fm planned for the future) frontend that stores metadata and cover images.<br><br>Includes scrobbles fetching, metadata enrichment, and an interactive [PureScript](https://purescript.org) frontend for exploration of your listening habits.<br><br>[Live instance running here.](https://scrobbler.mtmn.name) | <img src="docs/korpus.webp" width="400" alt="Korpus"> |
 
 ## Documentation
 
@@ -45,5 +45,5 @@ npx spago bundle --module Client --outfile client.js --platform browser
 
 Required environment variables:
 - `LISTENBRAINZ_USER`: Your ListenBrainz username
-- `DATABASE_FILE`: Path to the DuckDB file (defaults to `corpus.db`)
+- `DATABASE_FILE`: Path to the DuckDB file (defaults to `scorpus.db`)
 - `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc. (for cover art caching)

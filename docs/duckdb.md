@@ -1,6 +1,6 @@
-# DuckDB in Corpus
+# DuckDB in Scorpus
 
-Corpus uses [DuckDB](https://duckdb.org/) as its primary analytical database. DuckDB's columnar storage and efficient query engine allow Corpus to provide fast filtering, pagination, and statistics over large sets of listening history data.
+Scorpus uses [DuckDB](https://duckdb.org/) as its primary analytical database. DuckDB's columnar storage and efficient query engine allow Scorpus to provide fast filtering, pagination, and statistics over large sets of listening history data.
 
 ## Database Schema
 
@@ -37,7 +37,7 @@ The application interacts with DuckDB via a PureScript FFI layer (`src/Db.js` an
 
 ## Common Analytical Queries
 
-You can run these queries directly against your `corpus.db` file using the DuckDB CLI or any compatible tool.
+You can run these queries directly against your `scorpus.db` file using the DuckDB CLI or any compatible tool.
 
 ### Top 10 Artists of All Time
 ```sql
