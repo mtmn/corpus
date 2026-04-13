@@ -4,11 +4,6 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  nixConfig = {
-    extra-substituters = ["https://attic.saatana.cat/corpus"];
-    extra-trusted-public-keys = ["corpus:mtDW9MGPAwrpye91ZDh3dMPBBzyz597OHNs4KempuLY="];
-  };
-
   outputs = {
     self,
     nixpkgs,
@@ -43,11 +38,13 @@
 
           src = pkgs.lib.cleanSourceWith {
             src = self;
-            filter = name: _type: let baseName = baseNameOf (toString name); in
-              pkgs.lib.elem baseName [ "package.json" "package-lock.json" "spago.yaml" "spago.lock" ];
+            filter = name: _type: let
+              baseName = baseNameOf (toString name);
+            in
+              pkgs.lib.elem baseName ["package.json" "package-lock.json" "spago.yaml" "spago.lock"];
           };
 
-          nativeBuildInputs = with pkgs; [ nodejs git cacert purescript ];
+          nativeBuildInputs = with pkgs; [nodejs git cacert purescript];
 
           outputHashAlgo = "sha256";
           outputHashMode = "recursive";
@@ -82,15 +79,20 @@
 
         src = pkgs.lib.cleanSourceWith {
           src = self;
-          filter = name: type: let baseName = baseNameOf (toString name); in !(
-            (type == "directory" && (baseName == "docs" || baseName == ".git")) ||
-            (type == "regular" && (
-              pkgs.lib.hasSuffix ".md" baseName ||
-              baseName == "justfile" ||
-              baseName == "flake.nix" ||
-              baseName == "flake.lock"
-            ))
-          );
+          filter = name: type: let
+            baseName = baseNameOf (toString name);
+          in
+            !(
+              (type == "directory" && (baseName == "docs" || baseName == ".git"))
+              || (type
+                == "regular"
+                && (
+                  pkgs.lib.hasSuffix ".md" baseName
+                  || baseName == "justfile"
+                  || baseName == "flake.nix"
+                  || baseName == "flake.lock"
+                ))
+            );
         };
 
         corpus = pkgs.buildNpmPackage {
@@ -98,13 +100,13 @@
           version = "1.0.0";
           inherit src;
 
-          npmDepsHash = "sha256-JiNx28jEkeaD+5kPvNG8bOfVwzliNbOnZkJFFGDan9g=";
+          npmDepsHash = "sha256-q7+quD9rN0eTyPOLxjDvjQgFDnQtJanvSXzJEvMQfFk=";
           npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [
             makeWrapper
             nodejs
-	    git
+            git
             purescript
           ];
 
