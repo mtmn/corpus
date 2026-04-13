@@ -196,8 +196,9 @@ lbSyncOnce conn username isSyncing initialSyncEnabled = do
             run conn "BEGIN TRANSACTION" []
             Tuple added (Tuple minTs hitCount) <- processListens listens
             run conn "COMMIT" []
-            when (added > 0 || initialSyncEnabled) $
-              Log.info $ "ListenBrainz batch: added " <> show added <> ", " <> show hitCount <> " already present."
+            when (added > 0 || initialSyncEnabled)
+              $ Log.info
+              $ "ListenBrainz batch: added " <> show added <> ", " <> show hitCount <> " already present."
             let allExist = hitCount == length listens && length listens > 0
             if allExist || length listens == 0 || not initialSyncEnabled then do
               when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
@@ -265,8 +266,9 @@ lfSyncOnce conn apiKey lfmUser isSyncing initialSyncEnabled = do
     run conn "BEGIN TRANSACTION" []
     Tuple added hitCount <- processLastfmTracks tracks
     run conn "COMMIT" []
-    when (added > 0 || initialSyncEnabled) $
-      Log.info $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+    when (added > 0 || initialSyncEnabled)
+      $ Log.info
+      $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
     let
       validTracks = mapMaybe lastfmTrackToListen tracks
       allExist = hitCount == length validTracks && length validTracks > 0
@@ -1263,5 +1265,4 @@ main = do
     coverCacheEnabled = getEnvBool env "COVER_CACHE_ENABLED" true
     initialSyncEnabled = getEnvBool env "INITIAL_SYNC" false
 
-  when (username == "") $ Log.warn "LISTENBRAINZ_USER is not set — ListenBrainz syncing will be disabled"
   startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnabled initialSyncEnabled
