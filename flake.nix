@@ -51,7 +51,7 @@
 
           outputHashAlgo = "sha256";
           outputHashMode = "recursive";
-          outputHash = "sha256-zHJu96X0JNRndeGdRcTC0BGjtOI8AE4juJi6izIJJAE=";
+          outputHash = "sha256-aJPjClixXOdbAZrAyb63Asvt3EyN6ov0Vv+DawvOSag=";
 
           buildPhase = ''
             export HOME=$TMPDIR
@@ -98,7 +98,7 @@
           version = "1.0.0";
           inherit src;
 
-          npmDepsHash = "sha256-eDc4ckDWvMb3EaDf6GclXxglsd1ZYHhEkHggBG+vcaA=";
+          npmDepsHash = "sha256-JiNx28jEkeaD+5kPvNG8bOfVwzliNbOnZkJFFGDan9g=";
           npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [
