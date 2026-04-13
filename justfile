@@ -31,7 +31,7 @@ nix command:
     @if [ "{{ command }}" = "build" ]; then \
         nix build .; \
     elif [ "{{ command }}" = "run" ]; then \
-        ./result/bin/corpus-server; \
+        ./result/bin/scorpus-server; \
     else \
         echo "Unknown nix command: {{ command }}"; \
         exit 1; \
@@ -52,7 +52,7 @@ container command:
     elif [ "{{ command }}" = "push" ]; then \
         skopeo copy \
             --dest-precompute-digests \
-            docker-archive:result docker://ghcr.io/mtmn/corpus:latest; \
+            docker-archive:result docker://ghcr.io/mtmn/scorpus:latest; \
     else \
         echo "Unknown container command: {{ command }}"; \
         exit 1; \

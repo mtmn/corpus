@@ -24,7 +24,7 @@ main = do
   Process.setEnv "S3_BUCKET" "my-bucket"
 
   runSpecAndExitProcess [consoleReporter] do
-    describe "Corpus Main Utils" do
+    describe "Scorpus Main Utils" do
       it "should build ListenBrainz URLs correctly" do
         listenBrainzUrl "user1" `shouldEqual` "https://api.listenbrainz.org/1/user/user1/listens"
 
@@ -33,7 +33,7 @@ main = do
         sanitizeKey "T.est-123" `shouldEqual` "T.est-123"
         sanitizeKey "multiple   spaces" `shouldEqual` "multiple_spaces"
 
-    describe "Corpus Types" do
+    describe "Scorpus Types" do
       describe "MbidMapping Codecs" do
         it "should roundtrip MbidMapping" do
           let mbid = MbidMapping { releaseMbid: Just "release-123", caaReleaseMbid: Just "caa-456" }
@@ -107,7 +107,7 @@ main = do
             Left err ->
               fail $ "Decoding failed: " <> show err
 
-    describe "Corpus Database" do
+    describe "Scorpus Database" do
       it "should handle scrobble and metadata operations" do
         conn <- connect ":memory:"
         initDb conn
@@ -153,7 +153,7 @@ main = do
         listensEmpty <- getScrobbles conn 10 0 (Just { field: "genre", value: "Jazz" })
         length listensEmpty `shouldEqual` 0
 
-    describe "Corpus S3" do
+    describe "Scorpus S3" do
       it "should generate virtual-host style S3 URLs" do
         liftEffect $ Process.setEnv "AWS_S3_ADDRESSING_STYLE" "virtual"
         let url = getS3Url "covers/test.jpg"

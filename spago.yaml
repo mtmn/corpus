@@ -1,5 +1,5 @@
 package:
-  name: corpus
+  name: scorpus
   dependencies:
     - aff
     - affjax

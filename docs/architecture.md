@@ -1,6 +1,6 @@
-# Corpus Architecture
+# Scorpus Architecture
 
-Corpus is a personal music listening history dashboard and analytics service. It synchronizes scrobbles from ListenBrainz and provides a performant web interface for data exploration and statistics.
+Scorpus is a personal music listening history dashboard and analytics service. It synchronizes scrobbles from ListenBrainz and provides a performant web interface for data exploration and statistics.
 
 ## System Components
 
@@ -18,7 +18,7 @@ A Single Page Application (SPA) built with PureScript and the [Halogen](https://
 - **Responsive UI**: Designed for both desktop and mobile viewing with a "retro-modern" aesthetic.
 
 ### Database
-Corpus uses **DuckDB** for its primary data storage.
+Scorpus uses **DuckDB** for its primary data storage.
 - **Schema**:
     - `scrobbles`: Stores the core listening history (timestamp, track, artist, album, MBIDs).
     - `release_metadata`: Stores enriched metadata indexed by MusicBrainz Release ID (MBID).
@@ -62,7 +62,7 @@ When a cover is requested:
 
 ## Foreign Function Interface (FFI)
 
-Corpus relies on FFI to interact with the Node.js and browser ecosystems where native PureScript wrappers are unavailable or where direct JS access is required. Key FFI integrations include:
+Scorpus relies on FFI to interact with the Node.js and browser ecosystems where native PureScript wrappers are unavailable or where direct JS access is required. Key FFI integrations include:
 
 - **Database (`Db.js`)**: Provides a high-performance interface to the native `duckdb` library. It includes custom logic to handle BigInt conversions, ensuring database results are compatible with standard JSON serialization.
 - **Cloud Storage (`S3.js`)**: Leverages the official AWS SDK (`@aws-sdk/client-s3`) to manage cover art caching in S3-compatible storage.
@@ -80,7 +80,7 @@ graph TD
         CAA[Cover Art Archive]
     end
 
-    subgraph Corpus Server
+    subgraph Scorpus Server
         Sync[Sync Process]
         Enrich[Enrichment Task]
         Proxy[Cover Proxy]

@@ -40,7 +40,7 @@ RUN mkdir -p /app/data && chown -R node:node /app/data
 USER node
 
 ENV PORT=8321
-ENV DATABASE_FILE=/app/data/corpus.db
+ENV DATABASE_FILE=/app/data/scorpus.db
 ENV NODE_ENV=production
 
 CMD ["node", "--no-deprecation", "server.js"]
