@@ -57,9 +57,10 @@ logger :: Logger Effect LogMessage
 logger = Logger \{ level, message } -> do
   now <- nowDateTime
   let ts = formatTimestamp now
-  let sanitized = replaceAll (Pattern "\r\n") (Replacement " ") message
-                # replaceAll (Pattern "\n") (Replacement " ")
-                # replaceAll (Pattern "\r") (Replacement " ")
+  let
+    sanitized = replaceAll (Pattern "\r\n") (Replacement " ") message
+      # replaceAll (Pattern "\n") (Replacement " ")
+      # replaceAll (Pattern "\r") (Replacement " ")
   Console.log $ "[" <> ts <> "] [" <> show level <> "] " <> sanitized
 
 debug :: forall m. MonadEffect m => String -> m Unit
