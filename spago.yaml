@@ -32,6 +32,7 @@ package:
     - node-url
     - now
     - ordered-collections
+    - aff-retry
     - prelude
     - strings
     - tailrec

@@ -13,6 +13,7 @@ import Control.Logger (Logger(..), log)
 import Data.DateTime (DateTime)
 import Data.Formatter.DateTime (FormatterCommand(..), format)
 import Data.List (fromFoldable)
+import Data.String (replaceAll, Pattern(..), Replacement(..))
 import Effect (Effect)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console as Console
@@ -56,7 +57,11 @@ logger :: Logger Effect LogMessage
 logger = Logger \{ level, message } -> do
   now <- nowDateTime
   let ts = formatTimestamp now
-  Console.log $ "[" <> ts <> "] [" <> show level <> "] " <> message
+  let
+    sanitized = replaceAll (Pattern "\r\n") (Replacement " ") message
+      # replaceAll (Pattern "\n") (Replacement " ")
+      # replaceAll (Pattern "\r") (Replacement " ")
+  Console.log $ "[" <> ts <> "] [" <> show level <> "] " <> sanitized
 
 debug :: forall m. MonadEffect m => String -> m Unit
 debug msg = liftEffect $ log logger { level: DEBUG, message: msg }

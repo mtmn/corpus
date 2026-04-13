@@ -1,13 +1,14 @@
 # Scorpus Architecture
 
-Scorpus is a personal music listening history dashboard and analytics service. It synchronizes scrobbles from ListenBrainz and provides a performant web interface for data exploration and statistics.
+Scorpus is a personal music listening history dashboard and analytics service. It synchronizes scrobbles from ListenBrainz and Last.fm and provides a performant web interface for data exploration and statistics.
 
 ## System Components
 
 ### Web Server
 The server is built with PureScript running on Node.js. It handles several core responsibilities:
 - **HTTP API**: Serves the frontend, scrobble data (with filtering/pagination), and statistics.
-- **ListenBrainz Sync**: A background process that polls the ListenBrainz API every 60 seconds to fetch new scrobbles.
+- **ListenBrainz Sync**: A background process that polls the ListenBrainz API every 60 seconds to fetch new scrobbles. Enabled when `LISTENBRAINZ_USER` is set.
+- **Last.fm Sync**: A background process that polls the Last.fm API every 60 seconds to fetch new scrobbles. Enabled when `LASTFM_USER` and `LASTFM_API_KEY` are set. Both syncs write to the same `scrobbles` table; duplicate timestamps are silently ignored.
 - **Metadata Enrichment**: A background process that identifies scrobbles with missing metadata (genres, labels, release years) and fetches information from MusicBrainz, Last.fm, and Discogs.
 - **Cover Art Proxy**: A specialized endpoint that fetches, caches, and serves cover art, utilizing a multi-source fallback strategy (CAA → Last.fm → Discogs).
 
@@ -20,7 +21,7 @@ A Single Page Application (SPA) built with PureScript and the [Halogen](https://
 ### Database
 Scorpus uses **DuckDB** for its primary data storage.
 - **Schema**:
-    - `scrobbles`: Stores the core listening history (timestamp, track, artist, album, MBIDs).
+    - `scrobbles`: Stores the core listening history (timestamp, track, artist, album, MBIDs). The `listened_at` Unix timestamp is the primary key — scrobbles from ListenBrainz and Last.fm deduplicate naturally.
     - `release_metadata`: Stores enriched metadata indexed by MusicBrainz Release ID (MBID).
 - **Performance**: DuckDB's columnar storage allows for extremely fast analytical queries across large listening histories.
 
@@ -31,10 +32,20 @@ Uses an S3-compatible bucket to cache cover art images.
 ## Data Flow
 
 ### Scrobble Synchronization
-1. Server triggers sync process.
-2. Fetches latest 100 scrobbles from ListenBrainz.
-3. Performs a "gap-fill" by paginating backwards if the local database is significantly behind.
-4. Stores new scrobbles in the DuckDB `scrobbles` table.
+
+Both sync processes follow the same pattern: fetch the most recent page, insert any new scrobbles, and paginate backwards through history until an already-known timestamp is encountered.
+
+**ListenBrainz** (timestamp-based pagination):
+1. Fetch latest 100 scrobbles from the ListenBrainz API.
+2. Insert new scrobbles; stop if an existing timestamp is found.
+3. Paginate backwards using `max_ts` until fully caught up.
+
+**Last.fm** (page-based pagination):
+1. Fetch page 1 (most recent 200 scrobbles) from the Last.fm API.
+2. Insert new scrobbles; stop if an existing timestamp is found.
+3. Paginate through subsequent pages using `totalPages` from the API response until fully caught up.
+
+Both processes run every 60 seconds. On subsequent syncs they stop at the first known timestamp, making incremental updates efficient.
 
 ### Metadata Enrichment
 1. Background task identifies MBIDs in `scrobbles` that are not in `release_metadata`.
@@ -74,14 +85,15 @@ Scorpus relies on FFI to interact with the Node.js and browser ecosystems where 
 graph TD
     subgraph External APIs
         LB[ListenBrainz API]
-        MB[MusicBrainz API]
         LF[Last.fm API]
+        MB[MusicBrainz API]
         DC[Discogs API]
         CAA[Cover Art Archive]
     end
 
     subgraph Scorpus Server
-        Sync[Sync Process]
+        LBSync[ListenBrainz Sync]
+        LFSync[Last.fm Sync]
         Enrich[Enrichment Task]
         Proxy[Cover Proxy]
         API[Web API]
@@ -97,8 +109,10 @@ graph TD
     end
 
     %% Scrobble Sync Flow
-    LB -- "Fetch scrobbles" --> Sync
-    Sync -- "Store scrobbles" --> DB
+    LB -- "Fetch scrobbles" --> LBSync
+    LBSync -- "Store scrobbles" --> DB
+    LF -- "Fetch scrobbles" --> LFSync
+    LFSync -- "Store scrobbles" --> DB
 
     %% Enrichment Flow
     DB -- "Get MBIDs" --> Enrich

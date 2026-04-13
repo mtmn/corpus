@@ -17,6 +17,6 @@ result-*
 server.js
 client.js
 server.log
-scrobbler.db*
-scorpus.db*
+*.db.wal
+*.db
 .devenv
