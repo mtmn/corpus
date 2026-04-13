@@ -34,12 +34,12 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import JSURI (encodeURIComponent)
 import Foreign.Object as Object
 import Data.Argonaut (decodeJson, encodeJson, parseJson)
-import Data.Argonaut.Core (toObject, toArray, toString, stringify)
-import Data.Array ((!!), length, uncons)
+import Data.Argonaut.Core (Json, toObject, toArray, toString, stringify)
+import Data.Array ((!!), length, uncons, mapMaybe)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
 import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb)
-import Types (Listen(..), ListenBrainzResponse(..), Payload(..), TrackMetadata(..))
+import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Int (fromString, toNumber)
@@ -98,6 +98,71 @@ fetchListenBrainzDataBefore username maxTs = makeAff \callback -> do
     (unsafeCoerce req)
 
   pure nonCanceler
+
+fetchLastfmPage :: String -> String -> Int -> Aff { tracks :: Array Json, totalPages :: Int }
+fetchLastfmPage apiKey lfmUser page = do
+  let
+    url = "https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user="
+      <> (fromMaybe lfmUser $ encodeURIComponent lfmUser)
+      <> "&api_key="
+      <> apiKey
+      <> "&format=json&limit=200&page="
+      <> show page
+  result <- try $ fetch url { method: GET }
+  case result of
+    Left err -> do
+      Log.error $ "Last.fm fetch error: " <> Exception.message err
+      pure { tracks: [], totalPages: 0 }
+    Right fr | fr.status == 200 -> do
+      jsonResult <- try $ fromJson fr.json
+      case jsonResult of
+        Left err -> do
+          Log.error $ "Last.fm JSON parse error: " <> Exception.message err
+          pure { tracks: [], totalPages: 0 }
+        Right json -> do
+          let
+            parsed = do
+              obj <- toObject json
+              rt <- Object.lookup "recenttracks" obj >>= toObject
+              tracks <- Object.lookup "track" rt >>= toArray
+              attr <- Object.lookup "@attr" rt >>= toObject
+              totalPagesStr <- Object.lookup "totalPages" attr >>= toString
+              totalPages <- fromString totalPagesStr
+              pure { tracks, totalPages }
+          pure $ fromMaybe { tracks: [], totalPages: 0 } parsed
+    Right fr -> do
+      Log.warn $ "Last.fm API returned status " <> show fr.status
+      pure { tracks: [], totalPages: 0 }
+
+lastfmTrackToListen :: Json -> Maybe Listen
+lastfmTrackToListen json = do
+  obj <- toObject json
+  trackName <- Object.lookup "name" obj >>= toString
+  artistObj <- Object.lookup "artist" obj >>= toObject
+  artistName <- Object.lookup "#text" artistObj >>= toString
+  albumObj <- Object.lookup "album" obj >>= toObject
+  let releaseName = Object.lookup "#text" albumObj >>= toString
+  let
+    releaseMbid = do
+      s <- Object.lookup "mbid" albumObj >>= toString
+      if s == "" then Nothing else Just s
+  -- nowplaying tracks have no date field — naturally filtered out here
+  dateObj <- Object.lookup "date" obj >>= toObject
+  utsStr <- Object.lookup "uts" dateObj >>= toString
+  ts <- fromString utsStr
+  pure $ Listen
+    { listenedAt: Just ts
+    , trackMetadata: TrackMetadata
+        { trackName: Just trackName
+        , artistName: Just artistName
+        , releaseName: releaseName
+        , genre: Nothing
+        , mbidMapping: Just $ MbidMapping
+            { releaseMbid: releaseMbid
+            , caaReleaseMbid: releaseMbid
+            }
+        }
+    }
 
 syncData :: Connection -> String -> Ref Boolean -> Aff Unit
 syncData _ username _ | username == "" = pure unit
@@ -163,6 +228,48 @@ syncData conn username isSyncing = do
     Just { head: _, tail } -> do
       Log.warn "Skipping scrobble without timestamp"
       syncRecursive acc minTs tail
+
+syncLastfmData :: Connection -> String -> String -> Ref Boolean -> Aff Unit
+syncLastfmData conn apiKey lfmUser isSyncing = do
+  Log.info $ "Starting Last.fm sync for user: " <> lfmUser
+  forever do
+    liftEffect $ Ref.write true isSyncing
+    void $ performLastfmSync
+    liftEffect $ Ref.write false isSyncing
+    delay (Milliseconds 60000.0)
+  where
+  performLastfmSync = do
+    { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1
+    run conn "BEGIN TRANSACTION" []
+    Tuple added hitExisting <- processLastfmTracks tracks
+    run conn "COMMIT" []
+    if hitExisting || totalPages <= 1 then
+      when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
+    else do
+      total <- paginateLastfmUntilDone 2 totalPages added
+      Log.info $ "Last.fm sync complete. Added " <> show total <> " new scrobbles."
+
+  paginateLastfmUntilDone page totalPages acc
+    | page > totalPages = pure acc
+    | otherwise = do
+        { tracks } <- fetchLastfmPage apiKey lfmUser page
+        run conn "BEGIN TRANSACTION" []
+        Tuple added hitExisting <- processLastfmTracks tracks
+        run conn "COMMIT" []
+        if hitExisting || length tracks == 0 then pure (acc + added)
+        else paginateLastfmUntilDone (page + 1) totalPages (acc + added)
+
+  processLastfmTracks tracks = syncLastfmRecursive 0 (mapMaybe lastfmTrackToListen tracks)
+
+  syncLastfmRecursive acc listens = case uncons listens of
+    Nothing -> pure $ Tuple acc false
+    Just { head: l@(Listen { listenedAt: Just ts }), tail } -> do
+      exists <- checkExists conn ts
+      if exists then pure $ Tuple acc true
+      else do
+        upsertScrobble conn l
+        syncLastfmRecursive (acc + 1) tail
+    Just { head: _, tail } -> syncLastfmRecursive acc tail
 
 indexHtml :: String
 indexHtml =
@@ -1042,7 +1149,16 @@ startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnable
   initDb conn
   initReleaseMetadata conn
   isSyncing <- liftEffect $ Ref.new false
-  void $ forkAff $ syncData conn username isSyncing
+  when (username /= "") $ void $ forkAff $ syncData conn username isSyncing
+  env <- liftEffect getEnv
+  let
+    lfmUser = fromMaybe "" $ Object.lookup "LASTFM_USER" env
+    lfmApiKey = fromMaybe "" $ Object.lookup "LASTFM_API_KEY" env
+  when (lfmUser /= "") $
+    if lfmApiKey == "" then
+      Log.warn "LASTFM_USER is set but LASTFM_API_KEY is missing — Last.fm syncing disabled"
+    else
+      void $ forkAff $ syncLastfmData conn lfmApiKey lfmUser isSyncing
   void $ forkAff $ enrichMetadata conn isSyncing
   when backupEnabled $ void $ forkAff $ backupDb conn dbFile backupIntervalMs
 
