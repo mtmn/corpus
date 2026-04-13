@@ -38,11 +38,11 @@ import Data.Argonaut.Core (toObject, toArray, toString, stringify)
 import Data.Array ((!!), length, uncons)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
-import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping)
+import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb)
 import Types (Listen(..), ListenBrainzResponse(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
-import Data.Int (fromString)
+import Data.Int (fromString, toNumber)
 import Data.String (Pattern(..))
 import Data.String.Common (split) as String
 import Data.String.Regex (replace, parseFlags)
@@ -567,8 +567,8 @@ indexHtml =
 </html>"""
 
 -- Request handler
-handleRequest :: Connection -> Ref Boolean -> Request -> Response -> Effect Unit
-handleRequest db isSyncing req res = do
+handleRequest :: Connection -> Ref Boolean -> Boolean -> Request -> Response -> Effect Unit
+handleRequest db isSyncing coverCacheEnabled req res = do
   let method = IM.method req
   let rawUrl = IM.url req
   case URL.fromRelative rawUrl "http://localhost" of
@@ -581,7 +581,7 @@ handleRequest db isSyncing req res = do
         "/" -> serveIndex res
         "/healthz" -> serveHealthz db isSyncing res
         "/proxy" -> serveProxy db isSyncing url res
-        "/cover" -> serveCover isSyncing url res
+        "/cover" -> serveCover coverCacheEnabled isSyncing url res
         "/stats" -> serveStats db isSyncing res
         "/client.js" -> serveClientJs res
         "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
@@ -625,8 +625,8 @@ sanitizeKey str =
   in
     replace re2 "_" (replace re1 "_" str)
 
-serveCover :: Ref Boolean -> URL -> Response -> Effect Unit
-serveCover isSyncing url res = do
+serveCover :: Boolean -> Ref Boolean -> URL -> Response -> Effect Unit
+serveCover coverCacheEnabled isSyncing url res = do
   launchAff_ do
     yieldToSync isSyncing
     let mbid = fromMaybe "" (getQueryParam "mbid" url)
@@ -657,11 +657,13 @@ serveCover isSyncing url res = do
       tryLastfm artistStr releaseStr res
 
   where
-  checkS3 s3Key = do
-    result <- try $ existsInS3 s3Key
-    pure $ case result of
-      Right b -> b
-      Left _ -> false
+  checkS3 s3Key
+    | not coverCacheEnabled = pure false
+    | otherwise = do
+        result <- try $ existsInS3 s3Key
+        pure $ case result of
+          Right b -> b
+          Left _ -> false
 
   serveS3 s3Key response = liftEffect $ do
     setStatusCode 302 response
@@ -685,7 +687,7 @@ serveCover isSyncing url res = do
           end writer
 
         -- Cache to S3 in background
-        void $ forkAff $ do
+        when coverCacheEnabled $ void $ forkAff $ do
           uploadResult <- try $ uploadToS3 s3Key (unsafeCoerce buf) contentType
           case uploadResult of
             Right _ -> Log.info $ "Cached to S3: " <> s3Key
@@ -1034,18 +1036,19 @@ enrichMetadata conn isSyncing = forever do
             -- Genre found in MusicBrainz, just save as usual
             upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
 
-startServer :: Int -> String -> String -> Effect Unit
-startServer port dbFile username = launchAff_ do
+startServer :: Int -> String -> String -> Boolean -> Number -> Boolean -> Effect Unit
+startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnabled = launchAff_ do
   conn <- connect dbFile
   initDb conn
   initReleaseMetadata conn
   isSyncing <- liftEffect $ Ref.new false
   void $ forkAff $ syncData conn username isSyncing
   void $ forkAff $ enrichMetadata conn isSyncing
+  when backupEnabled $ void $ forkAff $ backupDb conn dbFile backupIntervalMs
 
   liftEffect $ do
     server <- createServer
-    server # on_ Server.requestH (handleRequest conn isSyncing)
+    server # on_ Server.requestH (handleRequest conn isSyncing coverCacheEnabled)
     let netServer = Server.toNetServer server
 
     netServer # on_ listeningH do
@@ -1062,5 +1065,9 @@ main = do
   let port = fromMaybe 8000 (Object.lookup "PORT" env >>= fromString)
   let dbFile = fromMaybe "scorpus.db" (Object.lookup "DATABASE_FILE" env)
   let username = fromMaybe "" (Object.lookup "LISTENBRAINZ_USER" env)
+  let backupEnabled = Object.lookup "BACKUP_ENABLED" env == Just "true"
+  let backupIntervalHours = fromMaybe 1 (Object.lookup "BACKUP_INTERVAL_HOURS" env >>= fromString)
+  let backupIntervalMs = toNumber backupIntervalHours * 3600000.0
+  let coverCacheEnabled = Object.lookup "COVER_CACHE_ENABLED" env /= Just "false"
   when (username == "") $ Log.warn "LISTENBRAINZ_USER is not set — syncing will be disabled"
-  startServer port dbFile username
+  startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnabled

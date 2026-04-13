@@ -14,9 +14,12 @@ import Test.Spec.Assertions (shouldEqual, fail)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..))
-import Db (connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats)
+import Db (connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dirName, performBackup)
 import Main (sanitizeKey, listenBrainzUrl)
 import S3 (getS3Url)
+import Node.FS.Aff as FSA
+import Node.FS.Perms (mkPerms, all, read) as Perms
+import Effect.Aff (try)
 
 main :: Effect Unit
 main = do
@@ -152,6 +155,31 @@ main = do
 
         listensEmpty <- getScrobbles conn 10 0 (Just { field: "genre", value: "Jazz" })
         length listensEmpty `shouldEqual` 0
+
+    describe "Scorpus Backup" do
+      describe "dirName" do
+        it "extracts directory from an absolute path" do
+          dirName "/app/data/scorpus.db" `shouldEqual` "/app/data/"
+        it "extracts directory from a nested path" do
+          dirName "/tmp/test/scorpus.db" `shouldEqual` "/tmp/test/"
+        it "returns ./ for a bare filename" do
+          dirName "scorpus.db" `shouldEqual` "./"
+
+      it "local backup creates a file in backup/ alongside the db" do
+        let testDir = "/tmp/scorpus-backup-test"
+        let dbPath = testDir <> "/scorpus.db"
+        let backupDir = testDir <> "/backup"
+        -- clean up any previous run
+        void $ try $ FSA.rm' testDir { force: true, recursive: true, maxRetries: 0, retryDelay: 100 }
+        FSA.mkdir' testDir { recursive: true, mode: Perms.mkPerms Perms.all Perms.all Perms.read }
+        conn <- connect dbPath
+        initDb conn
+        initReleaseMetadata conn
+        performBackup conn dbPath
+        files <- FSA.readdir backupDir
+        length files `shouldEqual` 1
+        -- cleanup
+        void $ try $ FSA.rm' testDir { force: true, recursive: true, maxRetries: 0, retryDelay: 100 }
 
     describe "Scorpus S3" do
       it "should generate virtual-host style S3 URLs" do

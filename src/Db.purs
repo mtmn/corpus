@@ -5,9 +5,13 @@ import Prelude
 import Data.Argonaut.Core (Json, toObject, toString)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
-import Effect.Aff (Aff, makeAff, nonCanceler, try)
-import Effect.Exception (Error, error)
+import Effect.Aff (Aff, delay, makeAff, nonCanceler, try)
+import Effect.Class (liftEffect)
+import Effect.Exception (Error, error, message)
+import Effect.Now (nowDateTime)
+import Data.Formatter.DateTime (formatDateTime)
 import Foreign (Foreign)
 import Unsafe.Coerce (unsafeCoerce)
 import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEntry(..))
@@ -15,12 +19,18 @@ import Data.Traversable (traverse)
 import Foreign.Object as Object
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Array (mapMaybe, uncons)
+import Data.String (lastIndexOf, Pattern(..), take)
+import Control.Monad.Rec.Class (forever)
+import Node.FS.Aff as FSA
+import Node.FS.Perms (mkPerms, all, read) as Perms
+import Log as Log
 
 foreign import data Connection :: Type
 
 foreign import connectImpl :: String -> (Nullable Error -> Nullable Connection -> Effect Unit) -> Effect Unit
 foreign import runImpl :: Connection -> String -> Array Foreign -> (Nullable Error -> Effect Unit) -> Effect Unit
 foreign import allImpl :: Connection -> String -> Array Foreign -> (Nullable Error -> Nullable (Array Json) -> Effect Unit) -> Effect Unit
+foreign import checkpointImpl :: Connection -> (Nullable Error -> Effect Unit) -> Effect Unit
 
 connect :: String -> Aff Connection
 connect path = makeAff \cb -> do
@@ -39,6 +49,41 @@ run conn sql params = makeAff \cb -> do
       Just e -> cb (Left e)
       Nothing -> cb (Right unit)
   pure nonCanceler
+
+checkpoint :: Connection -> Aff Unit
+checkpoint conn = makeAff \cb -> do
+  checkpointImpl conn \err ->
+    case toMaybe err of
+      Just e -> cb (Left e)
+      Nothing -> cb (Right unit)
+  pure nonCanceler
+
+dirName :: String -> String
+dirName path = case lastIndexOf (Pattern "/") path of
+  Just i -> take (i + 1) path
+  Nothing -> "./"
+
+performBackup :: Connection -> String -> Aff Unit
+performBackup conn dbFile = do
+  checkpoint conn
+  dt <- liftEffect nowDateTime
+  let
+    ts = case formatDateTime "YYYY-MM-DDTHH:mm:ss" dt of
+      Right s -> s
+      Left _ -> "unknown"
+  let dir = dirName dbFile <> "backup/"
+  void $ try $ FSA.mkdir' dir { recursive: true, mode: Perms.mkPerms Perms.all Perms.all Perms.read }
+  let dest = dir <> "scorpus-" <> ts <> ".db"
+  FSA.copyFile dbFile dest
+  Log.info $ "Backup saved locally: " <> dest
+
+backupDb :: Connection -> String -> Number -> Aff Unit
+backupDb conn dbFile intervalMs = forever do
+  delay (Milliseconds intervalMs)
+  result <- try $ performBackup conn dbFile
+  case result of
+    Left err -> Log.error $ "Backup failed: " <> message err
+    Right _ -> pure unit
 
 queryAll :: Connection -> String -> Array Foreign -> Aff (Array Json)
 queryAll conn sql params = makeAff \cb -> do

@@ -21,6 +21,12 @@ export const runImpl = (conn) => (sql) => (params) => (cb) => () => {
 	});
 };
 
+export const checkpointImpl = (conn) => (cb) => () => {
+	conn.run("CHECKPOINT", (err) => {
+		cb(err)();
+	});
+};
+
 export const allImpl = (conn) => (sql) => (params) => (cb) => () => {
 	conn.all(sql, ...params, (err, rows) => {
 		if (rows) {
