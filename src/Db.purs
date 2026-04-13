@@ -18,7 +18,7 @@ import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEn
 import Data.Traversable (traverse)
 import Foreign.Object as Object
 import Data.Nullable (Nullable, toMaybe, toNullable)
-import Data.Array (mapMaybe, uncons)
+import Data.Array (mapMaybe, uncons, (!!))
 import Data.String (lastIndexOf, Pattern(..), take)
 import Control.Monad.Rec.Class (forever)
 import Node.FS.Aff as FSA
@@ -106,6 +106,15 @@ checkExists conn ts = do
       [] -> Just false
       _ -> Just true
 
+getOldestTs :: Connection -> Aff (Maybe Int)
+getOldestTs conn = do
+  rows <- queryAll conn "SELECT MIN(listened_at) as min_ts FROM scrobbles" []
+  pure $ do
+    row <- rows !! 0
+    obj <- toObject row
+    ts <- Object.lookup "min_ts" obj >>= (unsafeCoerce >>> Just)
+    if ts == 0 then Nothing else Just ts
+
 upsertScrobble :: Connection -> Listen -> Aff Unit
 upsertScrobble conn (Listen { listenedAt, trackMetadata: TrackMetadata track }) = do
   case listenedAt of
@@ -150,8 +159,8 @@ getScrobbles conn limit offset (Just { field, value }) = do
 initReleaseMetadata :: Connection -> Aff Unit
 initReleaseMetadata conn = do
   _ <- run conn "CREATE TABLE IF NOT EXISTS release_metadata (release_mbid VARCHAR PRIMARY KEY, genre VARCHAR, label VARCHAR, release_year INTEGER, genre_checked_at INTEGER)" []
-  -- Migration for existing databases; SQLite errors if column already exists, so ignore the failure
-  _ <- try $ run conn "ALTER TABLE release_metadata ADD COLUMN genre_checked_at INTEGER" []
+  -- Migration for existing databases; DuckDB supports IF NOT EXISTS for adding columns
+  _ <- run conn "ALTER TABLE release_metadata ADD COLUMN IF NOT EXISTS genre_checked_at INTEGER" []
   pure unit
 
 ping :: Connection -> Aff Unit
