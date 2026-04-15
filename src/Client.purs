@@ -5,7 +5,9 @@ import Prelude
 import Affjax.Web as AX
 import Affjax.ResponseFormat as ResponseFormat
 import Data.Argonaut (decodeJson)
-import Data.Array (mapWithIndex, length, take)
+import Data.Array (mapWithIndex, length, take, filter)
+import Data.String (Pattern(..))
+import Data.String as Str
 import Data.Either (Either(..))
 import Data.Int (floor, fromString, toNumber)
 import Data.Foldable (maximum)
@@ -40,6 +42,10 @@ data Tab = ListensTab | StatsTab
 
 derive instance eqTab :: Eq Tab
 
+data Period = AllTime | LastDays Int | CustomRange String String
+
+derive instance eqPeriod :: Eq Period
+
 type ActiveFilter = { field :: String, value :: String }
 
 type State =
@@ -57,7 +63,10 @@ type State =
   , limit :: Int
   , activeTab :: Tab
   , activeFilter :: Maybe ActiveFilter
-  , statsPeriod :: Maybe Int
+  , statsPeriod :: Period
+  , customInput :: String
+  , showCustomInput :: Boolean
+  , customError :: Maybe String
   }
 
 data Action
@@ -69,7 +78,10 @@ data Action
   | NextPage
   | PrevPage
   | SwitchTab Tab
-  | SetStatsPeriod (Maybe Int)
+  | SetStatsPeriod Period
+  | OpenCustomInput
+  | UpdateCustomInput String
+  | ApplyCustomPeriod
   | FilterBy String String
   | ClearFilter
   | HoverCover Int
@@ -105,7 +117,10 @@ component =
     , limit: 25
     , activeTab: ListensTab
     , activeFilter: Nothing
-    , statsPeriod: Nothing
+    , statsPeriod: AllTime
+    , customInput: ""
+    , showCustomInput: false
+    , customError: Nothing
     }
 
   render state =
@@ -162,7 +177,7 @@ component =
               ]
           StatsTab ->
             HH.div_
-              [ renderPeriodSelector state.statsPeriod
+              [ renderPeriodSelector state.statsPeriod state.showCustomInput state.customInput state.customError
               , renderStatsView state.expandedSections state.loadedSections state.stats
               ]
       , HH.div
@@ -232,19 +247,65 @@ component =
         , HH.span [ HP.class_ (H.ClassName "stat-count") ] [ HH.text $ show count ]
         ]
 
-  renderPeriodSelector current =
-    HH.div
-      [ HP.class_ (H.ClassName "period-selector") ]
-      (map periodBtn [ Nothing, Just 7, Just 14, Just 30, Just 60, Just 90, Just 365 ])
+  renderPeriodSelector current showInput customVal mError =
+    HH.div_
+      [ HH.div
+          [ HP.class_ (H.ClassName "period-selector") ]
+          ( [ namedBtn AllTime "all time", customBtn ]
+              <> map daysBtn [ 7, 14, 30, 90, 180, 365 ]
+          )
+      , if showInput || isCustom then
+          HH.div_
+            [ HH.div
+                [ HP.class_ (H.ClassName "custom-range") ]
+                [ HH.input
+                    [ HP.type_ HP.InputText
+                    , HP.class_ (H.ClassName $ "custom-range-input" <> if mError /= Nothing then " error" else "")
+                    , HP.placeholder "2023-01-01 2026-01-01"
+                    , HP.value customVal
+                    , HE.onValueInput UpdateCustomInput
+                    ]
+                , HH.button
+                    [ HP.class_ (H.ClassName "period-btn")
+                    , HE.onClick \_ -> ApplyCustomPeriod
+                    ]
+                    [ HH.text "apply" ]
+                ]
+            , case mError of
+                Just err -> HH.div [ HP.class_ (H.ClassName "custom-range-error") ] [ HH.text err ]
+                Nothing -> HH.text ""
+            ]
+        else HH.text ""
+      ]
     where
-    periodBtn target =
+    isCustom = case current of
+      CustomRange _ _ -> true
+      _ -> false
+    namedBtn target label =
       HH.button
         [ HP.class_ (H.ClassName $ "period-btn" <> if current == target then " active" else "")
         , HE.onClick \_ -> SetStatsPeriod target
         ]
-        [ HH.text $ case target of
-            Nothing -> "all time"
-            Just n -> show n
+        [ HH.text label ]
+    customBtn =
+      HH.button
+        [ HP.class_ (H.ClassName $ "period-btn" <> if isCustom then " active" else "")
+        , HE.onClick \_ -> OpenCustomInput
+        ]
+        [ HH.text "custom" ]
+    daysBtn n =
+      HH.button
+        [ HP.class_ (H.ClassName $ "period-btn" <> if current == LastDays n then " active" else "")
+        , HE.onClick \_ -> SetStatsPeriod (LastDays n)
+        ]
+        [ HH.text $ case n of
+            7 -> "1w"
+            14 -> "2w"
+            30 -> "1m"
+            90 -> "3m"
+            180 -> "6m"
+            365 -> "1y"
+            _ -> show n <> "d"
         ]
 
   renderContent state
@@ -362,9 +423,32 @@ component =
             handleAction (ReceiveStats response)
         ListensTab -> pure unit
     SetStatsPeriod period -> do
-      H.modify_ _ { statsPeriod = period, stats = Nothing, expandedSections = Set.empty, loadedSections = Set.empty }
+      H.modify_ _ { statsPeriod = period, stats = Nothing, expandedSections = Set.empty, loadedSections = Set.empty, showCustomInput = false }
       response <- H.liftAff $ fetchStats period
       handleAction (ReceiveStats response)
+    OpenCustomInput -> do
+      state <- H.get
+      let
+        prefill = case state.statsPeriod of
+          CustomRange from to -> from <> " " <> to
+          _ -> state.customInput
+      H.modify_ _ { showCustomInput = true, customInput = prefill, customError = Nothing }
+    UpdateCustomInput str -> H.modify_ _ { customInput = str, customError = Nothing }
+    ApplyCustomPeriod -> do
+      state <- H.get
+      let parts = filter (_ /= "") (Str.split (Pattern " ") state.customInput)
+      case parts of
+        [ from, to ]
+          | Str.length from /= 10 || Str.length to /= 10 ->
+              H.modify_ _ { customError = Just "Dates must be in YYYY-MM-DD format" }
+          | from > to ->
+              H.modify_ _ { customError = Just "'from' must be before 'to'" }
+          | otherwise -> do
+              let period = CustomRange from to
+              H.modify_ _ { statsPeriod = period, stats = Nothing, expandedSections = Set.empty, loadedSections = Set.empty, showCustomInput = false, customError = Nothing }
+              response <- H.liftAff $ fetchStats period
+              handleAction (ReceiveStats response)
+        _ -> H.modify_ _ { customError = Just "Enter two dates separated by a space" }
     ImageError url -> do
       H.modify_ \state -> state { failedCovers = Set.insert url state.failedCovers }
     NextPage -> do
@@ -385,6 +469,7 @@ component =
       state <- H.get
       response <- H.liftAff $ fetchSectionData state.statsPeriod section
       handleAction (ReceiveSectionData section response)
+
     CollapseSection section ->
       H.modify_ \s -> s
         { expandedSections = Set.delete section s.expandedSections
@@ -429,13 +514,24 @@ component =
     "year" -> s { years = entries }
     _ -> s
 
-  fetchSectionData :: Maybe Int -> String -> Aff (Either String (Array StatsEntry))
-  fetchSectionData mDays section = do
-    let
-      periodParam = case mDays of
-        Nothing -> ""
-        Just n -> "&period=" <> show n
-    res <- AX.get ResponseFormat.json ("/stats?section=" <> section <> periodParam)
+  statsUrl :: Period -> Maybe String -> String
+  statsUrl period mSection =
+    "/stats" <> case query of
+      "" -> ""
+      q -> "?" <> q
+    where
+    periodPart = case period of
+      AllTime -> ""
+      LastDays n -> "period=" <> show n
+      CustomRange from to -> "from=" <> from <> "&to=" <> to
+    sectionPart = case mSection of
+      Nothing -> ""
+      Just sec -> (if periodPart /= "" then "&" else "") <> "section=" <> sec
+    query = periodPart <> sectionPart
+
+  fetchSectionData :: Period -> String -> Aff (Either String (Array StatsEntry))
+  fetchSectionData period section = do
+    res <- AX.get ResponseFormat.json (statsUrl period (Just section))
     case res of
       Left err -> pure $ Left $ "Network error: " <> AX.printError err
       Right response ->
@@ -449,13 +545,9 @@ component =
             "year" -> s.years
             _ -> []
 
-  fetchStats :: Maybe Int -> Aff (Either String Stats)
-  fetchStats mDays = do
-    let
-      periodParam = case mDays of
-        Nothing -> ""
-        Just n -> "?period=" <> show n
-    res <- AX.get ResponseFormat.json ("/stats" <> periodParam)
+  fetchStats :: Period -> Aff (Either String Stats)
+  fetchStats period = do
+    res <- AX.get ResponseFormat.json (statsUrl period Nothing)
     case res of
       Left err -> pure $ Left $ "Network error: " <> AX.printError err
       Right response ->

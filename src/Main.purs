@@ -751,6 +751,44 @@ indexHtml =
             color: #ffffff;
             border-color: #50447f;
         }
+
+        .custom-range {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            align-items: center;
+        }
+
+        .custom-range-input {
+            background: #521e40;
+            border: 1px solid #50447f;
+            color: #ffffff;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-family: inherit;
+            font-size: 12px;
+            width: 220px;
+        }
+
+        .custom-range-input::placeholder {
+            color: #9fbfe7;
+            opacity: 0.7;
+        }
+
+        .custom-range-input:focus {
+            outline: none;
+            border-color: #ffffff;
+        }
+
+        .custom-range-input.error {
+            border-color: #ff6b6b;
+        }
+
+        .custom-range-error {
+            color: #ff6b6b;
+            font-size: 12px;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -1053,7 +1091,10 @@ serveStats db isSyncing url res = do
     yieldToSync isSyncing
     let period = getQueryParam "period" url
     let section = getQueryParam "section" url
-    stats <- getStats db period section
+    let safeDate = map (replace (unsafeRegex "[^0-9\\-]" (parseFlags "g")) "")
+    let mFrom = safeDate (getQueryParam "from" url)
+    let mTo = safeDate (getQueryParam "to" url)
+    stats <- getStats db period mFrom mTo section
     let responseBody = stringify $ encodeJson stats
     liftEffect $ do
       setStatusCode 200 res
