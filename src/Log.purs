@@ -1,8 +1,5 @@
 module Log
-  ( LogLevel(..)
-  , LogMessage
-  , debug
-  , info
+  ( info
   , warn
   , error
   ) where
@@ -62,9 +59,6 @@ logger = Logger \{ level, message } -> do
       # replaceAll (Pattern "\n") (Replacement " ")
       # replaceAll (Pattern "\r") (Replacement " ")
   Console.log $ "[" <> ts <> "] [" <> show level <> "] " <> sanitized
-
-debug :: forall m. MonadEffect m => String -> m Unit
-debug msg = liftEffect $ log logger { level: DEBUG, message: msg }
 
 info :: forall m. MonadEffect m => String -> m Unit
 info msg = liftEffect $ log logger { level: INFO, message: msg }
