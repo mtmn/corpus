@@ -52,10 +52,12 @@ type State =
   , failedCovers :: Set String
   , hoveredCover :: Maybe Int
   , expandedSections :: Set String
+  , loadedSections :: Set String
   , offset :: Int
   , limit :: Int
   , activeTab :: Tab
   , activeFilter :: Maybe ActiveFilter
+  , statsPeriod :: Maybe Int
   }
 
 data Action
@@ -67,11 +69,15 @@ data Action
   | NextPage
   | PrevPage
   | SwitchTab Tab
+  | SetStatsPeriod (Maybe Int)
   | FilterBy String String
   | ClearFilter
   | HoverCover Int
   | UnhoverCover
-  | ToggleSection String
+  | ExpandSection String
+  | ShowAllSection String
+  | CollapseSection String
+  | ReceiveSectionData String (Either String (Array StatsEntry))
 
 component :: forall query input output m. MonadAff m => H.Component query input output m
 component =
@@ -94,10 +100,12 @@ component =
     , failedCovers: Set.empty
     , hoveredCover: Nothing
     , expandedSections: Set.empty
+    , loadedSections: Set.empty
     , offset: 0
     , limit: 25
     , activeTab: ListensTab
     , activeFilter: Nothing
+    , statsPeriod: Nothing
     }
 
   render state =
@@ -153,7 +161,10 @@ component =
                   ]
               ]
           StatsTab ->
-            renderStatsView state.expandedSections state.stats
+            HH.div_
+              [ renderPeriodSelector state.statsPeriod
+              , renderStatsView state.expandedSections state.loadedSections state.stats
+              ]
       , HH.div
           [ HP.id "footer"
           , HP.class_ (H.ClassName "small")
@@ -162,46 +173,56 @@ component =
           ]
       ]
 
-  renderStatsView _ Nothing =
+  renderStatsView _ _ Nothing =
     HH.div [ HP.class_ (H.ClassName "loading") ] [ HH.text "Loading stats..." ]
-  renderStatsView expandedSections (Just (Stats { genres, labels, years })) =
+  renderStatsView expandedSections loadedSections (Just (Stats { genres, labels, years, artists, tracks })) =
     HH.div_
-      [ renderStatSection expandedSections "genre" "genres" genres
-      , renderStatSection expandedSections "label" "labels" labels
-      , renderStatSection expandedSections "year" "years" years
+      [ renderStatSection expandedSections loadedSections (Just "artist") "top artists" artists
+      , renderStatSection expandedSections loadedSections Nothing "top tracks" tracks
+      , renderStatSection expandedSections loadedSections (Just "genre") "genres" genres
+      , renderStatSection expandedSections loadedSections (Just "label") "labels" labels
+      , renderStatSection expandedSections loadedSections (Just "year") "years" years
       ]
 
-  renderStatSection expandedSections field title entries =
+  renderStatSection expandedSections loadedSections mField title entries =
     let
+      sectionKey = fromMaybe title mField
       maxCount = fromMaybe 1 (maximum (map (\(StatsEntry e) -> e.count) entries))
-      expanded = Set.member field expandedSections
-      visible = if expanded then entries else take 10 entries
-      hasMore = length entries > 10
+      expanded = Set.member sectionKey expandedSections
+      loaded = Set.member sectionKey loadedSections
+      visible = if loaded then entries else if expanded then take 50 entries else take 10 entries
+      btn action label =
+        HH.button
+          [ HP.class_ (H.ClassName "show-all-btn"), HE.onClick \_ -> action ]
+          [ HH.text label ]
+      footer =
+        if loaded then
+          if length entries > 10 then btn (CollapseSection sectionKey) "show less" else HH.text ""
+        else if expanded then
+          -- we have up to 50; show "show all" only if there might be more
+          if length entries >= 50 then HH.span_ [ btn (ShowAllSection sectionKey) "show all", HH.text " · ", btn (CollapseSection sectionKey) "show less" ]
+          else btn (CollapseSection sectionKey) "show less"
+        else if length entries > 10 then btn (ExpandSection sectionKey) "show more"
+        else HH.text ""
     in
       HH.div [ HP.class_ (H.ClassName "stats-section") ]
         [ HH.h2_ [ HH.text title ]
         , if entries == [] then
             HH.div [ HP.class_ (H.ClassName "stats-empty") ] [ HH.text "no data yet — enrichment in progress" ]
           else
-            HH.ul_ (map (renderStatEntry maxCount field) visible)
-        , if hasMore then
-            HH.button
-              [ HP.class_ (H.ClassName "show-all-btn")
-              , HE.onClick \_ -> ToggleSection field
-              ]
-              [ HH.text $ if expanded then "show less" else "show all (" <> show (length entries) <> ")" ]
-          else
-            HH.text ""
+            HH.ul_ (map (renderStatEntry maxCount mField) visible)
+        , footer
         ]
 
-  renderStatEntry maxCount field (StatsEntry { name, count }) =
+  renderStatEntry maxCount mField (StatsEntry { name, count }) =
     let
       barPct = floor (toNumber count * 100.0 / toNumber maxCount)
+      clickProps = case mField of
+        Just field -> [ HE.onClick \_ -> FilterBy field name ]
+        Nothing -> []
     in
       HH.li
-        [ HP.class_ (H.ClassName "stat-row")
-        , HE.onClick \_ -> FilterBy field name
-        ]
+        ([ HP.class_ (H.ClassName $ "stat-row" <> if mField /= Nothing then " clickable" else "") ] <> clickProps)
         [ HH.div
             [ HP.class_ (H.ClassName "stat-bar")
             , HP.style $ "width: " <> show barPct <> "%"
@@ -209,6 +230,21 @@ component =
             []
         , HH.span [ HP.class_ (H.ClassName "stat-name") ] [ HH.text name ]
         , HH.span [ HP.class_ (H.ClassName "stat-count") ] [ HH.text $ show count ]
+        ]
+
+  renderPeriodSelector current =
+    HH.div
+      [ HP.class_ (H.ClassName "period-selector") ]
+      (map periodBtn [ Nothing, Just 7, Just 14, Just 30, Just 60, Just 90, Just 365 ])
+    where
+    periodBtn target =
+      HH.button
+        [ HP.class_ (H.ClassName $ "period-btn" <> if current == target then " active" else "")
+        , HE.onClick \_ -> SetStatsPeriod target
+        ]
+        [ HH.text $ case target of
+            Nothing -> "all time"
+            Just n -> show n
         ]
 
   renderContent state
@@ -322,9 +358,13 @@ component =
         StatsTab -> do
           state <- H.get
           when (state.stats == Nothing) do
-            response <- H.liftAff fetchStats
+            response <- H.liftAff $ fetchStats state.statsPeriod
             handleAction (ReceiveStats response)
         ListensTab -> pure unit
+    SetStatsPeriod period -> do
+      H.modify_ _ { statsPeriod = period, stats = Nothing, expandedSections = Set.empty, loadedSections = Set.empty }
+      response <- H.liftAff $ fetchStats period
+      handleAction (ReceiveStats response)
     ImageError url -> do
       H.modify_ \state -> state { failedCovers = Set.insert url state.failedCovers }
     NextPage -> do
@@ -339,8 +379,24 @@ component =
       H.modify_ _ { hoveredCover = Just url }
     UnhoverCover -> do
       H.modify_ _ { hoveredCover = Nothing }
-    ToggleSection field -> do
-      H.modify_ \s -> s { expandedSections = if Set.member field s.expandedSections then Set.delete field s.expandedSections else Set.insert field s.expandedSections }
+    ExpandSection section ->
+      H.modify_ \s -> s { expandedSections = Set.insert section s.expandedSections }
+    ShowAllSection section -> do
+      state <- H.get
+      response <- H.liftAff $ fetchSectionData state.statsPeriod section
+      handleAction (ReceiveSectionData section response)
+    CollapseSection section ->
+      H.modify_ \s -> s
+        { expandedSections = Set.delete section s.expandedSections
+        , loadedSections = Set.delete section s.loadedSections
+        }
+    ReceiveSectionData section result -> case result of
+      Left err -> H.modify_ _ { error = Just err }
+      Right entries -> H.modify_ \s -> s
+        { expandedSections = Set.insert section s.expandedSections
+        , loadedSections = Set.insert section s.loadedSections
+        , stats = map (updateStatSection section entries) s.stats
+        }
 
   updateUrl = do
     state <- H.get
@@ -365,9 +421,41 @@ component =
           Left err -> pure $ Left $ "JSON decode error: " <> show err
           Right (ListenBrainzResponse { payload: Payload { listens } }) -> pure $ Right listens
 
-  fetchStats :: Aff (Either String Stats)
-  fetchStats = do
-    res <- AX.get ResponseFormat.json "/stats"
+  updateStatSection section entries (Stats s) = Stats $ case section of
+    "artist" -> s { artists = entries }
+    "track" -> s { tracks = entries }
+    "genre" -> s { genres = entries }
+    "label" -> s { labels = entries }
+    "year" -> s { years = entries }
+    _ -> s
+
+  fetchSectionData :: Maybe Int -> String -> Aff (Either String (Array StatsEntry))
+  fetchSectionData mDays section = do
+    let
+      periodParam = case mDays of
+        Nothing -> ""
+        Just n -> "&period=" <> show n
+    res <- AX.get ResponseFormat.json ("/stats?section=" <> section <> periodParam)
+    case res of
+      Left err -> pure $ Left $ "Network error: " <> AX.printError err
+      Right response ->
+        case decodeJson response.body of
+          Left err -> pure $ Left $ "JSON decode error: " <> show err
+          Right (Stats s) -> pure $ Right $ case section of
+            "artist" -> s.artists
+            "track" -> s.tracks
+            "genre" -> s.genres
+            "label" -> s.labels
+            "year" -> s.years
+            _ -> []
+
+  fetchStats :: Maybe Int -> Aff (Either String Stats)
+  fetchStats mDays = do
+    let
+      periodParam = case mDays of
+        Nothing -> ""
+        Just n -> "?period=" <> show n
+    res <- AX.get ResponseFormat.json ("/stats" <> periodParam)
     case res of
       Left err -> pure $ Left $ "Network error: " <> AX.printError err
       Right response ->

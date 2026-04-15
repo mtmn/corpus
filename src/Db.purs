@@ -19,6 +19,7 @@ import Data.Traversable (traverse)
 import Foreign.Object as Object
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Array (mapMaybe, uncons, (!!))
+import Data.Int (fromString)
 import Data.String (lastIndexOf, Pattern(..), take)
 import Control.Monad.Rec.Class (forever)
 import Node.FS.Aff as FSA
@@ -141,20 +142,26 @@ getScrobbles conn limit offset Nothing = do
     [ unsafeCoerce limit, unsafeCoerce offset ]
   pure $ fromMaybe [] $ traverse rowToListen rows
 getScrobbles conn limit offset (Just { field, value }) = do
-  let
-    col = case field of
-      "label" -> "rm.label"
-      "year" -> "rm.release_year::VARCHAR"
-      _ -> "rm.genre"
-  rows <- queryAll conn
-    ( "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
-        <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
-        <> " WHERE "
-        <> col
-        <> " = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
-    )
-    [ unsafeCoerce value, unsafeCoerce limit, unsafeCoerce offset ]
+  rows <- queryAll conn query [ unsafeCoerce value, unsafeCoerce limit, unsafeCoerce offset ]
   pure $ fromMaybe [] $ traverse rowToListen rows
+  where
+  query = case field of
+    "artist" ->
+      "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
+        <> " FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+        <> " WHERE s.artist_name = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+    _ ->
+      let
+        col = case field of
+          "label" -> "rm.label"
+          "year" -> "rm.release_year::VARCHAR"
+          _ -> "rm.genre"
+      in
+        "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
+          <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+          <> " WHERE "
+          <> col
+          <> " = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
 
 initReleaseMetadata :: Connection -> Aff Unit
 initReleaseMetadata conn = do
@@ -207,15 +214,27 @@ touchGenreCheckedAt conn mbid = do
     "UPDATE release_metadata SET genre_checked_at = CAST(epoch(now()) AS INTEGER) WHERE release_mbid = ?"
     [ unsafeCoerce mbid ]
 
-getStats :: Connection -> Aff Stats
-getStats conn = do
-  genreRows <- queryAll conn "SELECT rm.genre as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.genre IS NOT NULL AND rm.genre != '' GROUP BY rm.genre ORDER BY count DESC LIMIT 50" []
-  labelRows <- queryAll conn "SELECT rm.label as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.label IS NOT NULL AND rm.label != '' GROUP BY rm.label ORDER BY count DESC LIMIT 50" []
-  yearRows <- queryAll conn "SELECT CAST(rm.release_year AS VARCHAR) as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.release_year IS NOT NULL GROUP BY rm.release_year ORDER BY rm.release_year DESC" []
+getStats :: Connection -> Maybe String -> Maybe String -> Aff Stats
+getStats conn mPeriod mSection = do
+  let
+    timeFilter = case mPeriod >>= fromString of
+      Just days -> " AND s.listened_at >= CAST(epoch(now()) AS INTEGER) - " <> show (days * 86400)
+      Nothing -> ""
+    fetch name q = case mSection of
+      Nothing -> queryAll conn (q <> " LIMIT 50") []
+      Just s | s == name -> queryAll conn q []
+      Just _ -> pure []
+  genreRows <- fetch "genre" ("SELECT rm.genre as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.genre IS NOT NULL AND rm.genre != ''" <> timeFilter <> " GROUP BY rm.genre ORDER BY count DESC")
+  labelRows <- fetch "label" ("SELECT rm.label as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.label IS NOT NULL AND rm.label != ''" <> timeFilter <> " GROUP BY rm.label ORDER BY count DESC")
+  yearRows <- fetch "year" ("SELECT CAST(rm.release_year AS VARCHAR) as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.release_year IS NOT NULL" <> timeFilter <> " GROUP BY rm.release_year ORDER BY rm.release_year DESC")
+  artistRows <- fetch "artist" ("SELECT s.artist_name as name, COUNT(*) as count FROM scrobbles s WHERE s.artist_name != ''" <> timeFilter <> " GROUP BY s.artist_name ORDER BY count DESC")
+  trackRows <- fetch "track" ("SELECT s.artist_name || ' — ' || s.track_name as name, COUNT(*) as count FROM scrobbles s WHERE s.track_name != '' AND s.artist_name != ''" <> timeFilter <> " GROUP BY s.artist_name, s.track_name ORDER BY count DESC")
   pure $ Stats
     { genres: mapMaybe rowToEntry genreRows
     , labels: mapMaybe rowToEntry labelRows
     , years: mapMaybe rowToEntry yearRows
+    , artists: mapMaybe rowToEntry artistRows
+    , tracks: mapMaybe rowToEntry trackRows
     }
 
 rowToEntry :: Json -> Maybe StatsEntry

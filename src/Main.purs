@@ -664,11 +664,11 @@ indexHtml =
             opacity: 1;
         }
 
-        .stat-row {
+        .stat-row.clickable {
             cursor: pointer;
         }
 
-        .stat-row:hover .stat-name {
+        .stat-row.clickable:hover .stat-name {
             color: #a0c0d0;
         }
 
@@ -723,6 +723,34 @@ indexHtml =
         .show-all-btn:hover {
             color: #ffffff;
         }
+
+        .period-selector {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+
+        .period-btn {
+            background: none;
+            border: 1px solid #50447f;
+            color: #9fbfe7;
+            padding: 4px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        .period-btn:hover {
+            color: #ffffff;
+            border-color: #ffffff;
+        }
+
+        .period-btn.active {
+            background: #50447f;
+            color: #ffffff;
+            border-color: #50447f;
+        }
     </style>
 </head>
 <body>
@@ -747,7 +775,7 @@ handleRequest db isSyncing coverCacheEnabled req res = do
         "/healthz" -> serveHealthz db isSyncing res
         "/proxy" -> serveProxy db isSyncing url res
         "/cover" -> serveCover coverCacheEnabled isSyncing url res
-        "/stats" -> serveStats db isSyncing res
+        "/stats" -> serveStats db isSyncing url res
         "/client.js" -> serveClientJs res
         "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
         _ -> do
@@ -1017,13 +1045,15 @@ serveNotFound res = do
   void $ writeString w UTF8 "Not Found"
   end w
 
-serveStats :: Connection -> Ref Boolean -> Response -> Effect Unit
-serveStats db isSyncing res = do
+serveStats :: Connection -> Ref Boolean -> URL -> Response -> Effect Unit
+serveStats db isSyncing url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   launchAff_ do
     yieldToSync isSyncing
-    stats <- getStats db
+    let period = getQueryParam "period" url
+    let section = getQueryParam "section" url
+    stats <- getStats db period section
     let responseBody = stringify $ encodeJson stats
     liftEffect $ do
       setStatusCode 200 res
