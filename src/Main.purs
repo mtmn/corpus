@@ -424,11 +424,6 @@ indexHtml =
             color: #ffffff;
         }
 
-        .status {
-            color: #b9d0aa;
-            font-weight: bold;
-        }
-
         .track-cover {
             width: 60px;
             height: 60px;
@@ -472,35 +467,6 @@ indexHtml =
         .small a:hover {
             color: #ffffff;
             text-decoration: underline;
-        }
-
-        .refresh-btn {
-            background: none;
-            border: none;
-            color: #a0c0d0;
-            cursor: pointer;
-            font-size: 12px;
-            text-decoration: underline;
-        }
-
-        .refresh-btn:hover {
-            color: #ffffff;
-        }
-
-        .playing-indicator {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            background: #b9d0aa;
-            border-radius: 50%;
-            margin-right: 8px;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
         }
 
         .pagination {
