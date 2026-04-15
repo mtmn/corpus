@@ -214,12 +214,18 @@ touchGenreCheckedAt conn mbid = do
     "UPDATE release_metadata SET genre_checked_at = CAST(epoch(now()) AS INTEGER) WHERE release_mbid = ?"
     [ unsafeCoerce mbid ]
 
-getStats :: Connection -> Maybe String -> Maybe String -> Aff Stats
-getStats conn mPeriod mSection = do
+getStats :: Connection -> Maybe String -> Maybe String -> Maybe String -> Maybe String -> Aff Stats
+getStats conn mPeriod mFrom mTo mSection = do
   let
-    timeFilter = case mPeriod >>= fromString of
-      Just days -> " AND s.listened_at >= CAST(epoch(now()) AS INTEGER) - " <> show (days * 86400)
-      Nothing -> ""
+    timeFilter = case mFrom, mTo of
+      Just from, Just to ->
+        " AND s.listened_at >= CAST(epoch(TIMESTAMP '" <> from <> "') AS INTEGER)"
+          <> " AND s.listened_at < CAST(epoch(TIMESTAMP '"
+          <> to
+          <> "') AS INTEGER) + 86400"
+      _, _ -> case mPeriod >>= fromString of
+        Just days -> " AND s.listened_at >= CAST(epoch(now()) AS INTEGER) - " <> show (days * 86400)
+        Nothing -> ""
     fetch name q = case mSection of
       Nothing -> queryAll conn (q <> " LIMIT 50") []
       Just s | s == name -> queryAll conn q []

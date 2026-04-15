@@ -147,7 +147,7 @@ main = do
           [Listen { trackMetadata: TrackMetadata m }] -> m.genre `shouldEqual` Just "Rock"
           _ -> fail "Expected 1 listen"
 
-        Stats s <- getStats conn Nothing Nothing
+        Stats s <- getStats conn Nothing Nothing Nothing Nothing
         length s.genres `shouldEqual` 1
         length s.labels `shouldEqual` 1
         length s.years `shouldEqual` 1
