@@ -153,6 +153,8 @@ newtype Stats = Stats
   { genres :: Array StatsEntry
   , labels :: Array StatsEntry
   , years :: Array StatsEntry
+  , artists :: Array StatsEntry
+  , tracks :: Array StatsEntry
   }
 
 derive instance eqStats :: Eq Stats
@@ -166,11 +168,15 @@ instance DecodeJson Stats where
     genres <- obj .: "genres"
     labels <- obj .: "labels"
     years <- obj .: "years"
-    pure $ Stats { genres, labels, years }
+    artists <- obj .: "artists"
+    tracks <- obj .: "tracks"
+    pure $ Stats { genres, labels, years, artists, tracks }
 
 instance EncodeJson Stats where
-  encodeJson (Stats { genres, labels, years }) =
+  encodeJson (Stats { genres, labels, years, artists, tracks }) =
     "genres" := encodeJson genres
       ~> "labels" := encodeJson labels
       ~> "years" := encodeJson years
+      ~> "artists" := encodeJson artists
+      ~> "tracks" := encodeJson tracks
       ~> jsonEmptyObject

@@ -79,6 +79,8 @@ main = do
                 { genres: [StatsEntry { name: "Rock", count: 10 }]
                 , labels: [StatsEntry { name: "Label", count: 5 }]
                 , years: [StatsEntry { name: "2023", count: 15 }]
+                , artists: [StatsEntry { name: "Artist", count: 7 }]
+                , tracks: [StatsEntry { name: "Artist — Song", count: 3 }]
                 }
           decodeJson (encodeJson stats) `shouldEqual` Right stats
 
@@ -145,10 +147,12 @@ main = do
           [Listen { trackMetadata: TrackMetadata m }] -> m.genre `shouldEqual` Just "Rock"
           _ -> fail "Expected 1 listen"
 
-        Stats s <- getStats conn
+        Stats s <- getStats conn Nothing Nothing
         length s.genres `shouldEqual` 1
         length s.labels `shouldEqual` 1
         length s.years `shouldEqual` 1
+        length s.artists `shouldEqual` 1
+        length s.tracks `shouldEqual` 1
 
         -- Test Filtering (as mentioned in architecture.md)
         listensFiltered <- getScrobbles conn 10 0 (Just { field: "genre", value: "Rock" })
