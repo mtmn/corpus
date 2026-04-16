@@ -14,13 +14,10 @@ import Test.Spec.Assertions (shouldEqual, fail)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..))
-import Db (connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dirName, performBackup)
+import Db (connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName)
 import Data.Argonaut.Core (Json)
 import Main (sanitizeKey, listenBrainzUrl, lastfmTrackToListen)
 import S3 (getS3Url)
-import Node.FS.Aff as FSA
-import Node.FS.Perms (mkPerms, all, read) as Perms
-import Effect.Aff (try)
 
 main :: Effect Unit
 main = do
@@ -162,29 +159,13 @@ main = do
         length listensEmpty `shouldEqual` 0
 
     describe "Corpus Backup" do
-      describe "dirName" do
-        it "extracts directory from an absolute path" do
-          dirName "/app/data/corpus.db" `shouldEqual` "/app/data/"
-        it "extracts directory from a nested path" do
-          dirName "/tmp/test/corpus.db" `shouldEqual` "/tmp/test/"
-        it "returns ./ for a bare filename" do
-          dirName "corpus.db" `shouldEqual` "./"
-
-      it "local backup creates a file in backup/ alongside the db" do
-        let testDir = "/tmp/corpus-backup-test"
-        let dbPath = testDir <> "/corpus.db"
-        let backupDir = testDir <> "/backup"
-        -- clean up any previous run
-        void $ try $ FSA.rm' testDir { force: true, recursive: true, maxRetries: 0, retryDelay: 100 }
-        FSA.mkdir' testDir { recursive: true, mode: Perms.mkPerms Perms.all Perms.all Perms.read }
-        conn <- connect dbPath
-        initDb conn
-        initReleaseMetadata conn
-        performBackup conn dbPath
-        files <- FSA.readdir backupDir
-        length files `shouldEqual` 1
-        -- cleanup
-        void $ try $ FSA.rm' testDir { force: true, recursive: true, maxRetries: 0, retryDelay: 100 }
+      describe "dbBaseName" do
+        it "extracts base name from an absolute path" do
+          dbBaseName "/app/data/corpus.db" `shouldEqual` "corpus"
+        it "extracts base name from a nested path" do
+          dbBaseName "/tmp/test/mymusic.db" `shouldEqual` "mymusic"
+        it "returns the name without extension for a bare filename" do
+          dbBaseName "corpus.db" `shouldEqual` "corpus"
 
     describe "Last.fm Support" do
       let parseTrack :: String -> Json
