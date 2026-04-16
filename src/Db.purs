@@ -18,12 +18,12 @@ import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEn
 import Data.Traversable (traverse)
 import Foreign.Object as Object
 import Data.Nullable (Nullable, toMaybe, toNullable)
-import Data.Array (mapMaybe, uncons, (!!))
+import Data.Array (mapMaybe, uncons, (!!), last)
 import Data.Int (fromString)
-import Data.String (lastIndexOf, Pattern(..), take)
+import Data.String (Pattern(..), split, stripSuffix)
 import Control.Monad.Rec.Class (forever)
 import Node.FS.Aff as FSA
-import Node.FS.Perms (mkPerms, all, read) as Perms
+import S3 as S3
 import Log as Log
 
 foreign import data Connection :: Type
@@ -59,10 +59,13 @@ checkpoint conn = makeAff \cb -> do
       Nothing -> cb (Right unit)
   pure nonCanceler
 
-dirName :: String -> String
-dirName path = case lastIndexOf (Pattern "/") path of
-  Just i -> take (i + 1) path
-  Nothing -> "./"
+dbBaseName :: String -> String
+dbBaseName path =
+  let
+    parts = split (Pattern "/") path
+    name = fromMaybe path (last parts)
+  in
+    fromMaybe name (stripSuffix (Pattern ".db") name)
 
 performBackup :: Connection -> String -> Aff Unit
 performBackup conn dbFile = do
@@ -72,11 +75,10 @@ performBackup conn dbFile = do
     ts = case formatDateTime "YYYY-MM-DDTHH:mm:ss" dt of
       Right s -> s
       Left _ -> "unknown"
-  let dir = dirName dbFile <> "backup/"
-  void $ try $ FSA.mkdir' dir { recursive: true, mode: Perms.mkPerms Perms.all Perms.all Perms.read }
-  let dest = dir <> "corpus-" <> ts <> ".db"
-  FSA.copyFile dbFile dest
-  Log.info $ "Backup saved locally: " <> dest
+  let key = "backups/" <> dbBaseName dbFile <> "-" <> ts <> ".db"
+  buf <- FSA.readFile dbFile
+  S3.uploadToS3 key buf "application/octet-stream"
+  Log.info $ "Backup uploaded to S3: " <> key
 
 backupDb :: Connection -> String -> Number -> Aff Unit
 backupDb conn dbFile intervalMs = forever do
