@@ -140,6 +140,7 @@
             git
             purescript
             elmPackages.elm
+            dhall-json
           ];
 
           buildPhase = ''
@@ -165,12 +166,13 @@
             cp -r ${elmDeps}/packages $HOME/.elm/0.19.1/
             chmod -R u+w $HOME/.elm
 
+            dhall-to-json --file users.dhall > users.json
             npm run build
           '';
 
           installPhase = ''
             mkdir -p $out/lib/corpus
-            cp -r server.js client.js package.json node_modules assets $out/lib/corpus/
+            cp -r server.js client.js users.json package.json node_modules assets $out/lib/corpus/
             if [ -f .env ]; then
               cp .env $out/lib/corpus/
             else
@@ -219,6 +221,7 @@
             awscli2
             duckdb
             esbuild
+            dhall-json
           ];
         };
       }

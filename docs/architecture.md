@@ -1,14 +1,14 @@
 # Corpus Architecture
 
-Corpus is a personal music listening history dashboard and analytics service. It synchronizes scrobbles from ListenBrainz and Last.fm and provides a performant web interface for data exploration and statistics.
+Corpus is a self-hosted music listening history dashboard and analytics service. It supports multiple users, synchronizing scrobbles from ListenBrainz and Last.fm and providing a performant web interface for data exploration and statistics.
 
 ## System Components
 
 ### Web Server
 The server is built with PureScript running on Node.js. It handles several core responsibilities:
 - **HTTP API**: Serves the frontend, scrobble data (with filtering/pagination), and statistics.
-- **ListenBrainz Sync**: A background process that polls the ListenBrainz API every 60 seconds to fetch new scrobbles. Enabled when `LISTENBRAINZ_USER` is set.
-- **Last.fm Sync**: A background process that polls the Last.fm API every 60 seconds to fetch new scrobbles. Enabled when `LASTFM_USER` and `LASTFM_API_KEY` are set. Both syncs write to the same `scrobbles` table; duplicate timestamps are silently ignored.
+- **ListenBrainz Sync**: A background process that polls the ListenBrainz API every 60 seconds to fetch new scrobbles.
+- **Last.fm Sync**: A background process that polls the Last.fm API every 60 seconds to fetch new scrobbles. Both syncs write to the same `scrobbles` table; duplicate timestamps are silently ignored.
 - **Metadata Enrichment**: A background process that identifies scrobbles with missing metadata (genres, labels, release years) and fetches information from MusicBrainz, Last.fm, and Discogs.
 - **Cover Art Proxy**: A specialized endpoint that fetches, caches, and serves cover art, utilizing a multi-source fallback strategy (CAA → Last.fm → Discogs).
 
@@ -19,7 +19,7 @@ A Single Page Application (SPA) built with [Elm](https://elm-lang.org).
 - **Responsive UI**: Designed for both desktop and mobile viewing with a "retro-modern" aesthetic.
 
 ### Database
-Corpus uses **DuckDB** for its primary data storage.
+Corpus uses **DuckDB** for its primary data storage. Each user has their own database file.
 - **Schema**:
     - `scrobbles`: Stores the core listening history (timestamp, track, artist, album, MBIDs). The `listened_at` Unix timestamp is the primary key — scrobbles from ListenBrainz and Last.fm deduplicate naturally.
     - `release_metadata`: Stores enriched metadata indexed by MusicBrainz Release ID (MBID).
@@ -28,6 +28,54 @@ Corpus uses **DuckDB** for its primary data storage.
 ### Storage
 Uses an S3-compatible bucket to cache cover art images.
 - **Caching Strategy**: Images are fetched once from external APIs and stored in S3 to reduce latency and avoid rate-limiting on external services.
+
+## Multi-User Support
+
+Corpus runs as a single server process serving multiple users. User configuration is defined in `users.dhall`, compiled to `users.json` at build time.
+
+### Routing
+- `/` and `/~<slug>` — serve the Elm SPA for the root user and named users respectively
+- `/proxy?user=<slug>`, `/stats?user=<slug>`, `/cover?user=<slug>` — shared API endpoints, user selected via query parameter
+
+### Configuration
+User configuration is split into two layers:
+
+1. **`users.dhall`** (build-time, non-sensitive): defines user slugs, source usernames, database filenames, and feature flags. Compiled to `users.json` at build time via `dhall-to-json`. The server reads this file at startup from the path in `CORPUS_CONFIG_FILE` (defaults to `users.json`).
+
+2. **Environment variables** (runtime, sensitive): shared API keys and S3 credentials are read from the environment at startup and applied to all users.
+
+Each user gets their own `UserContext` with an independent DuckDB connection, sync loop, and `isSyncing` flag. A shared `isSyncing` gate prevents reads during active syncs.
+
+## Configuration Reference
+
+### Environment Variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CORPUS_CONFIG_FILE` | `users.json` | Path to the compiled users config |
+| `DATABASE_PATH` | _(cwd)_ | Root directory for all user database files |
+| `LASTFM_API_KEY` | — | Last.fm API key (required if any user has `lastfmUser`) |
+| `DISCOGS_TOKEN` | — | Discogs token for cover/genre fallback |
+| `S3_BUCKET` | — | S3 bucket for cover art cache |
+| `S3_REGION` | `us-east-1` | S3 region |
+| `AWS_ACCESS_KEY_ID` | — | S3 credentials |
+| `AWS_SECRET_ACCESS_KEY` | — | S3 credentials |
+| `AWS_ENDPOINT_URL` | — | S3 endpoint (for S3-compatible storage) |
+| `AWS_S3_ADDRESSING_STYLE` | — | `virtual` or `path` |
+| `PORT` | `8000` | HTTP listen port |
+
+### users.dhall Fields
+
+| Field | Type | Purpose |
+|---|---|---|
+| `slug` | `Text` | URL slug (`""` for root user, `"filip"` for `/~filip`) |
+| `listenbrainzUser` | `Optional Text` | ListenBrainz username |
+| `lastfmUser` | `Optional Text` | Last.fm username |
+| `databaseFile` | `Text` | DuckDB filename (relative to `DATABASE_PATH`) |
+| `coverCacheEnabled` | `Bool` | Enable S3 cover art caching |
+| `backupEnabled` | `Bool` | Enable periodic S3 database backups |
+| `backupIntervalHours` | `Natural` | Backup frequency |
+| `initialSync` | `Bool` | Paginate full history on first startup |
 
 ## Data Flow
 
@@ -45,7 +93,7 @@ Both sync processes follow the same pattern: fetch the most recent page, insert 
 2. Insert new scrobbles; stop if an existing timestamp is found.
 3. Paginate through subsequent pages using `totalPages` from the API response until fully caught up.
 
-Both processes run every 60 seconds. On subsequent syncs they stop at the first known timestamp, making incremental updates efficient.
+Both processes run every 60 seconds per user. On subsequent syncs they stop at the first known timestamp, making incremental updates efficient.
 
 ### Metadata Enrichment
 1. Background task identifies MBIDs in `scrobbles` that are not in `release_metadata`.
@@ -66,17 +114,19 @@ When a cover is requested:
 
 - **Language**: [PureScript](https://purescript.org) (server), [Elm](https://elm-lang.org) (frontend)
 - **Runtime**: [Node.js](https://nodejs.org)
-- **Database**: [DuckDB](https://duckdb.org)
+- **Database**: [DuckDB](https://duckdb.org) (one file per user)
+- **Config**: [Dhall](https://dhall-lang.org) → JSON (compiled at build time)
 - **Bundling**: [spago](https://github.com/purescript/spago) + [esbuild](https://esbuild.github.io/) (server), [elm make](https://guide.elm-lang.org/install/elm.html) (frontend)
 - **Environment**: [Nix](https://nixos.org) for reproducible development shells and container builds
 
 ## Foreign Function Interface (FFI)
 
-Corpus relies on FFI to interact with the Node.js and browser ecosystems where native PureScript wrappers are unavailable or where direct JS access is required. Key FFI integrations include:
+Corpus relies on FFI to interact with the Node.js ecosystem where native PureScript wrappers are unavailable. Key FFI integrations:
 
-- **Database (`Db.js`)**: Provides a high-performance interface to the native `duckdb` library. It includes custom logic to handle BigInt conversions, ensuring database results are compatible with standard JSON serialization.
-- **Cloud Storage (`S3.js`)**: Leverages the official AWS SDK (`@aws-sdk/client-s3`) to manage cover art caching in S3-compatible storage.
-- **System Utilities (`Main.js`)**: Bridges PureScript with essential Node.js functionality, including environment variable management (`dotenv`) and raw buffer operations.
+- **Database (`Db.js`)**: Interface to the native `duckdb` library. Includes BigInt → Number conversion for JSON compatibility.
+- **Cloud Storage (`S3.js`)**: AWS SDK (`@aws-sdk/client-s3`) for cover art caching. Takes explicit config structs rather than reading `process.env`.
+- **System Utilities (`Main.js`)**: Bridges PureScript with Node.js — `dotenv` loading and request helpers.
+- **Config (`Config.js`)**: Reads and parses `users.json` from the path given by `CORPUS_CONFIG_FILE`.
 
 ## System Flow
 
@@ -91,20 +141,20 @@ graph TD
     end
 
     subgraph Corpus Server
-        LBSync[ListenBrainz Sync]
-        LFSync[Last.fm Sync]
-        Enrich[Enrichment Task]
+        LBSync[ListenBrainz Sync\nper user]
+        LFSync[Last.fm Sync\nper user]
+        Enrich[Enrichment Task\nper user]
         Proxy[Cover Proxy]
         API[Web API]
     end
 
     subgraph Storage
-        DB[(DuckDB)]
+        DB[(DuckDB\nper user)]
         S3[[S3 Bucket]]
     end
 
     subgraph Frontend
-        UI[Elm SPA]
+        UI[Elm SPA\n?user=slug]
     end
 
     %% Scrobble Sync Flow

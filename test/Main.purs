@@ -7,8 +7,6 @@ import Data.Array (length)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Effect.Class (liftEffect)
-import Node.Process as Process
 import Test.Spec (describe, it)
 import Test.Spec.Assertions (shouldEqual, fail)
 import Test.Spec.Reporter.Console (consoleReporter)
@@ -20,11 +18,7 @@ import Main (sanitizeKey, listenBrainzUrl, lastfmTrackToListen)
 import S3 (getS3Url)
 
 main :: Effect Unit
-main = do
-  Process.setEnv "AWS_ENDPOINT_URL" "https://s3.example.com"
-  Process.setEnv "S3_BUCKET" "my-bucket"
-
-  runSpecAndExitProcess [consoleReporter] do
+main = runSpecAndExitProcess [consoleReporter] do
     describe "Corpus Main Utils" do
       it "should build ListenBrainz URLs correctly" do
         listenBrainzUrl "user1" `shouldEqual` "https://api.listenbrainz.org/1/user/user1/listens"
@@ -275,11 +269,25 @@ main = do
 
     describe "Corpus S3" do
       it "should generate virtual-host style S3 URLs" do
-        liftEffect $ Process.setEnv "AWS_S3_ADDRESSING_STYLE" "virtual"
-        let url = getS3Url "covers/test.jpg"
-        url `shouldEqual` "https://my-bucket.s3.example.com/covers/test.jpg"
+        let
+          cfg =
+            { bucket: Just "my-bucket"
+            , region: "us-east-1"
+            , accessKeyId: Nothing
+            , secretAccessKey: Nothing
+            , endpointUrl: Just "https://s3.example.com"
+            , addressingStyle: Just "virtual"
+            }
+        getS3Url cfg "covers/test.jpg" `shouldEqual` "https://my-bucket.s3.example.com/covers/test.jpg"
 
       it "should generate path-style S3 URLs" do
-        liftEffect $ Process.setEnv "AWS_S3_ADDRESSING_STYLE" "path"
-        let url = getS3Url "covers/test.jpg"
-        url `shouldEqual` "https://s3.example.com/my-bucket/covers/test.jpg"
+        let
+          cfg =
+            { bucket: Just "my-bucket"
+            , region: "us-east-1"
+            , accessKeyId: Nothing
+            , secretAccessKey: Nothing
+            , endpointUrl: Just "https://s3.example.com"
+            , addressingStyle: Just "path"
+            }
+        getS3Url cfg "covers/test.jpg" `shouldEqual` "https://s3.example.com/my-bucket/covers/test.jpg"
