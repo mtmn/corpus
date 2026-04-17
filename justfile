@@ -11,6 +11,8 @@ build:
     dhall-to-json --file users.dhall > users.json
     npm run build
 
+dev: build run
+
 # Run the project locally
 run:
     npx spago run

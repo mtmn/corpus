@@ -1,5 +1,4 @@
 {
-	"port": 8000,
 	"users": [
 		{
 			"config": {
@@ -11,28 +10,6 @@
 				"listenbrainzUser": "mtmn"
 			},
 			"slug": ""
-		},
-		{
-			"config": {
-				"backupEnabled": true,
-				"backupIntervalHours": 1,
-				"coverCacheEnabled": true,
-				"databaseFile": "corpus-lastfm-mtmnn.db",
-				"initialSync": false,
-				"lastfmUser": "mtmnn"
-			},
-			"slug": "lastfm"
-		},
-		{
-			"config": {
-				"backupEnabled": false,
-				"backupIntervalHours": 1,
-				"coverCacheEnabled": true,
-				"databaseFile": "corpus-lb-otheruser.db",
-				"initialSync": true,
-				"lastfmUser": "otheruser"
-			},
-			"slug": "other_listenbrainz"
 		}
 	]
 }

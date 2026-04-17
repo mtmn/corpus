@@ -27,20 +27,5 @@ in  { users =
             with databaseFile = "corpus-mtmn.db"
             with backupEnabled = True
         }
-      , { slug = "lastfm"
-        , config =
-            defaults
-            with lastfmUser = Some "mtmnn"
-            with databaseFile = "corpus-lastfm-mtmnn.db"
-            with backupEnabled = True
-        }
-      , { slug = "other_listenbrainz"
-        , config =
-            defaults
-            with lastfmUser = Some "otheruser"
-            with databaseFile = "corpus-lb-otheruser.db"
-            with backupEnabled = False
-            with initialSync = True
-        }
       ]
     }
