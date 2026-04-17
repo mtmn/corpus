@@ -13,7 +13,7 @@ import Effect (Effect)
 import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
-import Node.Process (lookupEnv)
+import Node.Process (cwd, lookupEnv)
 
 type UserConfig =
   { listenbrainzUser :: Maybe String
@@ -88,9 +88,10 @@ loadConfig path = do
   awsEndpointUrl <- liftEffect $ lookupEnv "AWS_ENDPOINT_URL"
   awsS3AddressingStyle <- liftEffect $ lookupEnv "AWS_S3_ADDRESSING_STYLE"
   databasePath <- liftEffect $ lookupEnv "DATABASE_PATH"
+  defaultPath <- liftEffect cwd
   let
     resolvePath file = case databasePath of
-      Nothing -> file
+      Nothing -> defaultPath <> "/" <> file
       Just dir -> dir <> "/" <> file
     fillCreds cfg = cfg
       { lastfmApiKey = lastfmApiKey
