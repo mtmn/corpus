@@ -623,7 +623,13 @@ view model =
                                 ""
                            )
                     )
-                , href (if model.userSlug == "" then "/" else "/~" ++ model.userSlug)
+                , href
+                    (if model.userSlug == "" then
+                        "/"
+
+                     else
+                        "/~" ++ model.userSlug
+                    )
                 ]
                 [ text "listens" ]
             , button
@@ -680,8 +686,6 @@ view model =
                     [ renderPeriodSelector model.statsPeriod model.showCustomInput model.customInput model.customError
                     , renderStatsView model.expandedSections model.loadedSections model.stats
                     ]
-        , div [ Attr.id "footer", class "small" ]
-            [ span [] [ text (lastCheckText model.currentTime model.lastCheck) ] ]
         ]
 
 
@@ -1041,7 +1045,8 @@ timeAgo mNow mTimestamp =
                     mins =
                         diff // 60
                 in
-                String.fromInt mins ++ " minute"
+                String.fromInt mins
+                    ++ " minute"
                     ++ (if mins > 1 then
                             "s"
 
@@ -1055,7 +1060,8 @@ timeAgo mNow mTimestamp =
                     hours =
                         diff // 3600
                 in
-                String.fromInt hours ++ " hour"
+                String.fromInt hours
+                    ++ " hour"
                     ++ (if hours > 1 then
                             "s"
 
@@ -1069,7 +1075,8 @@ timeAgo mNow mTimestamp =
                     days =
                         diff // 86400
                 in
-                String.fromInt days ++ " day"
+                String.fromInt days
+                    ++ " day"
                     ++ (if days > 1 then
                             "s"
 
@@ -1080,21 +1087,3 @@ timeAgo mNow mTimestamp =
 
         _ ->
             "unknown time"
-
-
-lastCheckText : Maybe Time.Posix -> Maybe Time.Posix -> String
-lastCheckText mCurrent mLastCheck =
-    case ( mCurrent, mLastCheck ) of
-        ( Just current, Just lastCheck ) ->
-            let
-                diff =
-                    (Time.posixToMillis current - Time.posixToMillis lastCheck) // 1000
-            in
-            if diff < 5 then
-                "just updated"
-
-            else
-                "last checked " ++ String.fromInt diff ++ "s ago"
-
-        _ ->
-            ""
