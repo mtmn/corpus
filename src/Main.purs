@@ -24,8 +24,8 @@ import Node.Buffer (fromArrayBuffer)
 import Data.Either (Either(..))
 import Effect.Exception as Exception
 import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff, joinFiber)
-import Effect.Ref as Ref
-import Effect.Ref (Ref)
+import Effect.Aff.AVar (AVar)
+import Effect.Aff.AVar as Avar
 import Unsafe.Coerce (unsafeCoerce)
 import Node.FS.Aff as FSA
 import Fetch (fetch, Method(GET), lookup)
@@ -39,7 +39,7 @@ import Data.Array ((!!), length, uncons, mapMaybe, find)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
 import Data.Traversable (traverse)
-import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, getOldestTs, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb)
+import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, getOldestTs, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb, withTransaction)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
@@ -61,7 +61,7 @@ type Response = ServerResponse
 
 type UserContext =
   { conn :: Connection
-  , isSyncing :: Ref Boolean
+  , writeLock :: AVar Unit
   , config :: UserConfig
   , slug :: String
   }
@@ -188,11 +188,8 @@ lastfmTrackToListen json = do
     }
 
 -- One complete paginated pass; used for both initial and recurring syncs.
-lbSyncOnce :: Connection -> String -> Ref Boolean -> Boolean -> Aff Unit
-lbSyncOnce conn username isSyncing initialSyncEnabled = do
-  liftEffect $ Ref.write true isSyncing
-  void $ performFullSync
-  liftEffect $ Ref.write false isSyncing
+lbSyncOnce :: Connection -> String -> AVar Unit -> Boolean -> Aff Unit
+lbSyncOnce conn username writeLock initialSyncEnabled = void performFullSync
   where
   performFullSync = do
     when initialSyncEnabled $ Log.info $ "Starting ListenBrainz sync for " <> username
@@ -202,9 +199,7 @@ lbSyncOnce conn username isSyncing initialSyncEnabled = do
         case parseJson body >>= decodeJson of
           Left err -> Log.error $ "Sync parse error: " <> show err
           Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
-            run conn "BEGIN TRANSACTION" []
-            Tuple added (Tuple minTs hitCount) <- processListens listens
-            run conn "COMMIT" []
+            Tuple added (Tuple minTs hitCount) <- withTransaction conn writeLock (processListens listens)
             when (added > 0 || initialSyncEnabled)
               $ Log.info
               $ "ListenBrainz batch: added " <> show added <> ", " <> show hitCount <> " already present."
@@ -228,9 +223,7 @@ lbSyncOnce conn username isSyncing initialSyncEnabled = do
               Log.error $ "Sync parse error: " <> show err
               pure acc
             Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
-              run conn "BEGIN TRANSACTION" []
-              Tuple added (Tuple newMinTs hitCount) <- processListens listens
-              run conn "COMMIT" []
+              Tuple added (Tuple newMinTs hitCount) <- withTransaction conn writeLock (processListens listens)
               Log.info $ "ListenBrainz batch " <> show batchNum <> ": added " <> show added <> ", " <> show hitCount <> " already present."
               let allExist = hitCount == length listens && length listens > 0
               if allExist || length listens == 0 then do
@@ -257,24 +250,20 @@ lbSyncOnce conn username isSyncing initialSyncEnabled = do
       Log.warn "Skipping scrobble without timestamp"
       syncRecursive acc minTs hitCount tail
 
-lbSyncLoop :: Connection -> String -> Ref Boolean -> Boolean -> Aff Unit
-lbSyncLoop conn username isSyncing initialSyncEnabled = forever do
+lbSyncLoop :: Connection -> String -> AVar Unit -> Boolean -> Aff Unit
+lbSyncLoop conn username writeLock initialSyncEnabled = forever do
   delay (Milliseconds 60000.0)
-  lbSyncOnce conn username isSyncing initialSyncEnabled
+  lbSyncOnce conn username writeLock initialSyncEnabled
 
-lfSyncOnce :: Connection -> String -> String -> Ref Boolean -> Boolean -> Aff Unit
-lfSyncOnce conn apiKey lfmUser isSyncing initialSyncEnabled = do
-  liftEffect $ Ref.write true isSyncing
+lfSyncOnce :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
+lfSyncOnce conn apiKey lfmUser writeLock initialSyncEnabled = do
   void $ performLastfmSync
   when initialSyncEnabled $ void $ performLastfmBackfill
-  liftEffect $ Ref.write false isSyncing
   where
   performLastfmSync = do
     when initialSyncEnabled $ Log.info $ "Starting Last.fm sync for " <> lfmUser
     { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1 Nothing
-    run conn "BEGIN TRANSACTION" []
-    Tuple added hitCount <- processLastfmTracks tracks
-    run conn "COMMIT" []
+    Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
     when (added > 0 || initialSyncEnabled)
       $ Log.info
       $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
@@ -292,9 +281,7 @@ lfSyncOnce conn apiKey lfmUser isSyncing initialSyncEnabled = do
     | otherwise = do
         when initialSyncEnabled $ Log.info $ "Fetching Last.fm page " <> show page <> "/" <> show totalPages <> "..."
         { tracks } <- fetchLastfmPage apiKey lfmUser page mTo
-        run conn "BEGIN TRANSACTION" []
-        Tuple added hitCount <- processLastfmTracks tracks
-        run conn "COMMIT" []
+        Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
         Log.info $ "Last.fm page " <> show page <> "/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
         let
           validTracks = mapMaybe lastfmTrackToListen tracks
@@ -314,9 +301,7 @@ lfSyncOnce conn apiKey lfmUser isSyncing initialSyncEnabled = do
           pure unit
         else do
           Log.info $ "Backfilling " <> show totalPages <> " pages of Last.fm history before " <> show oldestTs
-          run conn "BEGIN TRANSACTION" []
-          Tuple added hitCount <- processLastfmTracks tracks
-          run conn "COMMIT" []
+          Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
           Log.info $ "Last.fm backfill page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
           total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
           Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
@@ -333,10 +318,10 @@ lfSyncOnce conn apiKey lfmUser isSyncing initialSyncEnabled = do
         syncLastfmRecursive (acc + 1) hitCount tail
     Just { head: _, tail } -> syncLastfmRecursive acc hitCount tail
 
-lfSyncLoop :: Connection -> String -> String -> Ref Boolean -> Boolean -> Aff Unit
-lfSyncLoop conn apiKey lfmUser isSyncing initialSyncEnabled = forever do
+lfSyncLoop :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
+lfSyncLoop conn apiKey lfmUser writeLock initialSyncEnabled = forever do
   delay (Milliseconds 60000.0)
-  lfSyncOnce conn apiKey lfmUser isSyncing initialSyncEnabled
+  lfSyncOnce conn apiKey lfmUser writeLock initialSyncEnabled
 
 -- Build the per-user index HTML, inlining the slug for the Elm app.
 indexHtml :: String -> String
@@ -801,10 +786,10 @@ handleRequest contexts req res = do
         "/client.js" -> serveClientJs res
         "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
         "/" -> serveIndex "" res
-        "/proxy" -> withUser url \ctx -> serveProxy ctx.conn ctx.isSyncing url res
-        "/stats" -> withUser url \ctx -> serveStats ctx.conn ctx.isSyncing url res
-        "/cover" -> withUser url \ctx -> serveCover ctx.config ctx.isSyncing url res
-        "/healthz" -> withUser url \ctx -> serveHealthz ctx.conn ctx.isSyncing res
+        "/proxy" -> withUser url \ctx -> serveProxy ctx.conn url res
+        "/stats" -> withUser url \ctx -> serveStats ctx.conn url res
+        "/cover" -> withUser url \ctx -> serveCover ctx.config url res
+        "/healthz" -> withUser url \ctx -> serveHealthz ctx.conn res
         _ -> case stripPrefix (Pattern "/~") path of
           Just slug -> serveIndex slug res
           Nothing -> do
@@ -857,10 +842,9 @@ sanitizeKey str =
   in
     replace re2 "_" (replace re1 "_" str)
 
-serveCover :: UserConfig -> Ref Boolean -> URL -> Response -> Effect Unit
-serveCover cfg isSyncing url res = do
+serveCover :: UserConfig -> URL -> Response -> Effect Unit
+serveCover cfg url res = do
   launchAff_ do
-    yieldToSync isSyncing
     let mbid = fromMaybe "" (getQueryParam "mbid" url)
     let artistStr = fromMaybe "" (getQueryParam "artist" url)
     let releaseStr = fromMaybe "" (getQueryParam "release" url)
@@ -1007,15 +991,14 @@ serveCover cfg isSyncing url res = do
             Log.info "Discogs API request failed"
             liftEffect $ serveNotFound response
 
-serveProxy :: Connection -> Ref Boolean -> URL -> Response -> Effect Unit
-serveProxy db isSyncing url res = do
+serveProxy :: Connection -> URL -> Response -> Effect Unit
+serveProxy db url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Methods" "GET, POST, OPTIONS" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Headers" "*" (toOutgoingMessage res)
 
   launchAff_ do
-    yieldToSync isSyncing
     let limit = fromMaybe 25 (getQueryParam "limit" url >>= fromString)
     let offset = fromMaybe 0 (getQueryParam "offset" url >>= fromString)
     let
@@ -1048,12 +1031,11 @@ serveAsset contentType path res = do
         end w
       Left _ -> serveNotFound res
 
-serveHealthz :: Connection -> Ref Boolean -> Response -> Effect Unit
-serveHealthz db isSyncing res = do
+serveHealthz :: Connection -> Response -> Effect Unit
+serveHealthz db res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   launchAff_ do
-    yieldToSync isSyncing
     result <- try $ ping db
     liftEffect $ do
       let w = toWriteable (toOutgoingMessage res)
@@ -1075,12 +1057,11 @@ serveNotFound res = do
   void $ writeString w UTF8 "Not Found"
   end w
 
-serveStats :: Connection -> Ref Boolean -> URL -> Response -> Effect Unit
-serveStats db isSyncing url res = do
+serveStats :: Connection -> URL -> Response -> Effect Unit
+serveStats db url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   launchAff_ do
-    yieldToSync isSyncing
     let period = getQueryParam "period" url
     let section = getQueryParam "section" url
     let safeDate = map (replace (unsafeRegex "[^0-9\\-]" (parseFlags "g")) "")
@@ -1204,14 +1185,8 @@ fetchDiscogsGenre (Just t) artist release = do
       Log.warn "Discogs genre API request failed"
       pure Nothing
 
-yieldToSync :: Ref Boolean -> Aff Unit
-yieldToSync isSyncing = do
-  syncing <- liftEffect $ Ref.read isSyncing
-  when syncing $ delay (Milliseconds 200.0) *> yieldToSync isSyncing
-
-enrichMetadata :: Connection -> Ref Boolean -> UserConfig -> Aff Unit
-enrichMetadata conn isSyncing cfg = forever do
-  yieldToSync isSyncing
+enrichMetadata :: Connection -> UserConfig -> Aff Unit
+enrichMetadata conn cfg = forever do
   unenrichedMbids <- getUnenrichedMbids conn 10
   emptyGenreMbids <- getEmptyGenreMbids conn 10
   let allMbids = unenrichedMbids <> emptyGenreMbids
@@ -1221,7 +1196,6 @@ enrichMetadata conn isSyncing cfg = forever do
   else do
     Log.info $ "Processing " <> show (length unenrichedMbids) <> " unenriched + " <> show (length emptyGenreMbids) <> " empty genre releases"
     for_ allMbids \mbid -> do
-      yieldToSync isSyncing
       delay (Milliseconds 1100.0)
       result <- try $ fetchMusicBrainzRelease mbid
       case result of
@@ -1259,34 +1233,35 @@ startUser { slug, config } = do
   conn <- connect config.databaseFile
   initDb conn
   initReleaseMetadata conn
-  isSyncing <- liftEffect $ Ref.new false
+  writeLock <- Avar.new unit
 
   case config.lastfmUser, config.lastfmApiKey of
     Just _, Nothing -> Log.warn $ "lastfmUser set for user '" <> slug <> "' but lastfmApiKey is missing — Last.fm sync disabled"
     _, _ -> pure unit
 
   -- Run initial syncs in parallel, then join before starting loops.
+  -- Both syncs share the write lock, so their transactions are serialized.
   lbFiber <- case config.listenbrainzUser of
-    Just username -> Just <$> forkAff (lbSyncOnce conn username isSyncing config.initialSync)
+    Just username -> Just <$> forkAff (lbSyncOnce conn username writeLock config.initialSync)
     Nothing -> pure Nothing
   lfFiber <- case config.lastfmUser, config.lastfmApiKey of
-    Just lfmUser, Just apiKey -> Just <$> forkAff (lfSyncOnce conn apiKey lfmUser isSyncing config.initialSync)
+    Just lfmUser, Just apiKey -> Just <$> forkAff (lfSyncOnce conn apiKey lfmUser writeLock config.initialSync)
     _, _ -> pure Nothing
   for_ lbFiber joinFiber
   for_ lfFiber joinFiber
 
   -- Background loops
-  void $ forkAff $ enrichMetadata conn isSyncing config
+  void $ forkAff $ enrichMetadata conn config
   for_ config.listenbrainzUser \username ->
-    void $ forkAff $ lbSyncLoop conn username isSyncing config.initialSync
+    void $ forkAff $ lbSyncLoop conn username writeLock config.initialSync
   case config.lastfmUser, config.lastfmApiKey of
-    Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser isSyncing config.initialSync
+    Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser writeLock config.initialSync
     _, _ -> pure unit
   when config.backupEnabled $ void $ forkAff $
     backupDb conn config.databaseFile (s3ConfigFromUser config)
       (toNumber config.backupIntervalHours * 3600000.0)
 
-  pure { conn, isSyncing, config, slug }
+  pure { conn, writeLock, config, slug }
 
 foreign import dotenvConfig :: Effect Unit
 

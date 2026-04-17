@@ -8,8 +8,11 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
 import Effect.Aff (Aff, delay, makeAff, nonCanceler, try)
+import Effect.Aff.AVar (AVar)
+import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
 import Effect.Exception (Error, error, message)
+import Control.Monad.Error.Class (throwError)
 import Effect.Now (nowDateTime)
 import Data.Formatter.DateTime (formatDateTime)
 import Foreign (Foreign)
@@ -88,6 +91,23 @@ backupDb conn dbFile s3cfg intervalMs = forever do
   case result of
     Left err -> Log.error $ "Backup failed: " <> message err
     Right _ -> pure unit
+
+-- Acquires the write lock, runs the action inside a transaction, then releases.
+-- If the action throws, the transaction is rolled back before the lock is released.
+withTransaction :: forall a. Connection -> AVar Unit -> Aff a -> Aff a
+withTransaction conn lock action = do
+  Avar.take lock
+  run conn "BEGIN TRANSACTION" []
+  result <- try action
+  case result of
+    Left err -> do
+      void $ try $ run conn "ROLLBACK" []
+      Avar.put unit lock
+      throwError err
+    Right r -> do
+      run conn "COMMIT" []
+      Avar.put unit lock
+      pure r
 
 queryAll :: Connection -> String -> Array Foreign -> Aff (Array Json)
 queryAll conn sql params = makeAff \cb -> do
