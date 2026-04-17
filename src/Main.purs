@@ -1269,7 +1269,7 @@ main :: Effect Unit
 main = do
   dotenvConfig
   launchAff_ do
-    configFile <- liftEffect $ map (fromMaybe "users.json") $ lookupEnv "CORPUS_CONFIG_FILE"
+    configFile <- liftEffect $ map (fromMaybe "users.json") $ lookupEnv "CORPUS_USERS_FILE"
     result <- try $ loadConfig configFile
     case result of
       Left err -> do

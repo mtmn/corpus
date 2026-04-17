@@ -40,7 +40,7 @@ Corpus runs as a single server process serving multiple users. User configuratio
 ### Configuration
 User configuration is split into two layers:
 
-1. **`users.dhall`** (build-time, non-sensitive): defines user slugs, source usernames, database filenames, and feature flags. Compiled to `users.json` at build time via `dhall-to-json`. The server reads this file at startup from the path in `CORPUS_CONFIG_FILE` (defaults to `users.json`).
+1. **`users.dhall`** (build-time, non-sensitive): defines user slugs, source usernames, database filenames, and feature flags. Compiled to `users.json` at build time via `dhall-to-json`. The server reads this file at startup from the path in `CORPUS_USERS_FILE` (defaults to `users.json`).
 
 2. **Environment variables** (runtime, sensitive): shared API keys and S3 credentials are read from the environment at startup and applied to all users.
 
@@ -52,7 +52,7 @@ Each user gets their own `UserContext` with an independent DuckDB connection, sy
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CORPUS_CONFIG_FILE` | `users.json` | Path to the compiled users config |
+| `CORPUS_USERS_FILE` | `users.json` | Path to the compiled users config |
 | `DATABASE_PATH` | _(cwd)_ | Root directory for all user database files |
 | `LASTFM_API_KEY` | — | Last.fm API key (required if any user has `lastfmUser`) |
 | `DISCOGS_TOKEN` | — | Discogs token for cover/genre fallback |
@@ -126,7 +126,7 @@ Corpus relies on FFI to interact with the Node.js ecosystem where native PureScr
 - **Database (`Db.js`)**: Interface to the native `duckdb` library. Includes BigInt → Number conversion for JSON compatibility.
 - **Cloud Storage (`S3.js`)**: AWS SDK (`@aws-sdk/client-s3`) for cover art caching. Takes explicit config structs rather than reading `process.env`.
 - **System Utilities (`Main.js`)**: Bridges PureScript with Node.js — `dotenv` loading and request helpers.
-- **Config (`Config.js`)**: Reads and parses `users.json` from the path given by `CORPUS_CONFIG_FILE`.
+- **Config (`Config.js`)**: Reads and parses `users.json` from the path given by `CORPUS_USERS_FILE`.
 
 ## System Flow
 
