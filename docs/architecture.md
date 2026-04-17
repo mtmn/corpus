@@ -44,7 +44,7 @@ User configuration is split into two layers:
 
 2. **Environment variables** (runtime, sensitive): shared API keys and S3 credentials are read from the environment at startup and applied to all users.
 
-Each user gets their own `UserContext` with an independent DuckDB connection, sync loop, and `isSyncing` flag. A shared `isSyncing` gate prevents reads during active syncs.
+Each user gets their own `UserContext` with an independent DuckDB connection, sync loop, and write lock (`AVar Unit`). The write lock serializes all sync transactions — if a user has both ListenBrainz and Last.fm configured, their transactions are queued rather than run concurrently. HTTP reads do not acquire the lock; DuckDB's MVCC provides consistent snapshots.
 
 ## Configuration Reference
 
