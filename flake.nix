@@ -33,6 +33,37 @@
           hash = "sha256-ez73ecGmzf5d7EkamNZ9KT8u7e4yR7jSvdiGu4bGAHs=";
         };
 
+        elmDeps = pkgs.stdenv.mkDerivation {
+          name = "corpus-elm-deps";
+
+          src = pkgs.lib.cleanSourceWith {
+            src = self;
+            filter = name: _type: let
+              baseName = baseNameOf (toString name);
+            in
+              pkgs.lib.elem baseName ["elm.json" "src" "Client.elm"];
+          };
+
+          nativeBuildInputs = with pkgs; [elmPackages.elm cacert];
+
+          outputHashAlgo = "sha256";
+          outputHashMode = "recursive";
+          outputHash = "sha256-7Qx/xkTOh4bPQuztHe8s82CrLmrFGNjhOqYqpW8Jbec=";
+
+          buildPhase = ''
+            export HOME=$TMPDIR
+            export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+            export ELM_HOME=$HOME/.elm
+
+            elm make src/Client.elm --output=/dev/null
+          '';
+
+          installPhase = ''
+            mkdir -p $out
+            cp -r $HOME/.elm/0.19.1/packages $out/
+          '';
+        };
+
         spagoDeps = pkgs.stdenv.mkDerivation {
           name = "corpus-spago-deps";
 
@@ -48,7 +79,7 @@
 
           outputHashAlgo = "sha256";
           outputHashMode = "recursive";
-          outputHash = "sha256-aJPjClixXOdbAZrAyb63Asvt3EyN6ov0Vv+DawvOSag=";
+          outputHash = "sha256-hlMN1T0s8otmQcj/Hinf/FpLWSjAIesE3n3krGBS/WU=";
 
           buildPhase = ''
             export HOME=$TMPDIR
@@ -100,7 +131,7 @@
           version = "1.0.0";
           inherit src;
 
-          npmDepsHash = "sha256-q7+quD9rN0eTyPOLxjDvjQgFDnQtJanvSXzJEvMQfFk=";
+          npmDepsHash = "sha256-vxwqSgi9mIE/1skBkgk9CbcZa5In4mme1YUJoJs/7Lo=";
           npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [
@@ -108,6 +139,7 @@
             nodejs
             git
             purescript
+            elmPackages.elm
           ];
 
           buildPhase = ''
@@ -127,6 +159,11 @@
             cp -r ${spagoRegistry} $HOME/.cache/spago-nodejs/registry
             cp -r ${spagoRegistryIndex} $HOME/.cache/spago-nodejs/registry-index
             chmod -R u+w $HOME/.cache/spago-nodejs
+
+            # Restore elm packages
+            mkdir -p $HOME/.elm/0.19.1
+            cp -r ${elmDeps}/packages $HOME/.elm/0.19.1/
+            chmod -R u+w $HOME/.elm
 
             npm run build
           '';
@@ -178,6 +215,7 @@
           buildInputs = with pkgs; [
             nodejs
             purescript
+            elmPackages.elm
             awscli2
             duckdb
             esbuild
