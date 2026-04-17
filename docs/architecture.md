@@ -13,7 +13,7 @@ The server is built with PureScript running on Node.js. It handles several core 
 - **Cover Art Proxy**: A specialized endpoint that fetches, caches, and serves cover art, utilizing a multi-source fallback strategy (CAA → Last.fm → Discogs).
 
 ### Frontend
-A Single Page Application (SPA) built with PureScript and the [Halogen](https://github.com/purescript-halogen/purescript-halogen) framework.
+A Single Page Application (SPA) built with [Elm](https://elm-lang.org).
 - **Real-time Updates**: Periodically refreshes the scrobble list.
 - **Filtering & Search**: Supports deep filtering by genre, label, or release year.
 - **Responsive UI**: Designed for both desktop and mobile viewing with a "retro-modern" aesthetic.
@@ -64,11 +64,10 @@ When a cover is requested:
 
 ## Tech Stack
 
-- **Language**: [PureScript](https://purescript.org)
-- **Frontend Framework**: [Halogen](https://github.com/purescript-halogen/purescript-halogen)
+- **Language**: [PureScript](https://purescript.org) (server), [Elm](https://elm-lang.org) (frontend)
 - **Runtime**: [Node.js](https://nodejs.org)
 - **Database**: [DuckDB](https://duckdb.org)
-- **Bundling**: [spago](https://github.com/purescript/spago) and [esbuild](https://esbuild.github.io/)
+- **Bundling**: [spago](https://github.com/purescript/spago) + [esbuild](https://esbuild.github.io/) (server), [elm make](https://guide.elm-lang.org/install/elm.html) (frontend)
 - **Environment**: [Nix](https://nixos.org) for reproducible development shells and container builds
 
 ## Foreign Function Interface (FFI)
@@ -105,7 +104,7 @@ graph TD
     end
 
     subgraph Frontend
-        UI[Halogen SPA]
+        UI[Elm SPA]
     end
 
     %% Scrobble Sync Flow
