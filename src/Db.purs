@@ -23,6 +23,7 @@ import Data.Int (fromString)
 import Data.String (Pattern(..), split, stripSuffix)
 import Control.Monad.Rec.Class (forever)
 import Node.FS.Aff as FSA
+import Config (S3Config)
 import S3 as S3
 import Log as Log
 
@@ -67,8 +68,8 @@ dbBaseName path =
   in
     fromMaybe name (stripSuffix (Pattern ".db") name)
 
-performBackup :: Connection -> String -> Aff Unit
-performBackup conn dbFile = do
+performBackup :: Connection -> String -> S3Config -> Aff Unit
+performBackup conn dbFile s3cfg = do
   checkpoint conn
   dt <- liftEffect nowDateTime
   let
@@ -77,13 +78,13 @@ performBackup conn dbFile = do
       Left _ -> "unknown"
   let key = "backups/" <> dbBaseName dbFile <> "-" <> ts <> ".db"
   buf <- FSA.readFile dbFile
-  S3.uploadToS3 key buf "application/octet-stream"
+  S3.uploadToS3 s3cfg key buf "application/octet-stream"
   Log.info $ "Backup uploaded to S3: " <> key
 
-backupDb :: Connection -> String -> Number -> Aff Unit
-backupDb conn dbFile intervalMs = forever do
+backupDb :: Connection -> String -> S3Config -> Number -> Aff Unit
+backupDb conn dbFile s3cfg intervalMs = forever do
   delay (Milliseconds intervalMs)
-  result <- try $ performBackup conn dbFile
+  result <- try $ performBackup conn dbFile s3cfg
   case result of
     Left err -> Log.error $ "Backup failed: " <> message err
     Right _ -> pure unit
