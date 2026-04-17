@@ -4,22 +4,25 @@ import {
 	HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 
-const getClient = () =>
+const makeClient = (cfg) =>
 	new S3Client({
-		region: process.env.S3_REGION || "us-east-1",
-		endpoint: process.env.AWS_ENDPOINT_URL,
-		forcePathStyle: process.env.AWS_S3_ADDRESSING_STYLE === "path",
-		credentials: {
-			accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-			secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-		},
+		region: cfg.region || "us-east-1",
+		endpoint: cfg.endpointUrl ?? undefined,
+		forcePathStyle: cfg.addressingStyle === "path",
+		credentials:
+			cfg.accessKeyId && cfg.secretAccessKey
+				? {
+						accessKeyId: cfg.accessKeyId,
+						secretAccessKey: cfg.secretAccessKey,
+					}
+				: undefined,
 	});
 
 export const uploadToS3Impl =
-	(key) => (body) => (contentType) => (cb) => () => {
-		const client = getClient();
+	(cfg) => (key) => (body) => (contentType) => (cb) => () => {
+		const client = makeClient(cfg);
 		const command = new PutObjectCommand({
-			Bucket: process.env.S3_BUCKET,
+			Bucket: cfg.bucket,
 			Key: key,
 			Body: body,
 			ContentType: contentType,
@@ -27,12 +30,10 @@ export const uploadToS3Impl =
 
 		client
 			.send(command)
-			.then(() => {
-				cb(null)();
-			})
+			.then(() => cb(null)())
 			.catch((err) => {
 				const msg =
-					`S3: Upload failed for ${key} ${err.message || err}`.replace(
+					`S3: Upload failed for ${key}: ${err.message || err}`.replace(
 						/\n/g,
 						" ",
 					);
@@ -41,10 +42,10 @@ export const uploadToS3Impl =
 			});
 	};
 
-export const existsInS3Impl = (key) => (cb) => () => {
-	const client = getClient();
+export const existsInS3Impl = (cfg) => (key) => (cb) => () => {
+	const client = makeClient(cfg);
 	const command = new HeadObjectCommand({
-		Bucket: process.env.S3_BUCKET,
+		Bucket: cfg.bucket,
 		Key: key,
 	});
 
@@ -56,7 +57,7 @@ export const existsInS3Impl = (key) => (cb) => () => {
 				cb(false)();
 			} else {
 				const msg =
-					`S3: exists check failed for ${key} ${err.message || err}`.replace(
+					`S3: exists check failed for ${key}: ${err.message || err}`.replace(
 						/\n/g,
 						" ",
 					);
@@ -66,10 +67,10 @@ export const existsInS3Impl = (key) => (cb) => () => {
 		});
 };
 
-export const getS3UrlImpl = (key) => {
-	const endpoint = process.env.AWS_ENDPOINT_URL || "";
-	const bucket = process.env.S3_BUCKET || "";
-	if (process.env.AWS_S3_ADDRESSING_STYLE === "path") {
+export const getS3UrlImpl = (cfg) => (key) => {
+	const endpoint = cfg.endpointUrl || "";
+	const bucket = cfg.bucket || "";
+	if (cfg.addressingStyle === "path") {
 		return `${endpoint}/${bucket}/${key}`;
 	} else {
 		return `${endpoint.replace("://", `://${bucket}.`)}/${key}`;

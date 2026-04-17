@@ -18,7 +18,13 @@ import Url
 port pushUrl : String -> Cmd msg
 
 
-main : Program String Model Msg
+type alias Flags =
+    { search : String
+    , userSlug : String
+    }
+
+
+main : Program Flags Model Msg
 main =
     Browser.element
         { init = init
@@ -98,14 +104,15 @@ type alias Model =
     , customInput : String
     , showCustomInput : Bool
     , customError : Maybe String
+    , userSlug : String
     }
 
 
-init : String -> ( Model, Cmd Msg )
-init searchString =
+init : Flags -> ( Model, Cmd Msg )
+init flags =
     let
         page =
-            parsePageParam searchString
+            parsePageParam flags.search
 
         offset =
             max 0 ((page - 1) * 25)
@@ -128,9 +135,10 @@ init searchString =
       , customInput = ""
       , showCustomInput = False
       , customError = Nothing
+      , userSlug = flags.userSlug
       }
     , Cmd.batch
-        [ fetchListens 25 offset Nothing
+        [ fetchListens flags.userSlug 25 offset Nothing
         , Task.perform GotTime Time.now
         ]
     )
@@ -198,7 +206,7 @@ update msg model =
         Tick time ->
             if not model.loading then
                 ( { model | currentTime = Just time, loading = True }
-                , fetchListens model.limit model.offset model.activeFilter
+                , fetchListens model.userSlug model.limit model.offset model.activeFilter
                 )
 
             else
@@ -254,7 +262,7 @@ update msg model =
             in
             ( { model | offset = newOffset, loading = True }
             , Cmd.batch
-                [ fetchListens model.limit newOffset model.activeFilter
+                [ fetchListens model.userSlug model.limit newOffset model.activeFilter
                 , pushUrl ("?page=" ++ String.fromInt page)
                 ]
             )
@@ -269,7 +277,7 @@ update msg model =
             in
             ( { model | offset = newOffset, loading = True }
             , Cmd.batch
-                [ fetchListens model.limit newOffset model.activeFilter
+                [ fetchListens model.userSlug model.limit newOffset model.activeFilter
                 , pushUrl ("?page=" ++ String.fromInt page)
                 ]
             )
@@ -279,7 +287,7 @@ update msg model =
             , case tab of
                 StatsTab ->
                     if model.stats == Nothing then
-                        fetchStats model.statsPeriod
+                        fetchStats model.userSlug model.statsPeriod
 
                     else
                         Cmd.none
@@ -296,7 +304,7 @@ update msg model =
                 , loadedSections = Set.empty
                 , showCustomInput = False
               }
-            , fetchStats period
+            , fetchStats model.userSlug period
             )
 
         OpenCustomInput ->
@@ -344,7 +352,7 @@ update msg model =
                             , showCustomInput = False
                             , customError = Nothing
                           }
-                        , fetchStats period
+                        , fetchStats model.userSlug period
                         )
 
                 _ ->
@@ -357,7 +365,7 @@ update msg model =
             in
             ( { model | activeFilter = filter, offset = 0, activeTab = ListensTab, loading = True }
             , Cmd.batch
-                [ fetchListens model.limit 0 filter
+                [ fetchListens model.userSlug model.limit 0 filter
                 , pushUrl "?page=1"
                 ]
             )
@@ -365,7 +373,7 @@ update msg model =
         ClearFilter ->
             ( { model | activeFilter = Nothing, offset = 0, loading = True }
             , Cmd.batch
-                [ fetchListens model.limit 0 Nothing
+                [ fetchListens model.userSlug model.limit 0 Nothing
                 , pushUrl "?page=1"
                 ]
             )
@@ -380,7 +388,7 @@ update msg model =
             ( { model | expandedSections = Set.insert section model.expandedSections }, Cmd.none )
 
         ShowAllSection section ->
-            ( model, fetchSectionData model.statsPeriod section )
+            ( model, fetchSectionData model.userSlug model.statsPeriod section )
 
         CollapseSection section ->
             ( { model
@@ -426,8 +434,8 @@ subscriptions _ =
 -- HTTP
 
 
-fetchListens : Int -> Int -> Maybe ActiveFilter -> Cmd Msg
-fetchListens limit offset mFilter =
+fetchListens : String -> Int -> Int -> Maybe ActiveFilter -> Cmd Msg
+fetchListens userSlug limit offset mFilter =
     let
         filterParams =
             case mFilter of
@@ -438,7 +446,7 @@ fetchListens limit offset mFilter =
                     "&filterField=" ++ field ++ "&filterValue=" ++ Url.percentEncode value
 
         url =
-            "/proxy?limit=" ++ String.fromInt limit ++ "&offset=" ++ String.fromInt offset ++ filterParams
+            "/proxy?user=" ++ userSlug ++ "&limit=" ++ String.fromInt limit ++ "&offset=" ++ String.fromInt offset ++ filterParams
     in
     Http.get
         { url = url
@@ -446,24 +454,24 @@ fetchListens limit offset mFilter =
         }
 
 
-fetchStats : Period -> Cmd Msg
-fetchStats period =
+fetchStats : String -> Period -> Cmd Msg
+fetchStats userSlug period =
     Http.get
-        { url = statsUrl period Nothing
+        { url = statsUrl userSlug period Nothing
         , expect = Http.expectJson GotStats statsDecoder
         }
 
 
-fetchSectionData : Period -> String -> Cmd Msg
-fetchSectionData period section =
+fetchSectionData : String -> Period -> String -> Cmd Msg
+fetchSectionData userSlug period section =
     Http.get
-        { url = statsUrl period (Just section)
+        { url = statsUrl userSlug period (Just section)
         , expect = Http.expectJson (GotSectionData section) (sectionEntriesDecoder section)
         }
 
 
-statsUrl : Period -> Maybe String -> String
-statsUrl period mSection =
+statsUrl : String -> Period -> Maybe String -> String
+statsUrl userSlug period mSection =
     let
         periodPart =
             case period of
@@ -471,10 +479,10 @@ statsUrl period mSection =
                     ""
 
                 LastDays n ->
-                    "period=" ++ String.fromInt n
+                    "&period=" ++ String.fromInt n
 
                 CustomRange from to ->
-                    "from=" ++ from ++ "&to=" ++ to
+                    "&from=" ++ from ++ "&to=" ++ to
 
         sectionPart =
             case mSection of
@@ -482,25 +490,9 @@ statsUrl period mSection =
                     ""
 
                 Just sec ->
-                    (if String.isEmpty periodPart then
-                        ""
-
-                     else
-                        "&"
-                    )
-                        ++ "section="
-                        ++ sec
-
-        query =
-            periodPart ++ sectionPart
+                    "&section=" ++ sec
     in
-    "/stats"
-        ++ (if String.isEmpty query then
-                ""
-
-            else
-                "?" ++ query
-           )
+    "/stats?user=" ++ userSlug ++ periodPart ++ sectionPart
 
 
 httpErrorToString : Http.Error -> String
@@ -631,7 +623,7 @@ view model =
                                 ""
                            )
                     )
-                , href "/"
+                , href (if model.userSlug == "" then "/" else "/~" ++ model.userSlug)
                 ]
                 [ text "listens" ]
             , button
@@ -707,14 +699,14 @@ renderContent model =
                 ul [ Attr.id "tracks-container" ]
                     (List.indexedMap
                         (\idx listen ->
-                            renderListen model.currentTime model.failedCovers model.hoveredCover idx listen
+                            renderListen model.userSlug model.currentTime model.failedCovers model.hoveredCover idx listen
                         )
                         model.listens
                     )
 
 
-renderListen : Maybe Time.Posix -> Set String -> Maybe Int -> Int -> Listen -> Html Msg
-renderListen currentTime failedCovers hoveredCover idx listen =
+renderListen : String -> Maybe Time.Posix -> Set String -> Maybe Int -> Int -> Listen -> Html Msg
+renderListen userSlug currentTime failedCovers hoveredCover idx listen =
     let
         artist =
             Maybe.withDefault "" listen.artistName
@@ -731,7 +723,9 @@ renderListen currentTime failedCovers hoveredCover idx listen =
                     listen.releaseMbid
 
         coverUrl =
-            "/cover?artist="
+            "/cover?user="
+                ++ userSlug
+                ++ "&artist="
                 ++ Url.percentEncode artist
                 ++ "&release="
                 ++ Url.percentEncode release
