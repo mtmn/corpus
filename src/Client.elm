@@ -1,9 +1,9 @@
 port module Client exposing (main)
 
 import Browser
-import Html exposing (..)
+import Html exposing (Html, a, button, div, h1, h2, img, input, li, span, strong, text, ul)
 import Html.Attributes as Attr exposing (class, disabled, href, placeholder, src, style, target, type_, value)
-import Html.Events exposing (onClick, on, onInput)
+import Html.Events exposing (on, onClick, onInput)
 import Http
 import Json.Decode as D exposing (Decoder)
 import List
@@ -26,6 +26,7 @@ main =
         , view = view
         , subscriptions = subscriptions
         }
+
 
 
 -- TYPES
@@ -72,6 +73,7 @@ type alias Stats =
     , artists : List StatsEntry
     , tracks : List StatsEntry
     }
+
 
 
 -- MODEL
@@ -159,6 +161,7 @@ parsePageParam search =
         |> Maybe.withDefault 1
 
 
+
 -- MSG
 
 
@@ -183,6 +186,7 @@ type Msg
     | ExpandSection String
     | ShowAllSection String
     | CollapseSection String
+
 
 
 -- UPDATE
@@ -409,12 +413,14 @@ patchStatSection section entries stats =
             stats
 
 
+
 -- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Time.every 30000 Tick
+
 
 
 -- HTTP
@@ -476,12 +482,25 @@ statsUrl period mSection =
                     ""
 
                 Just sec ->
-                    (if String.isEmpty periodPart then "" else "&") ++ "section=" ++ sec
+                    (if String.isEmpty periodPart then
+                        ""
+
+                     else
+                        "&"
+                    )
+                        ++ "section="
+                        ++ sec
 
         query =
             periodPart ++ sectionPart
     in
-    "/stats" ++ (if String.isEmpty query then "" else "?" ++ query)
+    "/stats"
+        ++ (if String.isEmpty query then
+                ""
+
+            else
+                "?" ++ query
+           )
 
 
 httpErrorToString : Http.Error -> String
@@ -501,6 +520,7 @@ httpErrorToString err =
 
         Http.BadBody body ->
             "JSON decode error: " ++ body
+
 
 
 -- DECODERS
@@ -592,6 +612,7 @@ sectionEntriesDecoder section =
         statsDecoder
 
 
+
 -- VIEW
 
 
@@ -601,12 +622,28 @@ view model =
         [ h1 [] [ text "scrobbler" ]
         , div [ class "tabs" ]
             [ a
-                [ class ("tab-btn" ++ (if model.activeTab == ListensTab then " active" else ""))
+                [ class
+                    ("tab-btn"
+                        ++ (if model.activeTab == ListensTab then
+                                " active"
+
+                            else
+                                ""
+                           )
+                    )
                 , href "/"
                 ]
                 [ text "listens" ]
             , button
-                [ class ("tab-btn" ++ (if model.activeTab == StatsTab then " active" else ""))
+                [ class
+                    ("tab-btn"
+                        ++ (if model.activeTab == StatsTab then
+                                " active"
+
+                            else
+                                ""
+                           )
+                    )
                 , onClick (SwitchTab StatsTab)
                 ]
                 [ text "stats" ]
@@ -732,7 +769,15 @@ renderListen currentTime failedCovers hoveredCover idx listen =
 
               else
                 img
-                    [ class ("track-cover" ++ (if isZoomed then " zoomed" else ""))
+                    [ class
+                        ("track-cover"
+                            ++ (if isZoomed then
+                                    " zoomed"
+
+                                else
+                                    ""
+                               )
+                        )
                     , src coverUrl
                     , Attr.alt release
                     , on "error" (D.succeed (ImageError coverUrl))
@@ -872,14 +917,30 @@ renderPeriodSelector current showInput customVal mError =
 
         namedBtn target label =
             button
-                [ class ("period-btn" ++ (if current == target then " active" else ""))
+                [ class
+                    ("period-btn"
+                        ++ (if current == target then
+                                " active"
+
+                            else
+                                ""
+                           )
+                    )
                 , onClick (SetStatsPeriod target)
                 ]
                 [ text label ]
 
         customBtn =
             button
-                [ class ("period-btn" ++ (if isCustom then " active" else ""))
+                [ class
+                    ("period-btn"
+                        ++ (if isCustom then
+                                " active"
+
+                            else
+                                ""
+                           )
+                    )
                 , onClick OpenCustomInput
                 ]
                 [ text "custom" ]
@@ -910,7 +971,15 @@ renderPeriodSelector current showInput customVal mError =
                             String.fromInt n ++ "d"
             in
             button
-                [ class ("period-btn" ++ (if current == LastDays n then " active" else ""))
+                [ class
+                    ("period-btn"
+                        ++ (if current == LastDays n then
+                                " active"
+
+                            else
+                                ""
+                           )
+                    )
                 , onClick (SetStatsPeriod (LastDays n))
                 ]
                 [ text label ]
@@ -925,7 +994,15 @@ renderPeriodSelector current showInput customVal mError =
                 [ div [ class "custom-range" ]
                     [ input
                         [ type_ "text"
-                        , class ("custom-range-input" ++ (if mError /= Nothing then " error" else ""))
+                        , class
+                            ("custom-range-input"
+                                ++ (if mError /= Nothing then
+                                        " error"
+
+                                    else
+                                        ""
+                                   )
+                            )
                         , placeholder "2023-01-01 2026-01-01"
                         , value customVal
                         , onInput UpdateCustomInput
@@ -945,6 +1022,7 @@ renderPeriodSelector current showInput customVal mError =
           else
             text ""
         ]
+
 
 
 -- HELPERS
@@ -969,21 +1047,42 @@ timeAgo mNow mTimestamp =
                     mins =
                         diff // 60
                 in
-                String.fromInt mins ++ " minute" ++ (if mins > 1 then "s" else "") ++ " ago"
+                String.fromInt mins ++ " minute"
+                    ++ (if mins > 1 then
+                            "s"
+
+                        else
+                            ""
+                       )
+                    ++ " ago"
 
             else if diff < 86400 then
                 let
                     hours =
                         diff // 3600
                 in
-                String.fromInt hours ++ " hour" ++ (if hours > 1 then "s" else "") ++ " ago"
+                String.fromInt hours ++ " hour"
+                    ++ (if hours > 1 then
+                            "s"
+
+                        else
+                            ""
+                       )
+                    ++ " ago"
 
             else
                 let
                     days =
                         diff // 86400
                 in
-                String.fromInt days ++ " day" ++ (if days > 1 then "s" else "") ++ " ago"
+                String.fromInt days ++ " day"
+                    ++ (if days > 1 then
+                            "s"
+
+                        else
+                            ""
+                       )
+                    ++ " ago"
 
         _ ->
             "unknown time"
