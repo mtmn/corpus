@@ -48,7 +48,7 @@
 
           outputHashAlgo = "sha256";
           outputHashMode = "recursive";
-          outputHash = "sha256-7Qx/xkTOh4bPQuztHe8s82CrLmrFGNjhOqYqpW8Jbec=";
+          outputHash = "sha256-oCVdFzgalwswFlljrUZ8LDH56OA9Q7bUjAxpKmMadLI=";
 
           buildPhase = ''
             export HOME=$TMPDIR
