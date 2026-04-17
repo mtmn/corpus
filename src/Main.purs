@@ -2,6 +2,7 @@ module Main where
 
 import Prelude
 
+import Config (AppConfig, UserConfig, UserEntry, loadConfig, s3ConfigFromUser)
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import Log as Log
@@ -27,7 +28,6 @@ import Effect.Ref as Ref
 import Effect.Ref (Ref)
 import Unsafe.Coerce (unsafeCoerce)
 import Node.FS.Aff as FSA
-import Node.Process (getEnv)
 import Fetch (fetch, Method(GET), lookup)
 import Fetch.Argonaut.Json (fromJson)
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -35,15 +35,17 @@ import JSURI (encodeURIComponent)
 import Foreign.Object as Object
 import Data.Argonaut (decodeJson, encodeJson, parseJson)
 import Data.Argonaut.Core (Json, toObject, toArray, toString, stringify)
-import Data.Array ((!!), length, uncons, mapMaybe)
+import Data.Array ((!!), length, uncons, mapMaybe, find)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
+import Data.Traversable (traverse)
 import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, getOldestTs, run, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Int (fromString, toNumber)
-import Data.String (Pattern(..))
+import Data.String (Pattern(..), stripPrefix)
+import Node.Process (lookupEnv)
 import Data.String.Common (split) as String
 import Data.String.Regex (replace, parseFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
@@ -56,6 +58,13 @@ import Web.URL.URLSearchParams as URLSearchParams
 -- Types
 type Request = IncomingMessage IMServer
 type Response = ServerResponse
+
+type UserContext =
+  { conn :: Connection
+  , isSyncing :: Ref Boolean
+  , config :: UserConfig
+  , slug :: String
+  }
 
 listenBrainzUrl :: String -> String
 listenBrainzUrl username = "https://api.listenbrainz.org/1/user/" <> username <> "/listens"
@@ -329,8 +338,9 @@ lfSyncLoop conn apiKey lfmUser isSyncing initialSyncEnabled = forever do
   delay (Milliseconds 60000.0)
   lfSyncOnce conn apiKey lfmUser isSyncing initialSyncEnabled
 
-indexHtml :: String
-indexHtml =
+-- Build the per-user index HTML, inlining the slug for the Elm app.
+indexHtml :: String -> String
+indexHtml userSlug =
   """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -761,20 +771,25 @@ indexHtml =
     <div id="app"></div>
     <script src="/client.js"></script>
     <script>
+        var userSlug = '""" <> userSlug <>
+    """';
         var app = Elm.Client.init({
             node: document.getElementById('app'),
-            flags: window.location.search
+            flags: { search: window.location.search, userSlug: userSlug }
         });
         app.ports.pushUrl.subscribe(function(url) {
-            history.pushState({}, '', url);
+            var prefix = userSlug ? '/~' + userSlug : '';
+            history.pushState({}, '', prefix + url);
         });
     </script>
 </body>
 </html>"""
 
 -- Request handler
-handleRequest :: Connection -> Ref Boolean -> Boolean -> Request -> Response -> Effect Unit
-handleRequest db isSyncing coverCacheEnabled req res = do
+-- API endpoints (/proxy, /stats, /cover, /healthz) select the user via ?user=<slug>.
+-- Index pages are served at / (root user) and /~<slug> (named users).
+handleRequest :: Array UserContext -> Request -> Response -> Effect Unit
+handleRequest contexts req res = do
   let method = IM.method req
   let rawUrl = IM.url req
   case URL.fromRelative rawUrl "http://localhost" of
@@ -782,26 +797,37 @@ handleRequest db isSyncing coverCacheEnabled req res = do
     Just url -> do
       let path = URL.pathname url
       Log.info $ method <> " " <> rawUrl
-
       case path of
-        "/" -> serveIndex res
-        "/healthz" -> serveHealthz db isSyncing res
-        "/proxy" -> serveProxy db isSyncing url res
-        "/cover" -> serveCover coverCacheEnabled isSyncing url res
-        "/stats" -> serveStats db isSyncing url res
         "/client.js" -> serveClientJs res
         "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
-        _ -> do
-          Log.warn $ "Path not found: " <> path
+        "/" -> serveIndex "" res
+        "/proxy" -> withUser url \ctx -> serveProxy ctx.conn ctx.isSyncing url res
+        "/stats" -> withUser url \ctx -> serveStats ctx.conn ctx.isSyncing url res
+        "/cover" -> withUser url \ctx -> serveCover ctx.config ctx.isSyncing url res
+        "/healthz" -> withUser url \ctx -> serveHealthz ctx.conn ctx.isSyncing res
+        _ -> case stripPrefix (Pattern "/~") path of
+          Just slug -> serveIndex slug res
+          Nothing -> do
+            Log.warn $ "Path not found: " <> path
+            serveNotFound res
+  where
+  withUser url f =
+    let
+      slug = fromMaybe "" (getQueryParam "user" url)
+    in
+      case find (\c -> c.slug == slug) contexts of
+        Nothing -> do
+          Log.warn $ "Unknown user: " <> show slug
           serveNotFound res
+        Just ctx -> f ctx
 
-serveIndex :: Response -> Effect Unit
-serveIndex res = do
+serveIndex :: String -> Response -> Effect Unit
+serveIndex slug res = do
   setHeader "Content-Type" "text/html" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   setStatusCode 200 res
   let w = toWriteable (toOutgoingMessage res)
-  void $ writeString w UTF8 indexHtml
+  void $ writeString w UTF8 (indexHtml slug)
   end w
 
 serveClientJs :: Response -> Effect Unit
@@ -831,52 +857,48 @@ sanitizeKey str =
   in
     replace re2 "_" (replace re1 "_" str)
 
-serveCover :: Boolean -> Ref Boolean -> URL -> Response -> Effect Unit
-serveCover coverCacheEnabled isSyncing url res = do
+serveCover :: UserConfig -> Ref Boolean -> URL -> Response -> Effect Unit
+serveCover cfg isSyncing url res = do
   launchAff_ do
     yieldToSync isSyncing
     let mbid = fromMaybe "" (getQueryParam "mbid" url)
     let artistStr = fromMaybe "" (getQueryParam "artist" url)
     let releaseStr = fromMaybe "" (getQueryParam "release" url)
-
-    -- Strategy:
-    -- 1. If MBID exists, try CAA (S3 first, then Fetch)
-    -- 2. If CAA fails or no MBID, try Last.fm (S3 first, then Fetch)
-    -- 3. If Last.fm fails, try Discogs (S3 first, then Fetch)
+    let s3cfg = s3ConfigFromUser cfg
 
     if mbid /= "" then do
       let safeMbid = sanitizeKey mbid
       let s3Key = "covers/caa/" <> safeMbid <> ".jpg"
-      cached <- checkS3 s3Key
+      cached <- checkS3 s3cfg s3Key
       if cached then do
         Log.info $ "Serving CAA cover from S3: " <> s3Key
-        serveS3 s3Key res
+        serveS3 s3cfg s3Key res
       else do
         Log.info $ "Fetching CAA cover: " <> mbid
         let caaUrl = "https://coverartarchive.org/release/" <> mbid <> "/front-250"
-        success <- tryProxyAndCache caaUrl s3Key res
+        success <- tryProxyAndCache s3cfg caaUrl s3Key res
         unless success $ do
           Log.info $ "CAA cover not found for " <> mbid <> ", falling back to Last.fm"
-          tryLastfm artistStr releaseStr res
+          tryLastfm s3cfg artistStr releaseStr res
     else do
       Log.info $ "No MBID provided, trying Last.fm for: " <> artistStr <> " - " <> releaseStr
-      tryLastfm artistStr releaseStr res
+      tryLastfm s3cfg artistStr releaseStr res
 
   where
-  checkS3 s3Key
-    | not coverCacheEnabled = pure false
+  checkS3 s3cfg s3Key
+    | not cfg.coverCacheEnabled = pure false
     | otherwise = do
-        result <- try $ existsInS3 s3Key
+        result <- try $ existsInS3 s3cfg s3Key
         pure $ case result of
           Right b -> b
           Left _ -> false
 
-  serveS3 s3Key response = liftEffect $ do
+  serveS3 s3cfg s3Key response = liftEffect $ do
     setStatusCode 302 response
-    setHeader "Location" (getS3Url s3Key) (toOutgoingMessage response)
+    setHeader "Location" (getS3Url s3cfg s3Key) (toOutgoingMessage response)
     end (toWriteable (toOutgoingMessage response))
 
-  tryProxyAndCache urlStr s3Key response = do
+  tryProxyAndCache s3cfg urlStr s3Key response = do
     fetchResult <- try $ fetch urlStr { method: GET }
     case fetchResult of
       Right fr | fr.status == 200 -> do
@@ -892,103 +914,98 @@ serveCover coverCacheEnabled isSyncing url res = do
           void $ write writer nativeBuf
           end writer
 
-        -- Cache to S3 in background
-        when coverCacheEnabled $ void $ forkAff $ do
-          uploadResult <- try $ uploadToS3 s3Key (unsafeCoerce buf) contentType
+        when cfg.coverCacheEnabled $ void $ forkAff $ do
+          uploadResult <- try $ uploadToS3 s3cfg s3Key (unsafeCoerce buf) contentType
           case uploadResult of
             Right _ -> Log.info $ "Cached to S3: " <> s3Key
             Left err -> Log.error $ "S3 upload failed: " <> Exception.message err
         pure true
       _ -> pure false
 
-  tryLastfm artist release response
+  tryLastfm s3cfg artist release response
     | artist == "" || release == "" = do
-        Log.warn $ "Missing artist or release for Last.fm fallback"
+        Log.warn "Missing artist or release for Last.fm fallback"
         liftEffect $ serveNotFound response
     | otherwise = do
         let safeArtist = sanitizeKey artist
         let safeRelease = sanitizeKey release
         let s3Key = "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
-        cached <- checkS3 s3Key
+        cached <- checkS3 s3cfg s3Key
         if cached then do
           Log.info $ "Serving Last.fm cover from S3: " <> s3Key
-          serveS3 s3Key response
-        else do
-          env <- liftEffect getEnv
-          case Object.lookup "LASTFM_API_KEY" env of
-            Nothing -> do
-              Log.warn "LASTFM_API_KEY missing, falling back to Discogs"
-              tryDiscogs artist release response
-            Just k -> do
-              let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json"
-              Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
-              result <- try $ fetch searchUrl { method: GET }
-              case result of
-                Right fetchRes | fetchRes.status == 200 -> do
-                  json <- fromJson fetchRes.json
-                  let
-                    coverUrl = do
-                      obj <- toObject json
-                      album <- Object.lookup "album" obj >>= toObject
-                      images <- Object.lookup "image" album >>= toArray
-                      imageObj <- images !! 2 >>= toObject
-                      u <- Object.lookup "#text" imageObj >>= toString
-                      if u == "" then Nothing else Just u
-                  case coverUrl of
-                    Just urlStr -> do
-                      Log.info $ "Found Last.fm cover: " <> urlStr
-                      success <- tryProxyAndCache urlStr s3Key response
-                      unless success $ do
-                        Log.info "Last.fm image proxy failed, falling back to Discogs"
-                        tryDiscogs artist release response
-                    Nothing -> do
-                      Log.info "No cover found on Last.fm, falling back to Discogs"
-                      tryDiscogs artist release response
-                _ -> do
-                  Log.info "Last.fm API request failed, falling back to Discogs"
-                  tryDiscogs artist release response
+          serveS3 s3cfg s3Key response
+        else case cfg.lastfmApiKey of
+          Nothing -> do
+            Log.warn "lastfmApiKey not configured, falling back to Discogs"
+            tryDiscogs s3cfg artist release response
+          Just k -> do
+            let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json"
+            Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
+            result <- try $ fetch searchUrl { method: GET }
+            case result of
+              Right fetchRes | fetchRes.status == 200 -> do
+                json <- fromJson fetchRes.json
+                let
+                  coverUrl = do
+                    obj <- toObject json
+                    album <- Object.lookup "album" obj >>= toObject
+                    images <- Object.lookup "image" album >>= toArray
+                    imageObj <- images !! 2 >>= toObject
+                    u <- Object.lookup "#text" imageObj >>= toString
+                    if u == "" then Nothing else Just u
+                case coverUrl of
+                  Just urlStr -> do
+                    Log.info $ "Found Last.fm cover: " <> urlStr
+                    success <- tryProxyAndCache s3cfg urlStr s3Key response
+                    unless success $ do
+                      Log.info "Last.fm image proxy failed, falling back to Discogs"
+                      tryDiscogs s3cfg artist release response
+                  Nothing -> do
+                    Log.info "No cover found on Last.fm, falling back to Discogs"
+                    tryDiscogs s3cfg artist release response
+              _ -> do
+                Log.info "Last.fm API request failed, falling back to Discogs"
+                tryDiscogs s3cfg artist release response
 
-  tryDiscogs artist release response = do
+  tryDiscogs s3cfg artist release response = do
     let safeArtist = sanitizeKey artist
     let safeRelease = sanitizeKey release
     let s3Key = "covers/discogs/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
-    cached <- checkS3 s3Key
+    cached <- checkS3 s3cfg s3Key
     if cached then do
       Log.info $ "Serving Discogs cover from S3: " <> s3Key
-      serveS3 s3Key response
-    else do
-      env <- liftEffect getEnv
-      case Object.lookup "DISCOGS_TOKEN" env of
-        Nothing -> do
-          Log.warn "DISCOGS_TOKEN missing, cannot fallback further"
-          liftEffect $ serveNotFound response
-        Just t -> do
-          let queryStr = artist <> " " <> release
-          let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
-          Log.info $ "Searching Discogs for: " <> queryStr
-          result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
-          case result of
-            Right fetchRes | fetchRes.status == 200 -> do
-              json <- fromJson fetchRes.json
-              let
-                coverUrl = do
-                  obj <- toObject json
-                  results <- Object.lookup "results" obj >>= toArray
-                  firstResult <- results !! 0 >>= toObject
-                  Object.lookup "cover_image" firstResult >>= toString
-              case coverUrl of
-                Just urlStr -> do
-                  Log.info $ "Found Discogs cover: " <> urlStr
-                  success <- tryProxyAndCache urlStr s3Key response
-                  unless success $ do
-                    Log.info "Discogs image proxy failed"
-                    liftEffect $ serveNotFound response
-                Nothing -> do
-                  Log.info "No cover found on Discogs"
+      serveS3 s3cfg s3Key response
+    else case cfg.discogsToken of
+      Nothing -> do
+        Log.warn "discogsToken not configured, cannot fallback further"
+        liftEffect $ serveNotFound response
+      Just t -> do
+        let queryStr = artist <> " " <> release
+        let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
+        Log.info $ "Searching Discogs for: " <> queryStr
+        result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
+        case result of
+          Right fetchRes | fetchRes.status == 200 -> do
+            json <- fromJson fetchRes.json
+            let
+              coverUrl = do
+                obj <- toObject json
+                results <- Object.lookup "results" obj >>= toArray
+                firstResult <- results !! 0 >>= toObject
+                Object.lookup "cover_image" firstResult >>= toString
+            case coverUrl of
+              Just urlStr -> do
+                Log.info $ "Found Discogs cover: " <> urlStr
+                success <- tryProxyAndCache s3cfg urlStr s3Key response
+                unless success $ do
+                  Log.info "Discogs image proxy failed"
                   liftEffect $ serveNotFound response
-            _ -> do
-              Log.info "Discogs API request failed"
-              liftEffect $ serveNotFound response
+              Nothing -> do
+                Log.info "No cover found on Discogs"
+                liftEffect $ serveNotFound response
+          _ -> do
+            Log.info "Discogs API request failed"
+            liftEffect $ serveNotFound response
 
 serveProxy :: Connection -> Ref Boolean -> URL -> Response -> Effect Unit
 serveProxy db isSyncing url res = do
@@ -1115,7 +1132,6 @@ fetchMusicBrainzRelease mbid = do
                 Nothing -> Nothing
           Log.info $ "Enriched " <> mbid <> ": genre=" <> show genre <> " label=" <> show label <> " year=" <> show year
 
-          -- Warn if all fields are empty
           when (genre == Nothing && label == Nothing && year == Nothing)
             $ Log.warn
             $ "All fields empty for " <> mbid <> " - possible parsing issue or missing data"
@@ -1128,79 +1144,74 @@ fetchMusicBrainzRelease mbid = do
       Log.warn $ "MusicBrainz " <> show fr.status <> " for " <> mbid <> ", will retry"
       pure Nothing
 
-fetchLastfmGenre :: String -> String -> Aff (Maybe String)
-fetchLastfmGenre artist release = do
-  env <- liftEffect getEnv
-  case Object.lookup "LASTFM_API_KEY" env of
-    Nothing -> do
-      Log.warn "LASTFM_API_KEY missing for genre fallback"
-      pure Nothing
-    Just k -> do
-      let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json"
-      Log.info $ "Fetching Last.fm genre for: " <> artist <> " - " <> release
-      result <- try $ fetch searchUrl { method: GET }
-      case result of
-        Right fetchRes | fetchRes.status == 200 -> do
-          jsonResult <- try $ fromJson fetchRes.json
-          case jsonResult of
-            Left err -> do
-              Log.error $ "Last.fm genre JSON error: " <> Exception.message err
-              pure Nothing
-            Right json -> do
-              let
-                genre = do
-                  obj <- toObject json
-                  album <- Object.lookup "album" obj >>= toObject
-                  tags <- Object.lookup "tags" album >>= toObject
-                  tagArray <- Object.lookup "tag" tags >>= toArray
-                  firstTag <- tagArray !! 0 >>= toObject
-                  Object.lookup "name" firstTag >>= toString
-              pure genre
-        _ -> do
-          Log.warn "Last.fm genre API request failed"
+-- Explicit apiKey parameter — no env read.
+fetchLastfmGenre :: Maybe String -> String -> String -> Aff (Maybe String)
+fetchLastfmGenre Nothing _ _ = do
+  Log.warn "lastfmApiKey not configured for genre fallback"
+  pure Nothing
+fetchLastfmGenre (Just k) artist release = do
+  let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json"
+  Log.info $ "Fetching Last.fm genre for: " <> artist <> " - " <> release
+  result <- try $ fetch searchUrl { method: GET }
+  case result of
+    Right fetchRes | fetchRes.status == 200 -> do
+      jsonResult <- try $ fromJson fetchRes.json
+      case jsonResult of
+        Left err -> do
+          Log.error $ "Last.fm genre JSON error: " <> Exception.message err
           pure Nothing
+        Right json -> do
+          let
+            genre = do
+              obj <- toObject json
+              album <- Object.lookup "album" obj >>= toObject
+              tags <- Object.lookup "tags" album >>= toObject
+              tagArray <- Object.lookup "tag" tags >>= toArray
+              firstTag <- tagArray !! 0 >>= toObject
+              Object.lookup "name" firstTag >>= toString
+          pure genre
+    _ -> do
+      Log.warn "Last.fm genre API request failed"
+      pure Nothing
 
-fetchDiscogsGenre :: String -> String -> Aff (Maybe String)
-fetchDiscogsGenre artist release = do
-  env <- liftEffect getEnv
-  case Object.lookup "DISCOGS_TOKEN" env of
-    Nothing -> do
-      Log.warn "DISCOGS_TOKEN missing for genre fallback"
-      pure Nothing
-    Just t -> do
-      let queryStr = artist <> " " <> release
-      let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
-      Log.info $ "Fetching Discogs genre for: " <> queryStr
-      result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
-      case result of
-        Right fetchRes | fetchRes.status == 200 -> do
-          jsonResult <- try $ fromJson fetchRes.json
-          case jsonResult of
-            Left err -> do
-              Log.error $ "Discogs genre JSON error: " <> Exception.message err
-              pure Nothing
-            Right json -> do
-              let
-                genre = do
-                  obj <- toObject json
-                  results <- Object.lookup "results" obj >>= toArray
-                  firstResult <- results !! 0 >>= toObject
-                  genres <- Object.lookup "genres" firstResult >>= toArray
-                  genres !! 0 >>= toString
-              pure genre
-        _ -> do
-          Log.warn "Discogs genre API request failed"
+-- Explicit token parameter — no env read.
+fetchDiscogsGenre :: Maybe String -> String -> String -> Aff (Maybe String)
+fetchDiscogsGenre Nothing _ _ = do
+  Log.warn "discogsToken not configured for genre fallback"
+  pure Nothing
+fetchDiscogsGenre (Just t) artist release = do
+  let queryStr = artist <> " " <> release
+  let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
+  Log.info $ "Fetching Discogs genre for: " <> queryStr
+  result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
+  case result of
+    Right fetchRes | fetchRes.status == 200 -> do
+      jsonResult <- try $ fromJson fetchRes.json
+      case jsonResult of
+        Left err -> do
+          Log.error $ "Discogs genre JSON error: " <> Exception.message err
           pure Nothing
+        Right json -> do
+          let
+            genre = do
+              obj <- toObject json
+              results <- Object.lookup "results" obj >>= toArray
+              firstResult <- results !! 0 >>= toObject
+              genres <- Object.lookup "genres" firstResult >>= toArray
+              genres !! 0 >>= toString
+          pure genre
+    _ -> do
+      Log.warn "Discogs genre API request failed"
+      pure Nothing
 
 yieldToSync :: Ref Boolean -> Aff Unit
 yieldToSync isSyncing = do
   syncing <- liftEffect $ Ref.read isSyncing
   when syncing $ delay (Milliseconds 200.0) *> yieldToSync isSyncing
 
-enrichMetadata :: Connection -> Ref Boolean -> Aff Unit
-enrichMetadata conn isSyncing = forever do
+enrichMetadata :: Connection -> Ref Boolean -> UserConfig -> Aff Unit
+enrichMetadata conn isSyncing cfg = forever do
   yieldToSync isSyncing
-  -- Get both unenriched and empty genre MBIDs
   unenrichedMbids <- getUnenrichedMbids conn 10
   emptyGenreMbids <- getEmptyGenreMbids conn 10
   let allMbids = unenrichedMbids <> emptyGenreMbids
@@ -1217,20 +1228,15 @@ enrichMetadata conn isSyncing = forever do
         Left err -> Log.error $ "Enrichment error: " <> Exception.message err
         Right Nothing -> pure unit
         Right (Just mbdata) -> do
-          -- If genre is empty, try fallback sources
           if mbdata.genre == Nothing then do
             artistRelease <- getArtistReleaseByMbid conn mbid
             case artistRelease of
               Just { artist, release } -> do
-                -- Try Last.fm first
-                lastfmGenre <- fetchLastfmGenre artist release
+                lastfmGenre <- fetchLastfmGenre cfg.lastfmApiKey artist release
                 finalGenre <- case lastfmGenre of
                   Just _ -> pure lastfmGenre
-                  Nothing -> do
-                    -- Try Discogs as final fallback
-                    fetchDiscogsGenre artist release
+                  Nothing -> fetchDiscogsGenre cfg.discogsToken artist release
 
-                -- Update with the best genre we found
                 let finalMbdata = mbdata { genre = finalGenre }
                 upsertReleaseMetadata conn mbid finalMbdata.genre finalMbdata.label finalMbdata.year
 
@@ -1244,71 +1250,65 @@ enrichMetadata conn isSyncing = forever do
                 upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
                 touchGenreCheckedAt conn mbid
           else do
-            -- Genre found in MusicBrainz, just save as usual
             upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
 
-startServer :: Int -> String -> String -> Boolean -> Number -> Boolean -> Boolean -> Effect Unit
-startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnabled initialSyncEnabled = launchAff_ do
-  conn <- connect dbFile
+-- Initialise one user: connect DB, start sync loops, return a UserContext.
+startUser :: UserEntry -> Aff UserContext
+startUser { slug, config } = do
+  Log.info $ "Starting user: " <> if slug == "" then "(root)" else slug
+  conn <- connect config.databaseFile
   initDb conn
   initReleaseMetadata conn
   isSyncing <- liftEffect $ Ref.new false
-  env <- liftEffect getEnv
-  let
-    lfmUser = getEnvStr env "LASTFM_USER" ""
-    lfmApiKey = getEnvStr env "LASTFM_API_KEY" ""
-    lbEnabled = username /= ""
-    lfEnabled = lfmUser /= "" && lfmApiKey /= ""
-  when (lfmUser /= "" && not lfEnabled) $
-    Log.warn "LASTFM_USER is set but LASTFM_API_KEY is missing — Last.fm syncing disabled"
-  -- Fork initial syncs in parallel; both run concurrently
-  lbFiber <- if lbEnabled then Just <$> forkAff (lbSyncOnce conn username isSyncing initialSyncEnabled) else pure Nothing
-  lfFiber <- if lfEnabled then Just <$> forkAff (lfSyncOnce conn lfmApiKey lfmUser isSyncing initialSyncEnabled) else pure Nothing
-  -- Block until both initial syncs have fully paginated through history
+
+  case config.lastfmUser, config.lastfmApiKey of
+    Just _, Nothing -> Log.warn $ "lastfmUser set for user '" <> slug <> "' but lastfmApiKey is missing — Last.fm sync disabled"
+    _, _ -> pure unit
+
+  -- Run initial syncs in parallel, then join before starting loops.
+  lbFiber <- case config.listenbrainzUser of
+    Just username -> Just <$> forkAff (lbSyncOnce conn username isSyncing config.initialSync)
+    Nothing -> pure Nothing
+  lfFiber <- case config.lastfmUser, config.lastfmApiKey of
+    Just lfmUser, Just apiKey -> Just <$> forkAff (lfSyncOnce conn apiKey lfmUser isSyncing config.initialSync)
+    _, _ -> pure Nothing
   for_ lbFiber joinFiber
   for_ lfFiber joinFiber
-  -- Only now start enrichment and the recurring sync loops
-  void $ forkAff $ enrichMetadata conn isSyncing
-  when lbEnabled $ void $ forkAff $ lbSyncLoop conn username isSyncing initialSyncEnabled
-  when lfEnabled $ void $ forkAff $ lfSyncLoop conn lfmApiKey lfmUser isSyncing initialSyncEnabled
-  when backupEnabled $ void $ forkAff $ backupDb conn dbFile backupIntervalMs
 
-  liftEffect $ do
-    server <- createServer
-    server # on_ Server.requestH (handleRequest conn isSyncing coverCacheEnabled)
-    let netServer = Server.toNetServer server
+  -- Background loops
+  void $ forkAff $ enrichMetadata conn isSyncing config
+  for_ config.listenbrainzUser \username ->
+    void $ forkAff $ lbSyncLoop conn username isSyncing config.initialSync
+  case config.lastfmUser, config.lastfmApiKey of
+    Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser isSyncing config.initialSync
+    _, _ -> pure unit
+  when config.backupEnabled $ void $ forkAff $
+    backupDb conn config.databaseFile (s3ConfigFromUser config)
+      (toNumber config.backupIntervalHours * 3600000.0)
 
-    netServer # on_ listeningH do
-      Log.info $ "Server is running on port " <> show port
-
-    listenTcp netServer { host: "127.0.0.1", port, backlog: 128 }
+  pure { conn, isSyncing, config, slug }
 
 foreign import dotenvConfig :: Effect Unit
-
-getEnvStr :: Object.Object String -> String -> String -> String
-getEnvStr env key def = fromMaybe def (Object.lookup key env)
-
-getEnvInt :: Object.Object String -> String -> Int -> Int
-getEnvInt env key def = fromMaybe def (Object.lookup key env >>= fromString)
-
-getEnvBool :: Object.Object String -> String -> Boolean -> Boolean
-getEnvBool env key def = case Object.lookup key env of
-  Just "true" -> true
-  Just "false" -> false
-  _ -> def
 
 main :: Effect Unit
 main = do
   dotenvConfig
-  env <- getEnv
-  let
-    port = getEnvInt env "PORT" 8000
-    dbFile = getEnvStr env "DATABASE_FILE" "corpus.db"
-    username = getEnvStr env "LISTENBRAINZ_USER" ""
-    backupEnabled = getEnvBool env "BACKUP_ENABLED" false
-    backupIntervalHours = getEnvInt env "BACKUP_INTERVAL_HOURS" 1
-    backupIntervalMs = toNumber backupIntervalHours * 3600000.0
-    coverCacheEnabled = getEnvBool env "COVER_CACHE_ENABLED" true
-    initialSyncEnabled = getEnvBool env "INITIAL_SYNC" false
+  launchAff_ do
+    configFile <- liftEffect $ map (fromMaybe "users.json") $ lookupEnv "CORPUS_CONFIG_FILE"
+    result <- try $ loadConfig configFile
+    case result of
+      Left err -> do
+        Log.error $ "Failed to load " <> configFile <> ": " <> Exception.message err
+        liftEffect $ Exception.throwException err
+      Right (appConfig :: AppConfig) -> do
+        Log.info $ "Loaded " <> show (length appConfig.users) <> " user(s) from users.dhall"
+        contexts <- traverse startUser appConfig.users
+        liftEffect $ do
+          server <- createServer
+          server # on_ Server.requestH (handleRequest contexts)
+          let netServer = Server.toNetServer server
 
-  startServer port dbFile username backupEnabled backupIntervalMs coverCacheEnabled initialSyncEnabled
+          netServer # on_ listeningH do
+            Log.info $ "Server is running on port " <> show appConfig.port
+
+          listenTcp netServer { host: "127.0.0.1", port: appConfig.port, backlog: 128 }

@@ -8,6 +8,7 @@ setup:
 
 # Build the project locally
 build:
+    dhall-to-json --file users.dhall > users.json
     npm run build
 
 # Run the project locally
