@@ -2,8 +2,7 @@ package:
   name: corpus
   dependencies:
     - aff
-    - affjax
-    - affjax-web
+    - aff-retry
     - argonaut
     - argonaut-core
     - arrays
@@ -16,7 +15,6 @@ package:
     - fetch-argonaut
     - foreign-object
     - formatters
-    - halogen
     - http-methods
     - integers
     - js-uri
@@ -31,14 +29,10 @@ package:
     - node-streams
     - node-url
     - now
-    - ordered-collections
-    - aff-retry
     - prelude
     - strings
     - tailrec
     - unsafe-coerce
-    - web-dom
-    - web-html
     - web-url
   test:
     main: Test.Main
@@ -55,5 +49,5 @@ package:
       - node-process
 workspace:
   packageSet:
-    registry: 75.9.0
+    registry: 76.0.0
   extraPackages: {}

@@ -760,6 +760,15 @@ indexHtml =
 <body>
     <div id="app"></div>
     <script src="/client.js"></script>
+    <script>
+        var app = Elm.Client.init({
+            node: document.getElementById('app'),
+            flags: window.location.search
+        });
+        app.ports.pushUrl.subscribe(function(url) {
+            history.pushState({}, '', url);
+        });
+    </script>
 </body>
 </html>"""
 

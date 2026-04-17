@@ -1,15 +1,16 @@
 {
 	"name": "corpus",
 	"version": "1.0.0",
-	"description": "ListenBrainz frontend in PureScript",
+	"description": "ListenBrainz scrobble viewer",
 	"main": "index.js",
 	"type": "module",
 	"scripts": {
-		"build": "npx spago build && npx esbuild output/Main/index.js --bundle --platform=node --format=esm --footer:js='main();' --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3 && npx spago bundle --module Client --outfile client.js --platform browser",
+		"build": "npx spago build && npx esbuild output/Main/index.js --bundle --platform=node --format=esm --footer:js='main();' --outfile=server.js --external:http --external:https --external:dotenv --external:url --external:duckdb --external:@aws-sdk/client-s3 && elm make src/Client.elm --output=client.js",
 		"test": "npx spago test",
 		"tidy": "purs-tidy format-in-place src/**/*.purs"
 	},
 	"devDependencies": {
+		"elm": "^0.19.1",
 		"esbuild": "^0.28.0",
 		"purescript": "^0.15.16",
 		"purescript-language-server": "^0.18.0",
