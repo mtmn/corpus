@@ -6,7 +6,7 @@ import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Exception (error)
-import Node.HTTP.Types (ServerResponse)
+import Node.HTTP.Types (IMServer, IncomingMessage, ServerResponse)
 
 -- | Async: serialises all registered metrics to Prometheus text format.
 foreign import getMetricsImpl :: (String -> Effect Unit) -> (String -> Effect Unit) -> Effect Unit
@@ -15,10 +15,11 @@ foreign import getMetricsImpl :: (String -> Effect Unit) -> (String -> Effect Un
 foreign import getContentType :: Effect String
 
 -- | Attaches a 'finish' listener to `res` so that, once the response is
--- | fully written, the request count and latency histogram are updated,
--- | and the provided log function is called with "METHOD path status Nms".
+-- | fully written, the request count, latency histogram, and OTEL span are
+-- | updated, and logFn is called with "METHOD path status Nms".
+-- | W3C trace-context headers are extracted from `req` for span parenting.
 -- | Call once at the top of the request handler before routing.
-foreign import observeHttpRequest :: String -> String -> (String -> Effect Unit) -> ServerResponse -> Effect Unit
+foreign import observeHttpRequest :: String -> String -> (String -> Effect Unit) -> IncomingMessage IMServer -> ServerResponse -> Effect Unit
 
 -- Sync
 foreign import incSyncRuns :: String -> String -> String -> Effect Unit

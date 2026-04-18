@@ -5,6 +5,19 @@ import {
 	Histogram,
 	collectDefaultMetrics,
 } from "prom-client";
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import {
+	trace,
+	context,
+	propagation,
+	SpanKind,
+	SpanStatusCode,
+} from "@opentelemetry/api";
+
+// ---------------------------------------------------------------------------
+// Prometheus metrics
+// ---------------------------------------------------------------------------
 
 const registry = new Registry();
 
@@ -81,6 +94,53 @@ const dbBackupLastSuccessSeconds = new Gauge({
 	registers: [registry],
 });
 
+// ---------------------------------------------------------------------------
+// OpenTelemetry — only active when OTEL_EXPORTER_OTLP_ENDPOINT is set
+// ---------------------------------------------------------------------------
+
+let tracer = null;
+
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+	const sdk = new NodeSDK({
+		traceExporter: new OTLPTraceExporter(),
+	});
+	sdk.start();
+	tracer = trace.getTracer(
+		process.env.OTEL_SERVICE_NAME || "corpus",
+		process.env.npm_package_version,
+	);
+	process.on("SIGTERM", () => sdk.shutdown().finally(() => process.exit(0)));
+}
+
+function startHttpSpan(method, path, headers) {
+	if (!tracer) return null;
+	const parentCtx = propagation.extract(context.active(), headers);
+	return tracer.startSpan(
+		`${method} ${path}`,
+		{
+			kind: SpanKind.SERVER,
+			attributes: {
+				"http.method": method,
+				"http.target": path,
+			},
+		},
+		parentCtx,
+	);
+}
+
+function endHttpSpan(span, statusCode) {
+	if (!span) return;
+	span.setAttribute("http.status_code", statusCode);
+	span.setStatus({
+		code: statusCode >= 500 ? SpanStatusCode.ERROR : SpanStatusCode.OK,
+	});
+	span.end();
+}
+
+// ---------------------------------------------------------------------------
+// Exports
+// ---------------------------------------------------------------------------
+
 export const getMetricsImpl = (onSuccess) => (onError) => () => {
 	registry.metrics().then(
 		(s) => onSuccess(s)(),
@@ -90,18 +150,21 @@ export const getMetricsImpl = (onSuccess) => (onError) => () => {
 
 export const getContentType = () => registry.contentType;
 
-// Attaches a 'finish' listener to the response to record latency and status
-// after the response is fully written. Safe to call before routing.
-// logFn: (String -> Effect Unit) — the structured logger to call on completion.
+// Attaches a 'finish' listener to `res` so that, once the response is fully
+// written, the request count, latency histogram, and OTEL span are updated.
+// logFn: String -> Effect Unit — the structured logger to call on completion.
+// req: Node IncomingMessage — used to extract W3C trace-context headers.
 export const observeHttpRequest =
-	(method) => (path) => (logFn) => (res) => () => {
+	(method) => (path) => (logFn) => (req) => (res) => () => {
 		const startMs = Date.now();
+		const span = startHttpSpan(method, path, req.headers || {});
 		res.once("finish", () => {
 			const durationMs = Date.now() - startMs;
 			const durationSecs = durationMs / 1000;
-			const status = String(res.statusCode || 0);
-			httpRequestsTotal.inc({ method, path, status });
+			const status = res.statusCode || 0;
+			httpRequestsTotal.inc({ method, path, status: String(status) });
 			httpRequestDurationSeconds.observe({ method, path }, durationSecs);
+			endHttpSpan(span, status);
 			logFn(`${method} ${path} ${status} ${durationMs}ms`)();
 		});
 	};
