@@ -131,7 +131,7 @@
           version = "1.0.0";
           inherit src;
 
-          npmDepsHash = "sha256-yx8mCRd7moAAwVb7uu8U/xhkIsS8JYawonhGmkTUywU=";
+          npmDepsHash = "sha256-r9omGeMcGZUkAhXz4ZdZSn2ZOhhJ9Oo3za7iqyZXbqY=";
           npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [
