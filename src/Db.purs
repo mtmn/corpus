@@ -20,7 +20,7 @@ import Unsafe.Coerce (unsafeCoerce)
 import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEntry(..))
 import Foreign.Object as Object
 import Data.Nullable (Nullable, toMaybe, toNullable)
-import Data.Array (mapMaybe, uncons, (!!), last, length, replicate)
+import Data.Array (mapMaybe, (!!), last, length, null, replicate)
 import Data.Foldable (for_)
 import Data.String.Common (joinWith)
 import Data.Tuple (Tuple(..))
@@ -46,7 +46,8 @@ connect :: String -> Aff Connection
 connect path = makeAff \cb -> do
   connectImpl path \err conn ->
     case toMaybe err of
-      Just e -> cb (Left e)
+      Just e ->
+        cb (Left e)
       Nothing -> case toMaybe conn of
         Just c -> cb (Right c)
         Nothing -> cb (Left $ error "Failed to create connection")
@@ -99,7 +100,8 @@ backupDb conn dbFile s3cfg intervalMs slug = forever do
     Left err -> do
       Log.error $ "Backup failed: " <> message err
       liftEffect $ Metrics.incDbBackupRun slug "error"
-    Right _ -> pure unit
+    Right _ ->
+      pure unit
 
 -- Acquires the write lock, runs the action inside a transaction, then releases.
 -- The lock is always released: on success, on action failure (rollback), and on
@@ -288,7 +290,7 @@ rowToEntry json = do
   pure $ StatsEntry { name, count }
 
 getArtistReleasesByMbids :: Connection -> Array String -> Aff (Object.Object { artist :: String, release :: String })
-getArtistReleasesByMbids _ mbids | length mbids == 0 = pure Object.empty
+getArtistReleasesByMbids _ mbids | null mbids = pure Object.empty
 getArtistReleasesByMbids conn mbids = do
   let placeholders = joinWith "," (replicate (length mbids) "?")
   rows <- queryAll conn
@@ -306,19 +308,6 @@ getArtistReleasesByMbids conn mbids = do
     artist <- Object.lookup "artist_name" obj >>= toString
     release <- Object.lookup "release_name" obj >>= toString
     pure $ Tuple mbid { artist, release }
-
-getArtistReleaseByMbid :: Connection -> String -> Aff (Maybe { artist :: String, release :: String })
-getArtistReleaseByMbid conn mbid = do
-  rows <- queryAll conn
-    "SELECT DISTINCT artist_name, release_name FROM scrobbles WHERE release_mbid = ? AND artist_name != '' AND release_name != '' LIMIT 1"
-    [ unsafeCoerce mbid ]
-  pure $ case uncons rows of
-    Just { head: row, tail: _ } -> do
-      obj <- toObject row
-      artist <- Object.lookup "artist_name" obj >>= toString
-      release <- Object.lookup "release_name" obj >>= toString
-      Just { artist, release }
-    Nothing -> Nothing
 
 rowToListen :: Json -> Maybe Listen
 rowToListen json = do

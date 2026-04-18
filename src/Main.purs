@@ -36,7 +36,7 @@ import JSURI (encodeURIComponent)
 import Foreign.Object as Object
 import Data.Argonaut (decodeJson, encodeJson, parseJson)
 import Data.Argonaut.Core (Json, toObject, toArray, toString, stringify)
-import Data.Array ((!!), length, uncons, mapMaybe, find)
+import Data.Array ((!!), length, null, mapMaybe, find)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_, foldM)
 import Data.Traversable (traverse)
@@ -79,7 +79,8 @@ fetchListenBrainzUrl url = withRetry "ListenBrainz fetch" $ makeAff \callback ->
     launchAff_ do
       result <- try $ readableToStringUtf8 (IM.toReadable res)
       liftEffect $ case result of
-        Left err -> callback (Left err)
+        Left err ->
+          callback (Left err)
         Right body ->
           if IM.statusCode res == 200 then
             callback (Right body)
@@ -180,8 +181,8 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
             when (added > 0 || initialSyncEnabled)
               $ Log.info
               $ "ListenBrainz batch: added " <> show added <> ", " <> show hitCount <> " already present."
-            let allExist = hitCount == length listens && length listens > 0
-            if allExist || length listens == 0 || not initialSyncEnabled then do
+            let allExist = hitCount == length listens && not (null listens)
+            if allExist || null listens || not initialSyncEnabled then do
               when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
               recordSuccess added
             else do
@@ -193,7 +194,8 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
         liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
 
   paginateUntilDone batchNum minTs acc = case minTs of
-    Nothing -> pure acc
+    Nothing ->
+      pure acc
     Just ts -> do
       Log.info $ "Fetching ListenBrainz batch " <> show batchNum <> " (before " <> show ts <> ")..."
       result <- try $ fetchListenBrainzUrl (listenBrainzUrl username <> "?count=100&max_ts=" <> show ts)
@@ -206,8 +208,8 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
             Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
               Tuple added (Tuple newMinTs hitCount) <- withTransaction conn writeLock (processListens listens)
               Log.info $ "ListenBrainz batch " <> show batchNum <> ": added " <> show added <> ", " <> show hitCount <> " already present."
-              let allExist = hitCount == length listens && length listens > 0
-              if allExist || length listens == 0 then do
+              let allExist = hitCount == length listens && not (null listens)
+              if allExist || null listens then do
                 pure (acc + added)
               else do
                 paginateUntilDone (batchNum + 1) newMinTs (acc + added)
@@ -253,7 +255,7 @@ lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
       $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
     let
       validTracks = mapMaybe lastfmTrackToListen tracks
-      allExist = hitCount == length validTracks && length validTracks > 0
+      allExist = hitCount == length validTracks && not (null validTracks)
     if allExist || totalPages <= 1 || not initialSyncEnabled then do
       when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
       recordSuccess added
@@ -271,26 +273,23 @@ lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
         Log.info $ "Last.fm page " <> show page <> "/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
         let
           validTracks = mapMaybe lastfmTrackToListen tracks
-          allExist = hitCount == length validTracks && length validTracks > 0
-        if allExist || length tracks == 0 then pure (acc + added)
+          allExist = hitCount == length validTracks && not (null validTracks)
+        if allExist || null tracks then pure (acc + added)
         else paginateLastfmUntilDone (page + 1) totalPages mTo (acc + added)
 
   performLastfmBackfill = do
     mOldest <- getOldestTs conn
-    case mOldest of
-      Nothing -> pure unit
-      Just oldestTs -> do
-        when initialSyncEnabled $ Log.info $ "Checking for Last.fm history before " <> show oldestTs <> "..."
-        { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1 (Just (oldestTs - 1))
-        if length tracks == 0 then do
-          when initialSyncEnabled $ Log.info "No older Last.fm history found."
-          pure unit
-        else do
-          Log.info $ "Backfilling " <> show totalPages <> " pages of Last.fm history before " <> show oldestTs
-          Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
-          Log.info $ "Last.fm backfill page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
-          total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
-          Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
+    for_ mOldest \oldestTs -> do
+      when initialSyncEnabled $ Log.info $ "Checking for Last.fm history before " <> show oldestTs <> "..."
+      { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1 (Just (oldestTs - 1))
+      if null tracks then
+        when initialSyncEnabled $ Log.info "No older Last.fm history found."
+      else do
+        Log.info $ "Backfilling " <> show totalPages <> " pages of Last.fm history before " <> show oldestTs
+        Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
+        Log.info $ "Last.fm backfill page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+        total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
+        Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
 
   recordSuccess n = do
     liftEffect $ Metrics.incSyncRuns slug "lastfm" "success"
@@ -327,28 +326,38 @@ handleRequest metricsEnabled contexts req res = do
   let method = IM.method req
   let rawUrl = IM.url req
   case URL.fromRelative rawUrl "http://localhost" of
-    Nothing -> serveNotFound res
+    Nothing ->
+      serveNotFound res
     Just url -> do
       let path = URL.pathname url
       Metrics.wrapRequest method (normalizePath path) Log.info req res do
         case path of
-          "/client.js" -> serveClientJs res
-          "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
-          "/" -> serveIndex "" res
+          "/client.js" ->
+            serveClientJs res
+          "/favicon.png" ->
+            serveAsset "image/png" "assets/favicon.png" res
+          "/" ->
+            serveIndex "" res
           "/metrics" ->
             if metricsEnabled then serveMetrics res
             else do
               Log.warn "Path not found: /metrics"
               serveNotFound res
-          "/proxy" -> withUser url \ctx -> serveProxy ctx.conn url res
-          "/stats" -> withUser url \ctx -> serveStats ctx.conn url res
-          "/cover" -> withUser url \ctx -> serveCover ctx.config ctx.slug url res
-          "/healthz" -> withUser url \ctx -> serveHealthz ctx.conn res
-          _ -> case stripPrefix (Pattern "/~") path of
-            Just slug -> serveIndex slug res
-            Nothing -> do
-              Log.warn $ "Path not found: " <> path
-              serveNotFound res
+          "/proxy" ->
+            withUser url \ctx -> serveProxy ctx.conn url res
+          "/stats" ->
+            withUser url \ctx -> serveStats ctx.conn url res
+          "/cover" ->
+            withUser url \ctx -> serveCover ctx.config ctx.slug url res
+          "/healthz" ->
+            withUser url \ctx -> serveHealthz ctx.conn res
+          _ ->
+            case stripPrefix (Pattern "/~") path of
+              Just slug ->
+                serveIndex slug res
+              Nothing -> do
+                Log.warn $ "Path not found: " <> path
+                serveNotFound res
   where
   withUser url f =
     let
@@ -358,7 +367,8 @@ handleRequest metricsEnabled contexts req res = do
         Nothing -> do
           Log.warn $ "Unknown user: " <> show slug
           serveNotFound res
-        Just ctx -> f ctx
+        Just ctx ->
+          f ctx
 
 serveIndex :: String -> Response -> Effect Unit
 serveIndex slug res = do
@@ -414,7 +424,8 @@ sanitizeKey = replace re1 "_" >>> replace re2 "_"
 -- Fetch the Last.fm image URL for an artist/release (no caching, no serving).
 fetchLastfmCoverUrl :: UserConfig -> String -> String -> Aff (Maybe String)
 fetchLastfmCoverUrl cfg artist release = case cfg.lastfmApiKey of
-  Nothing -> pure Nothing
+  Nothing ->
+    pure Nothing
   Just k -> do
     let
       searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&artist="
@@ -435,12 +446,14 @@ fetchLastfmCoverUrl cfg artist release = case cfg.lastfmApiKey of
           imgObj <- images !! 2 >>= toObject
           u <- Object.lookup "#text" imgObj >>= toString
           if u == "" then Nothing else Just u
-      _ -> pure Nothing
+      _ ->
+        pure Nothing
 
 -- Fetch the Discogs image URL for an artist/release (no caching, no serving).
 fetchDiscogsCoverUrl :: UserConfig -> String -> String -> Aff (Maybe String)
 fetchDiscogsCoverUrl cfg artist release = case cfg.discogsToken of
-  Nothing -> pure Nothing
+  Nothing ->
+    pure Nothing
   Just t -> do
     let
       queryStr = artist <> " " <> release
@@ -457,7 +470,8 @@ fetchDiscogsCoverUrl cfg artist release = case cfg.discogsToken of
           results <- Object.lookup "results" obj >>= toArray
           firstResult <- results !! 0 >>= toObject
           Object.lookup "cover_image" firstResult >>= toString
-      _ -> pure Nothing
+      _ ->
+        pure Nothing
 
 type CoverSource =
   { name :: String
@@ -514,7 +528,8 @@ serveCover cfg slug url res = launchAff_ do
     else do
       mUrl <- findUrl
       case mUrl of
-        Nothing -> pure false
+        Nothing ->
+          pure false
         Just urlStr -> do
           success <- tryProxyAndCache s3cfg urlStr s3Key res
           liftEffect $
@@ -556,7 +571,8 @@ serveCover cfg slug url res = launchAff_ do
             Right _ -> Log.info $ "Cached to S3: " <> s3Key
             Left err -> Log.error $ "S3 upload failed: " <> Exception.message err
         pure true
-      _ -> pure false
+      _ ->
+        pure false
 
 serveProxy :: Connection -> URL -> Response -> Effect Unit
 serveProxy db url res = do
@@ -592,7 +608,8 @@ serveAsset contentType path res = do
         let w = toWriteable (toOutgoingMessage res)
         void $ write w buf
         end w
-      Left _ -> serveNotFound res
+      Left _ ->
+        serveNotFound res
 
 serveHealthz :: Connection -> Response -> Effect Unit
 serveHealthz db res = do
@@ -668,9 +685,7 @@ fetchMusicBrainzRelease mbid = do
               obj <- toObject json
               rg <- Object.lookup "release-group" obj >>= toObject
               dateStr <- Object.lookup "first-release-date" rg >>= toString
-              case uncons (String.split (Pattern "-") dateStr) of
-                Just { head } -> fromString head
-                Nothing -> Nothing
+              String.split (Pattern "-") dateStr !! 0 >>= fromString
           Log.info $ "Enriched " <> mbid <> ": genre=" <> show genre <> " label=" <> show label <> " year=" <> show year
 
           when (genre == Nothing && label == Nothing && year == Nothing)
@@ -808,7 +823,8 @@ enrichMetadata conn cfg slug = forever do
                   finalGenre <- fetchFallbackGenre slug sources
                   upsertReleaseMetadata conn mbid finalGenre mbdata.label mbdata.year
                   case finalGenre of
-                    Just genre -> Log.info $ "Added fallback genre for " <> mbid <> ": " <> genre
+                    Just genre ->
+                      Log.info $ "Added fallback genre for " <> mbid <> ": " <> genre
                     Nothing -> do
                       Log.info $ "No genre found in any source for " <> mbid
                       touchGenreCheckedAt conn mbid

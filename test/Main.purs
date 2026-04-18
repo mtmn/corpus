@@ -178,7 +178,8 @@ main = runSpecAndExitProcess [consoleReporter] do
             }
           """
           case lastfmTrackToListen j of
-            Nothing -> fail "Expected Just Listen, got Nothing"
+            Nothing ->
+              fail "Expected Just Listen, got Nothing"
             Just (Listen { listenedAt, trackMetadata: TrackMetadata m }) -> do
               listenedAt `shouldEqual` Just 1600000000
               m.trackName `shouldEqual` Just "Test Track"
@@ -196,7 +197,8 @@ main = runSpecAndExitProcess [consoleReporter] do
             }
           """
           case lastfmTrackToListen j of
-            Nothing -> fail "Expected Just Listen, got Nothing"
+            Nothing ->
+              fail "Expected Just Listen, got Nothing"
             Just (Listen { trackMetadata: TrackMetadata m }) ->
               m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Nothing, caaReleaseMbid: Nothing })
 
@@ -242,7 +244,8 @@ main = runSpecAndExitProcess [consoleReporter] do
             }
           """
           case lastfmTrackToListen j of
-            Nothing -> fail "Expected Just Listen, got Nothing"
+            Nothing ->
+              fail "Expected Just Listen, got Nothing"
             Just (Listen { trackMetadata: TrackMetadata m }) ->
               m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Just "mbid-xyz", caaReleaseMbid: Just "mbid-xyz" })
 
@@ -259,7 +262,8 @@ main = runSpecAndExitProcess [consoleReporter] do
             }
           """
           case lastfmTrackToListen j of
-            Nothing -> fail "lastfmTrackToListen returned Nothing"
+            Nothing ->
+              fail "lastfmTrackToListen returned Nothing"
             Just listen -> do
               upsertScrobble conn listen
               exists <- checkExists conn 1700000000
