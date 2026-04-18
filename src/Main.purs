@@ -1306,24 +1306,28 @@ startUser { slug, config } = do
     Just _, Nothing -> Log.warn $ "lastfmUser set for user '" <> slug <> "' but lastfmApiKey is missing — Last.fm sync disabled"
     _, _ -> pure unit
 
-  -- Run initial syncs in parallel, then join before starting loops.
-  -- Both syncs share the write lock, so their transactions are serialized.
+  -- Fork initial syncs; they run in the background so the HTTP server can
+  -- start immediately. A separate fiber waits for them to finish before
+  -- starting the recurring loops (preserving the original ordering guarantee).
   lbFiber <- case config.listenbrainzUser of
     Just username -> Just <$> forkAff (lbSyncOnce conn username slug writeLock config.initialSync)
     Nothing -> pure Nothing
   lfFiber <- case config.lastfmUser, config.lastfmApiKey of
     Just lfmUser, Just apiKey -> Just <$> forkAff (lfSyncOnce conn apiKey lfmUser slug writeLock config.initialSync)
     _, _ -> pure Nothing
-  for_ lbFiber joinFiber
-  for_ lfFiber joinFiber
 
-  -- Background loops
+  -- Wait for initial syncs then start recurring loops — all in background.
+  void $ forkAff do
+    for_ lbFiber joinFiber
+    for_ lfFiber joinFiber
+    for_ config.listenbrainzUser \username ->
+      void $ forkAff $ lbSyncLoop conn username slug writeLock config.initialSync
+    case config.lastfmUser, config.lastfmApiKey of
+      Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser slug writeLock config.initialSync
+      _, _ -> pure unit
+
+  -- Background tasks that don't depend on initial sync completion.
   void $ forkAff $ enrichMetadata conn config slug
-  for_ config.listenbrainzUser \username ->
-    void $ forkAff $ lbSyncLoop conn username slug writeLock config.initialSync
-  case config.lastfmUser, config.lastfmApiKey of
-    Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser slug writeLock config.initialSync
-    _, _ -> pure unit
   when config.backupEnabled $ void $ forkAff $
     backupDb conn config.databaseFile (s3ConfigFromUser config)
       (toNumber config.backupIntervalHours * 3600000.0)
