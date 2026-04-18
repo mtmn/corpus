@@ -7,6 +7,8 @@ import {
 } from "prom-client";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
+import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import {
 	trace,
 	context,
@@ -103,6 +105,13 @@ let tracer = null;
 if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
 	const sdk = new NodeSDK({
 		traceExporter: new OTLPTraceExporter(),
+		instrumentations: [
+			new HttpInstrumentation({
+				// Incoming requests are traced manually via wrapRequest below
+				ignoreIncomingRequestHook: () => true,
+			}),
+			new UndiciInstrumentation(),
+		],
 	});
 	sdk.start();
 	tracer = trace.getTracer(
@@ -150,23 +159,29 @@ export const getMetricsImpl = (onSuccess) => (onError) => () => {
 
 export const getContentType = () => registry.contentType;
 
-// Attaches a 'finish' listener to `res` so that, once the response is fully
-// written, the request count, latency histogram, and OTEL span are updated.
-// logFn: String -> Effect Unit — the structured logger to call on completion.
+// Runs `handler` inside the active context of a server span so that any
+// outbound HTTP/fetch calls made during handling automatically become child
+// spans. Attaches a 'finish' listener to record metrics and end the span.
+// logFn: String -> Effect Unit — structured logger called on completion.
 // req: Node IncomingMessage — used to extract W3C trace-context headers.
-export const observeHttpRequest =
-	(method) => (path) => (logFn) => (req) => (res) => () => {
+export const wrapRequest =
+	(method) => (path) => (logFn) => (req) => (res) => (handler) => () => {
 		const startMs = Date.now();
 		const span = startHttpSpan(method, path, req.headers || {});
 		res.once("finish", () => {
 			const durationMs = Date.now() - startMs;
-			const durationSecs = durationMs / 1000;
 			const status = res.statusCode || 0;
-			httpRequestsTotal.inc({ method, path, status: String(status) });
-			httpRequestDurationSeconds.observe({ method, path }, durationSecs);
+			if (httpRequestsTotal) httpRequestsTotal.inc({ method, path, status: String(status) });
+			if (httpRequestDurationSeconds) httpRequestDurationSeconds.observe({ method, path }, durationMs / 1000);
 			endHttpSpan(span, status);
 			logFn(`${method} ${path} ${status} ${durationMs}ms`)();
 		});
+		if (span) {
+			const ctx = trace.setSpan(context.active(), span);
+			context.with(ctx, () => handler());
+		} else {
+			handler();
+		}
 	};
 
 export const incSyncRuns = (user) => (source) => (result) => () =>
