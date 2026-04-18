@@ -47,24 +47,19 @@ npx spago bundle --module Client --outfile client.js --platform browser
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `LISTENBRAINZ_USER` | — | ListenBrainz username — enables scrobble sync when set |
-| `LASTFM_USER` | — | Last.fm username — enables scrobble sync when set |
-| `LASTFM_API_KEY` | — | Last.fm API key (required when `LASTFM_USER` is set; also used for genre and cover art fallback) |
-| `DATABASE_FILE` | `corpus.db` | Path to the DuckDB database file |
+| `CORPUS_USERS_FILE` | `users.json` | Path to the multi-user config file |
+| `DATABASE_PATH` | _(cwd)_ | Root directory for all user database files |
 | `PORT` | `8000` | HTTP port to listen on |
-| `COVER_CACHE_ENABLED` | `true` | Set to `false` to disable S3 cover art caching |
-| `S3_BUCKET` | — | S3 bucket name for cover art caching |
+| `LASTFM_API_KEY` | — | Last.fm API key (required when any user has `lastfmUser` set; also used for genre and cover art fallback) |
+| `DISCOGS_TOKEN` | — | Discogs token for cover art and genre fallback |
+| `S3_BUCKET` | — | S3 bucket name for cover art caching and backups |
 | `S3_REGION` | `us-east-1` | S3 region |
 | `AWS_ACCESS_KEY_ID` | — | S3 credentials |
 | `AWS_SECRET_ACCESS_KEY` | — | S3 credentials |
 | `AWS_ENDPOINT_URL` | — | S3-compatible endpoint (e.g. for MinIO) |
 | `AWS_S3_ADDRESSING_STYLE` | — | Set to `path` for path-style S3 URLs |
-| `DISCOGS_TOKEN` | — | Discogs token for cover art and genre fallback |
-| `BACKUP_ENABLED` | — | Set to `true` to enable periodic local database backups |
-| `BACKUP_INTERVAL_HOURS` | `1` | How often to back up the database (in hours) |
 | `METRICS_ENABLED` | `false` | Set to `true` to expose Prometheus metrics at `/metrics` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | If set, enables OpenTelemetry tracing and exports spans to this OTLP HTTP endpoint |
 | `OTEL_SERVICE_NAME` | `corpus` | Service name reported in OTel spans |
-| `CORPUS_USERS_FILE` | `users.json` | Path to the multi-user config file |
 
-Backups are written to a `backup/` directory alongside `DATABASE_FILE`, named `corpus-<timestamp>.db`.
+Per-user settings (`listenbrainzUser`, `lastfmUser`, `initialSync`, `coverCacheEnabled`, `backupEnabled`, `backupIntervalHours`, etc.) are configured in `users.json` (or `users.dhall`), not via environment variables.
