@@ -1,0 +1,26 @@
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache spago packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/spago
+          key: spago-${{ hashFiles('spago.lock') }}
+          restore-keys: spago-
+
+      - name: Run tests
+        run: npm test
