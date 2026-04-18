@@ -7,7 +7,7 @@ Corpus uses [DuckDB](https://duckdb.org/) as its primary analytical database. Du
 The database consists of two main tables:
 
 ### `scrobbles`
-Stores the raw listening history synced from ListenBrainz.
+Stores the raw listening history synced from ListenBrainz and/or Last.fm.
 
 | Column | Type | Description |
 | :--- | :--- | :--- |

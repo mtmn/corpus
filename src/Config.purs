@@ -40,6 +40,7 @@ type UserEntry =
 
 type AppConfig =
   { port :: Int
+  , metricsEnabled :: Boolean
   , users :: Array UserEntry
   }
 
@@ -88,6 +89,7 @@ loadConfig path = do
   awsEndpointUrl <- liftEffect $ lookupEnv "AWS_ENDPOINT_URL"
   awsS3AddressingStyle <- liftEffect $ lookupEnv "AWS_S3_ADDRESSING_STYLE"
   databasePath <- liftEffect $ lookupEnv "DATABASE_PATH"
+  metricsEnabledStr <- liftEffect $ lookupEnv "METRICS_ENABLED"
   defaultPath <- liftEffect cwd
   let
     resolvePath file = case databasePath of
@@ -106,7 +108,8 @@ loadConfig path = do
       }
   let
     port = fromMaybe 8000 (portStr >>= Data.Int.fromString)
-    fullConfig = { port, users: map (\u -> u { config = fillCreds u.config }) rawUsers }
+    metricsEnabled = metricsEnabledStr == Just "true"
+    fullConfig = { port, metricsEnabled, users: map (\u -> u { config = fillCreds u.config }) rawUsers }
   case validateConfig fullConfig of
     Left msg -> makeAff \cb -> cb (Left (error msg)) *> pure nonCanceler
     Right cfg -> pure cfg
