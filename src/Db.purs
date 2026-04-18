@@ -21,7 +21,9 @@ import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEn
 import Data.Traversable (traverse)
 import Foreign.Object as Object
 import Data.Nullable (Nullable, toMaybe, toNullable)
-import Data.Array (mapMaybe, uncons, (!!), last)
+import Data.Array (mapMaybe, uncons, (!!), last, length, replicate)
+import Data.String.Common (joinWith)
+import Data.Tuple (Tuple(..))
 import Data.Int (fromString)
 import Data.String (Pattern(..), split, stripSuffix)
 import Control.Monad.Rec.Class (forever)
@@ -285,6 +287,26 @@ rowToEntry json = do
   name <- Object.lookup "name" obj >>= toString
   count <- Object.lookup "count" obj >>= (unsafeCoerce >>> Just)
   pure $ StatsEntry { name, count }
+
+getArtistReleasesByMbids :: Connection -> Array String -> Aff (Object.Object { artist :: String, release :: String })
+getArtistReleasesByMbids _ mbids | length mbids == 0 = pure Object.empty
+getArtistReleasesByMbids conn mbids = do
+  let placeholders = joinWith "," (replicate (length mbids) "?")
+  rows <- queryAll conn
+    ( "SELECT DISTINCT release_mbid, artist_name, release_name FROM scrobbles"
+        <> " WHERE release_mbid IN ("
+        <> placeholders
+        <> ") AND artist_name != '' AND release_name != ''"
+    )
+    (map unsafeCoerce mbids)
+  pure $ Object.fromFoldable (mapMaybe extractPair rows)
+  where
+  extractPair json = do
+    obj <- toObject json
+    mbid <- Object.lookup "release_mbid" obj >>= toString
+    artist <- Object.lookup "artist_name" obj >>= toString
+    release <- Object.lookup "release_name" obj >>= toString
+    pure $ Tuple mbid { artist, release }
 
 getArtistReleaseByMbid :: Connection -> String -> Aff (Maybe { artist :: String, release :: String })
 getArtistReleaseByMbid conn mbid = do

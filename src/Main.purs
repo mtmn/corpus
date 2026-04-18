@@ -40,7 +40,7 @@ import Data.Array ((!!), length, uncons, mapMaybe, find)
 import Data.Tuple (Tuple(..))
 import Data.Foldable (for_)
 import Data.Traversable (traverse)
-import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, getOldestTs, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleaseByMbid, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb, withTransaction)
+import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, getOldestTs, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb, withTransaction)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
@@ -105,13 +105,14 @@ fetchLastfmPage apiKey lfmUser page mTo = withRetry "Last.fm fetch" do
     toParam = case mTo of
       Just ts -> "&to=" <> show ts
       Nothing -> ""
-    url = "https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user="
+    -- Build the base URL without the key so it is safe to log or include in errors.
+    -- Last.fm does not support header-based auth, so the key must be a query param.
+    baseUrl = "https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user="
       <> (fromMaybe lfmUser $ encodeURIComponent lfmUser)
-      <> "&api_key="
-      <> apiKey
       <> "&format=json&limit=200&page="
       <> show page
       <> toParam
+    url = baseUrl <> "&api_key=" <> apiKey
   fr <- fetch url { method: GET }
   if fr.status == 200 then do
     json <- fromJson fr.json
@@ -363,7 +364,6 @@ handleRequest metricsEnabled contexts req res = do
 serveIndex :: String -> Response -> Effect Unit
 serveIndex slug res = do
   setHeader "Content-Type" "text/html" (toOutgoingMessage res)
-  setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   setStatusCode 200 res
   let w = toWriteable (toOutgoingMessage res)
   void $ writeString w UTF8 (indexHtml slug)
@@ -384,7 +384,6 @@ serveMetrics res = do
 serveClientJs :: Response -> Effect Unit
 serveClientJs res = do
   setHeader "Content-Type" "application/javascript" (toOutgoingMessage res)
-  setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   launchAff_ do
     result <- try $ FSA.readTextFile UTF8 "client.js"
     liftEffect $ case result of
@@ -494,7 +493,7 @@ serveCover cfg slug url res = do
             Log.warn "lastfmApiKey not configured, falling back to Discogs"
             tryDiscogs s3cfg artist release response
           Just k -> do
-            let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json"
+            let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json" <> "&api_key=" <> k
             Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
             result <- try $ fetch searchUrl { method: GET }
             case result of
@@ -542,9 +541,9 @@ serveCover cfg slug url res = do
         liftEffect $ serveNotFound response
       Just t -> do
         let queryStr = artist <> " " <> release
-        let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
+        let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1"
         Log.info $ "Searching Discogs for: " <> queryStr
-        result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
+        result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0", "Authorization": "Discogs token=" <> t } }
         case result of
           Right fetchRes | fetchRes.status == 200 -> do
             json <- fromJson fetchRes.json
@@ -576,9 +575,6 @@ serveCover cfg slug url res = do
 serveProxy :: Connection -> URL -> Response -> Effect Unit
 serveProxy db url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
-  setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
-  setHeader "Access-Control-Allow-Methods" "GET, POST, OPTIONS" (toOutgoingMessage res)
-  setHeader "Access-Control-Allow-Headers" "*" (toOutgoingMessage res)
 
   launchAff_ do
     let limit = fromMaybe 25 (getQueryParam "limit" url >>= fromString)
@@ -601,7 +597,6 @@ serveProxy db url res = do
 serveAsset :: String -> String -> Response -> Effect Unit
 serveAsset contentType path res = do
   setHeader "Content-Type" contentType (toOutgoingMessage res)
-  setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   setHeader "Cache-Control" "public, max-age=86400" (toOutgoingMessage res)
   launchAff_ do
     result <- try $ FSA.readFile path
@@ -616,7 +611,6 @@ serveAsset contentType path res = do
 serveHealthz :: Connection -> Response -> Effect Unit
 serveHealthz db res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
-  setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   launchAff_ do
     result <- try $ ping db
     liftEffect $ do
@@ -633,7 +627,6 @@ serveHealthz db res = do
 serveNotFound :: Response -> Effect Unit
 serveNotFound res = do
   setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
-  setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   setStatusCode 404 res
   let w = toWriteable (toOutgoingMessage res)
   void $ writeString w UTF8 "Not Found"
@@ -642,7 +635,6 @@ serveNotFound res = do
 serveStats :: Connection -> URL -> Response -> Effect Unit
 serveStats db url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
-  setHeader "Access-Control-Allow-Origin" "*" (toOutgoingMessage res)
   launchAff_ do
     let period = getQueryParam "period" url
     let section = getQueryParam "section" url
@@ -713,7 +705,7 @@ fetchLastfmGenre Nothing _ _ = do
   Log.warn "lastfmApiKey not configured for genre fallback"
   pure Nothing
 fetchLastfmGenre (Just k) artist release = do
-  let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key=" <> k <> "&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json"
+  let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json" <> "&api_key=" <> k
   Log.info $ "Fetching Last.fm genre for: " <> artist <> " - " <> release
   result <- try $ fetch searchUrl { method: GET }
   case result of
@@ -744,9 +736,9 @@ fetchDiscogsGenre Nothing _ _ = do
   pure Nothing
 fetchDiscogsGenre (Just t) artist release = do
   let queryStr = artist <> " " <> release
-  let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1&token=" <> t
+  let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1"
   Log.info $ "Fetching Discogs genre for: " <> queryStr
-  result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0" } }
+  result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0", "Authorization": "Discogs token=" <> t } }
   case result of
     Right fetchRes | fetchRes.status == 200 -> do
       jsonResult <- try $ fromJson fetchRes.json
@@ -780,6 +772,7 @@ enrichMetadata conn cfg slug = forever do
     delay (Milliseconds 60000.0)
   else do
     Log.info $ "Processing " <> show (length unenrichedMbids) <> " unenriched + " <> show (length emptyGenreMbids) <> " empty genre releases"
+    artistReleaseMap <- getArtistReleasesByMbids conn allMbids
     for_ allMbids \mbid -> do
       delay (Milliseconds 1100.0)
       result <- try $ fetchMusicBrainzRelease mbid
@@ -793,7 +786,7 @@ enrichMetadata conn cfg slug = forever do
         Right (Just mbdata) -> do
           liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "success"
           if mbdata.genre == Nothing then do
-            artistRelease <- getArtistReleaseByMbid conn mbid
+            let artistRelease = Object.lookup mbid artistReleaseMap
             case artistRelease of
               Just { artist, release } -> do
                 lastfmGenre <- fetchLastfmGenre cfg.lastfmApiKey artist release
