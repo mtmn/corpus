@@ -803,7 +803,7 @@ handleRequest contexts req res = do
     Nothing -> serveNotFound res
     Just url -> do
       let path = URL.pathname url
-      Metrics.observeHttpRequest method (normalizePath path) Log.info res
+      Metrics.observeHttpRequest method (normalizePath path) Log.info req res
       case path of
         "/client.js" -> serveClientJs res
         "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
