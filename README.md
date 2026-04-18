@@ -62,5 +62,9 @@ npx spago bundle --module Client --outfile client.js --platform browser
 | `DISCOGS_TOKEN` | — | Discogs token for cover art and genre fallback |
 | `BACKUP_ENABLED` | — | Set to `true` to enable periodic local database backups |
 | `BACKUP_INTERVAL_HOURS` | `1` | How often to back up the database (in hours) |
+| `METRICS_ENABLED` | `false` | Set to `true` to expose Prometheus metrics at `/metrics` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | If set, enables OpenTelemetry tracing and exports spans to this OTLP HTTP endpoint |
+| `OTEL_SERVICE_NAME` | `corpus` | Service name reported in OTel spans |
+| `CORPUS_USERS_FILE` | `users.json` | Path to the multi-user config file |
 
 Backups are written to a `backup/` directory alongside `DATABASE_FILE`, named `corpus-<timestamp>.db`.
