@@ -692,7 +692,7 @@ view model =
 renderContent : Model -> Html Msg
 renderContent model =
     if model.loading && List.isEmpty model.listens then
-        ul [] [ li [ class "loading" ] [ text "Loading recent tracks..." ] ]
+        ul [] [ li [ class "loading" ] [ text "⏳" ] ]
 
     else
         case model.error of
@@ -802,7 +802,7 @@ renderStatsView : Set String -> Set String -> Maybe Stats -> Html Msg
 renderStatsView expandedSections loadedSections mStats =
     case mStats of
         Nothing ->
-            div [ class "loading" ] [ text "Loading stats..." ]
+            div [ class "loading" ] [ text "⏳" ]
 
         Just stats ->
             div []
@@ -873,7 +873,7 @@ renderStatSection expandedSections loadedSections mField title entries =
     div [ class "stats-section" ]
         [ h2 [] [ text title ]
         , if List.isEmpty entries then
-            div [ class "stats-empty" ] [ text "no data yet — enrichment in progress" ]
+            div [ class "stats-empty" ] [ text "no data yet" ]
 
           else
             ul [] (List.map (renderStatEntry maxCount mField) visible)
