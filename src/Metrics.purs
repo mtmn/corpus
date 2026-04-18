@@ -14,12 +14,11 @@ foreign import getMetricsImpl :: (String -> Effect Unit) -> (String -> Effect Un
 -- | The MIME type to use for the /metrics response body.
 foreign import getContentType :: Effect String
 
--- | Attaches a 'finish' listener to `res` so that, once the response is
--- | fully written, the request count, latency histogram, and OTEL span are
--- | updated, and logFn is called with "METHOD path status Nms".
+-- | Runs the given `Effect Unit` handler inside the active context of a server
+-- | span, so outbound HTTP/fetch calls become child spans automatically.
+-- | Attaches a 'finish' listener to record metrics and end the span.
 -- | W3C trace-context headers are extracted from `req` for span parenting.
--- | Call once at the top of the request handler before routing.
-foreign import observeHttpRequest :: String -> String -> (String -> Effect Unit) -> IncomingMessage IMServer -> ServerResponse -> Effect Unit
+foreign import wrapRequest :: String -> String -> (String -> Effect Unit) -> IncomingMessage IMServer -> ServerResponse -> Effect Unit -> Effect Unit
 
 -- Sync
 foreign import incSyncRuns :: String -> String -> String -> Effect Unit

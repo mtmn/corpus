@@ -803,21 +803,21 @@ handleRequest contexts req res = do
     Nothing -> serveNotFound res
     Just url -> do
       let path = URL.pathname url
-      Metrics.observeHttpRequest method (normalizePath path) Log.info req res
-      case path of
-        "/client.js" -> serveClientJs res
-        "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
-        "/" -> serveIndex "" res
-        "/metrics" -> serveMetrics res
-        "/proxy" -> withUser url \ctx -> serveProxy ctx.conn url res
-        "/stats" -> withUser url \ctx -> serveStats ctx.conn url res
-        "/cover" -> withUser url \ctx -> serveCover ctx.config ctx.slug url res
-        "/healthz" -> withUser url \ctx -> serveHealthz ctx.conn res
-        _ -> case stripPrefix (Pattern "/~") path of
-          Just slug -> serveIndex slug res
-          Nothing -> do
-            Log.warn $ "Path not found: " <> path
-            serveNotFound res
+      Metrics.wrapRequest method (normalizePath path) Log.info req res do
+        case path of
+          "/client.js" -> serveClientJs res
+          "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
+          "/" -> serveIndex "" res
+          "/metrics" -> serveMetrics res
+          "/proxy" -> withUser url \ctx -> serveProxy ctx.conn url res
+          "/stats" -> withUser url \ctx -> serveStats ctx.conn url res
+          "/cover" -> withUser url \ctx -> serveCover ctx.config ctx.slug url res
+          "/healthz" -> withUser url \ctx -> serveHealthz ctx.conn res
+          _ -> case stripPrefix (Pattern "/~") path of
+            Just slug -> serveIndex slug res
+            Nothing -> do
+              Log.warn $ "Path not found: " <> path
+              serveNotFound res
   where
   withUser url f =
     let
