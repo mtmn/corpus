@@ -92,15 +92,19 @@ export const getContentType = () => registry.contentType;
 
 // Attaches a 'finish' listener to the response to record latency and status
 // after the response is fully written. Safe to call before routing.
-export const observeHttpRequest = (method) => (path) => (res) => () => {
-	const startMs = Date.now();
-	res.once("finish", () => {
-		const durationSecs = (Date.now() - startMs) / 1000;
-		const status = String(res.statusCode || 0);
-		httpRequestsTotal.inc({ method, path, status });
-		httpRequestDurationSeconds.observe({ method, path }, durationSecs);
-	});
-};
+// logFn: (String -> Effect Unit) — the structured logger to call on completion.
+export const observeHttpRequest =
+	(method) => (path) => (logFn) => (res) => () => {
+		const startMs = Date.now();
+		res.once("finish", () => {
+			const durationMs = Date.now() - startMs;
+			const durationSecs = durationMs / 1000;
+			const status = String(res.statusCode || 0);
+			httpRequestsTotal.inc({ method, path, status });
+			httpRequestDurationSeconds.observe({ method, path }, durationSecs);
+			logFn(`${method} ${path} ${status} ${durationMs}ms`)();
+		});
+	};
 
 export const incSyncRuns = (user) => (source) => (result) => () =>
 	syncRunsTotal.inc({ user, source, result });
