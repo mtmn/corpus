@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0](https://github.com/mtmn/corpus/compare/v1.2.0...v1.3.0) (2026-04-18)
+
+
+### Features
+
+* rewrite into folds, cover/genre rewrite ([bd17786](https://github.com/mtmn/corpus/commit/bd17786cbf22fec6accecf887e313fd4f9ed6c16))
+
+
+### Bug Fixes
+
+* update tests ([04d8f23](https://github.com/mtmn/corpus/commit/04d8f234eb6735ce689c7112350bd435efc4f677))
+
 ## [1.2.0](https://github.com/mtmn/corpus/compare/v1.1.1...v1.2.0) (2026-04-18)
 
 
