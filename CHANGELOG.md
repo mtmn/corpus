@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/mtmn/corpus/compare/v1.3.0...v1.3.1) (2026-04-18)
+
+
+### Bug Fixes
+
+* initialSync halts syncing, broken range query ([720e234](https://github.com/mtmn/corpus/commit/720e2341ba1bd1b8482be75d9246544f12d98e3f))
+
 ## [1.3.0](https://github.com/mtmn/corpus/compare/v1.2.0...v1.3.0) (2026-04-18)
 
 
