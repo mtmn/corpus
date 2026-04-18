@@ -29,6 +29,7 @@ import Node.FS.Aff as FSA
 import Config (S3Config)
 import S3 as S3
 import Log as Log
+import Metrics as Metrics
 
 foreign import data Connection :: Type
 
@@ -71,8 +72,8 @@ dbBaseName path =
   in
     fromMaybe name (stripSuffix (Pattern ".db") name)
 
-performBackup :: Connection -> String -> S3Config -> Aff Unit
-performBackup conn dbFile s3cfg = do
+performBackup :: Connection -> String -> S3Config -> String -> Aff Unit
+performBackup conn dbFile s3cfg slug = do
   checkpoint conn
   dt <- liftEffect nowDateTime
   let
@@ -83,13 +84,17 @@ performBackup conn dbFile s3cfg = do
   buf <- FSA.readFile dbFile
   S3.uploadToS3 s3cfg key buf "application/octet-stream"
   Log.info $ "Backup uploaded to S3: " <> key
+  liftEffect $ Metrics.setDbBackupLastSuccess slug
+  liftEffect $ Metrics.incDbBackupRun slug "success"
 
-backupDb :: Connection -> String -> S3Config -> Number -> Aff Unit
-backupDb conn dbFile s3cfg intervalMs = forever do
+backupDb :: Connection -> String -> S3Config -> Number -> String -> Aff Unit
+backupDb conn dbFile s3cfg intervalMs slug = forever do
   delay (Milliseconds intervalMs)
-  result <- try $ performBackup conn dbFile s3cfg
+  result <- try $ performBackup conn dbFile s3cfg slug
   case result of
-    Left err -> Log.error $ "Backup failed: " <> message err
+    Left err -> do
+      Log.error $ "Backup failed: " <> message err
+      liftEffect $ Metrics.incDbBackupRun slug "error"
     Right _ -> pure unit
 
 -- Acquires the write lock, runs the action inside a transaction, then releases.

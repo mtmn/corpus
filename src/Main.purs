@@ -6,6 +6,7 @@ import Config (AppConfig, UserConfig, UserEntry, loadConfig, s3ConfigFromUser)
 import Effect (Effect)
 import Effect.Class (liftEffect)
 import Log as Log
+import Metrics as Metrics
 import Node.HTTP (createServer)
 import Node.HTTPS as HTTPS
 import Node.HTTP.Server as Server
@@ -30,7 +31,7 @@ import Unsafe.Coerce (unsafeCoerce)
 import Node.FS.Aff as FSA
 import Fetch (fetch, Method(GET), lookup)
 import Fetch.Argonaut.Json (fromJson)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import JSURI (encodeURIComponent)
 import Foreign.Object as Object
 import Data.Argonaut (decodeJson, encodeJson, parseJson)
@@ -188,8 +189,8 @@ lastfmTrackToListen json = do
     }
 
 -- One complete paginated pass; used for both initial and recurring syncs.
-lbSyncOnce :: Connection -> String -> AVar Unit -> Boolean -> Aff Unit
-lbSyncOnce conn username writeLock initialSyncEnabled = void performFullSync
+lbSyncOnce :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
+lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSync
   where
   performFullSync = do
     when initialSyncEnabled $ Log.info $ "Starting ListenBrainz sync for " <> username
@@ -197,7 +198,9 @@ lbSyncOnce conn username writeLock initialSyncEnabled = void performFullSync
     case result of
       Right body -> do
         case parseJson body >>= decodeJson of
-          Left err -> Log.error $ "Sync parse error: " <> show err
+          Left err -> do
+            Log.error $ "Sync parse error: " <> show err
+            liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
           Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
             Tuple added (Tuple minTs hitCount) <- withTransaction conn writeLock (processListens listens)
             when (added > 0 || initialSyncEnabled)
@@ -206,10 +209,18 @@ lbSyncOnce conn username writeLock initialSyncEnabled = void performFullSync
             let allExist = hitCount == length listens && length listens > 0
             if allExist || length listens == 0 || not initialSyncEnabled then do
               when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
+              liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "success"
+              when (added > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "listenbrainz" added
+              liftEffect $ Metrics.setSyncLastSuccess slug "listenbrainz"
             else do
               total <- paginateUntilDone 2 minTs added
               Log.info $ "ListenBrainz sync complete. Added " <> show total <> " new scrobbles."
-      Left err -> Log.error $ "Sync fetch error: " <> Exception.message err
+              liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "success"
+              when (total > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "listenbrainz" total
+              liftEffect $ Metrics.setSyncLastSuccess slug "listenbrainz"
+      Left err -> do
+        Log.error $ "Sync fetch error: " <> Exception.message err
+        liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
 
   paginateUntilDone batchNum minTs acc = case minTs of
     Nothing -> pure acc
@@ -250,13 +261,13 @@ lbSyncOnce conn username writeLock initialSyncEnabled = void performFullSync
       Log.warn "Skipping scrobble without timestamp"
       syncRecursive acc minTs hitCount tail
 
-lbSyncLoop :: Connection -> String -> AVar Unit -> Boolean -> Aff Unit
-lbSyncLoop conn username writeLock initialSyncEnabled = forever do
+lbSyncLoop :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
+lbSyncLoop conn username slug writeLock initialSyncEnabled = forever do
   delay (Milliseconds 60000.0)
-  lbSyncOnce conn username writeLock initialSyncEnabled
+  lbSyncOnce conn username slug writeLock initialSyncEnabled
 
-lfSyncOnce :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
-lfSyncOnce conn apiKey lfmUser writeLock initialSyncEnabled = do
+lfSyncOnce :: Connection -> String -> String -> String -> AVar Unit -> Boolean -> Aff Unit
+lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
   void $ performLastfmSync
   when initialSyncEnabled $ void $ performLastfmBackfill
   where
@@ -270,11 +281,17 @@ lfSyncOnce conn apiKey lfmUser writeLock initialSyncEnabled = do
     let
       validTracks = mapMaybe lastfmTrackToListen tracks
       allExist = hitCount == length validTracks && length validTracks > 0
-    if allExist || totalPages <= 1 || not initialSyncEnabled then
+    if allExist || totalPages <= 1 || not initialSyncEnabled then do
       when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
+      liftEffect $ Metrics.incSyncRuns slug "lastfm" "success"
+      when (added > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "lastfm" added
+      liftEffect $ Metrics.setSyncLastSuccess slug "lastfm"
     else do
       total <- paginateLastfmUntilDone 2 totalPages Nothing added
       Log.info $ "Last.fm sync complete. Added " <> show total <> " new scrobbles."
+      liftEffect $ Metrics.incSyncRuns slug "lastfm" "success"
+      when (total > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "lastfm" total
+      liftEffect $ Metrics.setSyncLastSuccess slug "lastfm"
 
   paginateLastfmUntilDone page totalPages mTo acc
     | page > totalPages = pure acc
@@ -318,10 +335,10 @@ lfSyncOnce conn apiKey lfmUser writeLock initialSyncEnabled = do
         syncLastfmRecursive (acc + 1) hitCount tail
     Just { head: _, tail } -> syncLastfmRecursive acc hitCount tail
 
-lfSyncLoop :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
-lfSyncLoop conn apiKey lfmUser writeLock initialSyncEnabled = forever do
+lfSyncLoop :: Connection -> String -> String -> String -> AVar Unit -> Boolean -> Aff Unit
+lfSyncLoop conn apiKey lfmUser slug writeLock initialSyncEnabled = forever do
   delay (Milliseconds 60000.0)
-  lfSyncOnce conn apiKey lfmUser writeLock initialSyncEnabled
+  lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled
 
 -- Build the per-user index HTML, inlining the slug for the Elm app.
 indexHtml :: String -> String
@@ -770,6 +787,11 @@ indexHtml userSlug =
 </body>
 </html>"""
 
+normalizePath :: String -> String
+normalizePath path = case stripPrefix (Pattern "/~") path of
+  Just _ -> "/~:slug"
+  Nothing -> path
+
 -- Request handler
 -- API endpoints (/proxy, /stats, /cover, /healthz) select the user via ?user=<slug>.
 -- Index pages are served at / (root user) and /~<slug> (named users).
@@ -782,13 +804,15 @@ handleRequest contexts req res = do
     Just url -> do
       let path = URL.pathname url
       Log.info $ method <> " " <> rawUrl
+      Metrics.observeHttpRequest method (normalizePath path) res
       case path of
         "/client.js" -> serveClientJs res
         "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
         "/" -> serveIndex "" res
+        "/metrics" -> serveMetrics res
         "/proxy" -> withUser url \ctx -> serveProxy ctx.conn url res
         "/stats" -> withUser url \ctx -> serveStats ctx.conn url res
-        "/cover" -> withUser url \ctx -> serveCover ctx.config url res
+        "/cover" -> withUser url \ctx -> serveCover ctx.config ctx.slug url res
         "/healthz" -> withUser url \ctx -> serveHealthz ctx.conn res
         _ -> case stripPrefix (Pattern "/~") path of
           Just slug -> serveIndex slug res
@@ -814,6 +838,18 @@ serveIndex slug res = do
   let w = toWriteable (toOutgoingMessage res)
   void $ writeString w UTF8 (indexHtml slug)
   end w
+
+serveMetrics :: Response -> Effect Unit
+serveMetrics res = do
+  launchAff_ do
+    contentType <- liftEffect Metrics.getContentType
+    metricsText <- Metrics.getMetrics
+    liftEffect $ do
+      setHeader "Content-Type" contentType (toOutgoingMessage res)
+      setStatusCode 200 res
+      let w = toWriteable (toOutgoingMessage res)
+      void $ writeString w UTF8 metricsText
+      end w
 
 serveClientJs :: Response -> Effect Unit
 serveClientJs res = do
@@ -842,8 +878,8 @@ sanitizeKey str =
   in
     replace re2 "_" (replace re1 "_" str)
 
-serveCover :: UserConfig -> URL -> Response -> Effect Unit
-serveCover cfg url res = do
+serveCover :: UserConfig -> String -> URL -> Response -> Effect Unit
+serveCover cfg slug url res = do
   launchAff_ do
     let mbid = fromMaybe "" (getQueryParam "mbid" url)
     let artistStr = fromMaybe "" (getQueryParam "artist" url)
@@ -856,12 +892,16 @@ serveCover cfg url res = do
       cached <- checkS3 s3cfg s3Key
       if cached then do
         Log.info $ "Serving CAA cover from S3: " <> s3Key
+        liftEffect $ Metrics.incCoverRequest slug "caa" "s3_hit"
         serveS3 s3cfg s3Key res
       else do
         Log.info $ "Fetching CAA cover: " <> mbid
         let caaUrl = "https://coverartarchive.org/release/" <> mbid <> "/front-250"
         success <- tryProxyAndCache s3cfg caaUrl s3Key res
-        unless success $ do
+        if success then
+          liftEffect $ Metrics.incCoverRequest slug "caa" "fetch"
+        else do
+          liftEffect $ Metrics.incCoverRequest slug "caa" "miss"
           Log.info $ "CAA cover not found for " <> mbid <> ", falling back to Last.fm"
           tryLastfm s3cfg artistStr releaseStr res
     else do
@@ -917,6 +957,7 @@ serveCover cfg url res = do
         cached <- checkS3 s3cfg s3Key
         if cached then do
           Log.info $ "Serving Last.fm cover from S3: " <> s3Key
+          liftEffect $ Metrics.incCoverRequest slug "lastfm" "s3_hit"
           serveS3 s3cfg s3Key response
         else case cfg.lastfmApiKey of
           Nothing -> do
@@ -941,14 +982,19 @@ serveCover cfg url res = do
                   Just urlStr -> do
                     Log.info $ "Found Last.fm cover: " <> urlStr
                     success <- tryProxyAndCache s3cfg urlStr s3Key response
-                    unless success $ do
+                    if success then
+                      liftEffect $ Metrics.incCoverRequest slug "lastfm" "fetch"
+                    else do
+                      liftEffect $ Metrics.incCoverRequest slug "lastfm" "miss"
                       Log.info "Last.fm image proxy failed, falling back to Discogs"
                       tryDiscogs s3cfg artist release response
                   Nothing -> do
                     Log.info "No cover found on Last.fm, falling back to Discogs"
+                    liftEffect $ Metrics.incCoverRequest slug "lastfm" "not_found"
                     tryDiscogs s3cfg artist release response
               _ -> do
                 Log.info "Last.fm API request failed, falling back to Discogs"
+                liftEffect $ Metrics.incCoverRequest slug "lastfm" "error"
                 tryDiscogs s3cfg artist release response
 
   tryDiscogs s3cfg artist release response = do
@@ -958,6 +1004,7 @@ serveCover cfg url res = do
     cached <- checkS3 s3cfg s3Key
     if cached then do
       Log.info $ "Serving Discogs cover from S3: " <> s3Key
+      liftEffect $ Metrics.incCoverRequest slug "discogs" "s3_hit"
       serveS3 s3cfg s3Key response
     else case cfg.discogsToken of
       Nothing -> do
@@ -981,14 +1028,19 @@ serveCover cfg url res = do
               Just urlStr -> do
                 Log.info $ "Found Discogs cover: " <> urlStr
                 success <- tryProxyAndCache s3cfg urlStr s3Key response
-                unless success $ do
+                if success then
+                  liftEffect $ Metrics.incCoverRequest slug "discogs" "fetch"
+                else do
+                  liftEffect $ Metrics.incCoverRequest slug "discogs" "miss"
                   Log.info "Discogs image proxy failed"
                   liftEffect $ serveNotFound response
               Nothing -> do
                 Log.info "No cover found on Discogs"
+                liftEffect $ Metrics.incCoverRequest slug "discogs" "not_found"
                 liftEffect $ serveNotFound response
           _ -> do
             Log.info "Discogs API request failed"
+            liftEffect $ Metrics.incCoverRequest slug "discogs" "error"
             liftEffect $ serveNotFound response
 
 serveProxy :: Connection -> URL -> Response -> Effect Unit
@@ -1185,11 +1237,14 @@ fetchDiscogsGenre (Just t) artist release = do
       Log.warn "Discogs genre API request failed"
       pure Nothing
 
-enrichMetadata :: Connection -> UserConfig -> Aff Unit
-enrichMetadata conn cfg = forever do
+enrichMetadata :: Connection -> UserConfig -> String -> Aff Unit
+enrichMetadata conn cfg slug = forever do
   unenrichedMbids <- getUnenrichedMbids conn 10
   emptyGenreMbids <- getEmptyGenreMbids conn 10
   let allMbids = unenrichedMbids <> emptyGenreMbids
+
+  liftEffect $ Metrics.setEnrichmentQueueSize slug "unenriched" (length unenrichedMbids)
+  liftEffect $ Metrics.setEnrichmentQueueSize slug "empty_genre" (length emptyGenreMbids)
 
   if length allMbids == 0 then
     delay (Milliseconds 60000.0)
@@ -1199,17 +1254,30 @@ enrichMetadata conn cfg = forever do
       delay (Milliseconds 1100.0)
       result <- try $ fetchMusicBrainzRelease mbid
       case result of
-        Left err -> Log.error $ "Enrichment error: " <> Exception.message err
-        Right Nothing -> pure unit
+        Left err -> do
+          Log.error $ "Enrichment error: " <> Exception.message err
+          liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "error"
+        Right Nothing -> do
+          liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "retry"
+          pure unit
         Right (Just mbdata) -> do
+          liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "success"
           if mbdata.genre == Nothing then do
             artistRelease <- getArtistReleaseByMbid conn mbid
             case artistRelease of
               Just { artist, release } -> do
                 lastfmGenre <- fetchLastfmGenre cfg.lastfmApiKey artist release
+                when (isJust cfg.lastfmApiKey) $ liftEffect $ case lastfmGenre of
+                  Just _ -> Metrics.incEnrichmentFetch slug "lastfm" "found"
+                  Nothing -> Metrics.incEnrichmentFetch slug "lastfm" "not_found"
                 finalGenre <- case lastfmGenre of
                   Just _ -> pure lastfmGenre
-                  Nothing -> fetchDiscogsGenre cfg.discogsToken artist release
+                  Nothing -> do
+                    g <- fetchDiscogsGenre cfg.discogsToken artist release
+                    when (isJust cfg.discogsToken) $ liftEffect $ case g of
+                      Just _ -> Metrics.incEnrichmentFetch slug "discogs" "found"
+                      Nothing -> Metrics.incEnrichmentFetch slug "discogs" "not_found"
+                    pure g
 
                 let finalMbdata = mbdata { genre = finalGenre }
                 upsertReleaseMetadata conn mbid finalMbdata.genre finalMbdata.label finalMbdata.year
@@ -1242,24 +1310,25 @@ startUser { slug, config } = do
   -- Run initial syncs in parallel, then join before starting loops.
   -- Both syncs share the write lock, so their transactions are serialized.
   lbFiber <- case config.listenbrainzUser of
-    Just username -> Just <$> forkAff (lbSyncOnce conn username writeLock config.initialSync)
+    Just username -> Just <$> forkAff (lbSyncOnce conn username slug writeLock config.initialSync)
     Nothing -> pure Nothing
   lfFiber <- case config.lastfmUser, config.lastfmApiKey of
-    Just lfmUser, Just apiKey -> Just <$> forkAff (lfSyncOnce conn apiKey lfmUser writeLock config.initialSync)
+    Just lfmUser, Just apiKey -> Just <$> forkAff (lfSyncOnce conn apiKey lfmUser slug writeLock config.initialSync)
     _, _ -> pure Nothing
   for_ lbFiber joinFiber
   for_ lfFiber joinFiber
 
   -- Background loops
-  void $ forkAff $ enrichMetadata conn config
+  void $ forkAff $ enrichMetadata conn config slug
   for_ config.listenbrainzUser \username ->
-    void $ forkAff $ lbSyncLoop conn username writeLock config.initialSync
+    void $ forkAff $ lbSyncLoop conn username slug writeLock config.initialSync
   case config.lastfmUser, config.lastfmApiKey of
-    Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser writeLock config.initialSync
+    Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser slug writeLock config.initialSync
     _, _ -> pure unit
   when config.backupEnabled $ void $ forkAff $
     backupDb conn config.databaseFile (s3ConfigFromUser config)
       (toNumber config.backupIntervalHours * 3600000.0)
+      slug
 
   pure { conn, writeLock, config, slug }
 
