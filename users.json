@@ -1,15 +1,15 @@
 {
-	"users": [
-		{
-			"config": {
-				"backupEnabled": true,
-				"backupIntervalHours": 1,
-				"coverCacheEnabled": true,
-				"databaseFile": "corpus-mtmn.db",
-				"initialSync": false,
-				"listenbrainzUser": "mtmn"
-			},
-			"slug": ""
-		}
-	]
+  "users": [
+    {
+      "config": {
+        "backupEnabled": true,
+        "backupIntervalHours": 1,
+        "coverCacheEnabled": true,
+        "databaseFile": "corpus-mtmn.db",
+        "initialSync": true,
+        "listenbrainzUser": "mtmn"
+      },
+      "slug": ""
+    }
+  ]
 }

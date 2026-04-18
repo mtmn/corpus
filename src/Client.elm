@@ -873,7 +873,7 @@ renderStatSection expandedSections loadedSections mField title entries =
     div [ class "stats-section" ]
         [ h2 [] [ text title ]
         , if List.isEmpty entries then
-            div [ class "stats-empty" ] [ text "no data yet" ]
+            div [ class "stats-empty" ] [ text "beyond here lies nothing" ]
 
           else
             ul [] (List.map (renderStatEntry maxCount mField) visible)

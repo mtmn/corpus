@@ -182,13 +182,16 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
               $ Log.info
               $ "ListenBrainz batch: added " <> show added <> ", " <> show hitCount <> " already present."
             let allExist = hitCount == length listens && not (null listens)
-            if allExist || null listens || not initialSyncEnabled then do
+            if allExist || null listens then do
               when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
               recordSuccess added
-            else do
+            else if initialSyncEnabled then do
               total <- paginateUntilDone 2 minTs added
               Log.info $ "ListenBrainz sync complete. Added " <> show total <> " new scrobbles."
               recordSuccess total
+            else do
+              when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
+              recordSuccess added
       Left err -> do
         Log.error $ "Sync fetch error: " <> Exception.message err
         liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
@@ -256,13 +259,16 @@ lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
     let
       validTracks = mapMaybe lastfmTrackToListen tracks
       allExist = hitCount == length validTracks && not (null validTracks)
-    if allExist || totalPages <= 1 || not initialSyncEnabled then do
+    if allExist || totalPages <= 1 then do
       when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
       recordSuccess added
-    else do
+    else if initialSyncEnabled then do
       total <- paginateLastfmUntilDone 2 totalPages Nothing added
       Log.info $ "Last.fm sync complete. Added " <> show total <> " new scrobbles."
       recordSuccess total
+    else do
+      when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
+      recordSuccess added
 
   paginateLastfmUntilDone page totalPages mTo acc
     | page > totalPages = pure acc
