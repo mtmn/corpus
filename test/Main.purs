@@ -12,7 +12,7 @@ import Test.Spec.Assertions (shouldEqual, fail)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..))
-import Db (connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName)
+import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName)
 import Data.Argonaut.Core (Json)
 import Main (sanitizeKey, listenBrainzUrl, lastfmTrackToListen)
 import S3 (getS3Url)
@@ -146,10 +146,10 @@ main = runSpecAndExitProcess [consoleReporter] do
         length s.tracks `shouldEqual` 1
 
         -- Test Filtering (as mentioned in architecture.md)
-        listensFiltered <- getScrobbles conn 10 0 (Just { field: "genre", value: "Rock" })
+        listensFiltered <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Rock" })
         length listensFiltered `shouldEqual` 1
 
-        listensEmpty <- getScrobbles conn 10 0 (Just { field: "genre", value: "Jazz" })
+        listensEmpty <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Jazz" })
         length listensEmpty `shouldEqual` 0
 
     describe "Corpus Backup" do

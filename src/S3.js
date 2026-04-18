@@ -31,15 +31,7 @@ export const uploadToS3Impl =
 		client
 			.send(command)
 			.then(() => cb(null)())
-			.catch((err) => {
-				const msg =
-					`S3: Upload failed for ${key}: ${err.message || err}`.replace(
-						/\n/g,
-						" ",
-					);
-				console.error(msg);
-				cb(err)();
-			});
+			.catch((err) => cb(err)());
 	};
 
 export const existsInS3Impl = (cfg) => (key) => (cb) => () => {
@@ -51,18 +43,12 @@ export const existsInS3Impl = (cfg) => (key) => (cb) => () => {
 
 	client
 		.send(command)
-		.then(() => cb(true)())
+		.then(() => cb(null)(true)())
 		.catch((err) => {
 			if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) {
-				cb(false)();
+				cb(null)(false)();
 			} else {
-				const msg =
-					`S3: exists check failed for ${key}: ${err.message || err}`.replace(
-						/\n/g,
-						" ",
-					);
-				console.error(msg);
-				cb(false)();
+				cb(err)(false)();
 			}
 		});
 };

@@ -10,6 +10,7 @@ import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing)
 import Data.String (joinWith)
 import Data.Traversable (traverse)
 import Effect (Effect)
+import Control.Monad.Error.Class (throwError)
 import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
@@ -77,7 +78,7 @@ loadConfig path = do
       (\j -> cb (Right j))
       *> pure nonCanceler
   rawUsers <- case decodeUsersJson json of
-    Left msg -> makeAff \cb -> cb (Left (error msg)) *> pure nonCanceler
+    Left msg -> throwError (error msg)
     Right users -> pure users
   portStr <- liftEffect $ lookupEnv "PORT"
   lastfmApiKey <- liftEffect $ lookupEnv "LASTFM_API_KEY"
@@ -111,7 +112,7 @@ loadConfig path = do
     metricsEnabled = metricsEnabledStr == Just "true"
     fullConfig = { port, metricsEnabled, users: map (\u -> u { config = fillCreds u.config }) rawUsers }
   case validateConfig fullConfig of
-    Left msg -> makeAff \cb -> cb (Left (error msg)) *> pure nonCanceler
+    Left msg -> throwError (error msg)
     Right cfg -> pure cfg
 
 validateConfig :: AppConfig -> Either String AppConfig
