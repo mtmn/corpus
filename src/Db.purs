@@ -248,24 +248,29 @@ touchGenreCheckedAt conn mbid = do
 getStats :: Connection -> Maybe String -> Maybe String -> Maybe String -> Maybe String -> Aff Stats
 getStats conn mPeriod mFrom mTo mSection = do
   let
-    timeFilter = case mFrom, mTo of
+    buildTimeFilterAndParams :: { timeFilter :: String, params :: Array Foreign }
+    buildTimeFilterAndParams = case mFrom, mTo of
       Just from, Just to ->
-        " AND s.listened_at >= CAST(epoch(TIMESTAMP '" <> from <> "') AS INTEGER)"
-          <> " AND s.listened_at < CAST(epoch(TIMESTAMP '"
-          <> to
-          <> "') AS INTEGER) + 86400"
+        { timeFilter: " AND s.listened_at >= CAST(epoch(TIMESTAMP ?) AS INTEGER) AND s.listened_at < CAST(epoch(TIMESTAMP ?) AS INTEGER) + 86400"
+        , params: [ unsafeCoerce (from <> "T00:00:00"), unsafeCoerce (to <> "T00:00:00") ]
+        }
       _, _ -> case mPeriod >>= fromString of
-        Just days -> " AND s.listened_at >= CAST(epoch(now()) AS INTEGER) - " <> show (days * 86400)
-        Nothing -> ""
-    fetch name q = case mSection of
-      Nothing -> queryAll conn (q <> " LIMIT 50") []
-      Just s | s == name -> queryAll conn q []
+        Just days ->
+          { timeFilter: " AND s.listened_at >= CAST(epoch(now()) AS INTEGER) - ?"
+          , params: [ unsafeCoerce (days * 86400) ]
+          }
+        Nothing ->
+          { timeFilter: "", params: [] }
+    { timeFilter, params: buildTimeParams } = buildTimeFilterAndParams
+    fetch name q extraParams = case mSection of
+      Nothing -> queryAll conn (q <> " LIMIT 50") (buildTimeParams <> extraParams)
+      Just s | s == name -> queryAll conn q (buildTimeParams <> extraParams)
       Just _ -> pure []
-  genreRows <- fetch "genre" ("SELECT rm.genre as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.genre IS NOT NULL AND rm.genre != ''" <> timeFilter <> " GROUP BY rm.genre ORDER BY count DESC")
-  labelRows <- fetch "label" ("SELECT rm.label as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.label IS NOT NULL AND rm.label != ''" <> timeFilter <> " GROUP BY rm.label ORDER BY count DESC")
-  yearRows <- fetch "year" ("SELECT CAST(rm.release_year AS VARCHAR) as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.release_year IS NOT NULL" <> timeFilter <> " GROUP BY rm.release_year ORDER BY rm.release_year DESC")
-  artistRows <- fetch "artist" ("SELECT s.artist_name as name, COUNT(*) as count FROM scrobbles s WHERE s.artist_name != ''" <> timeFilter <> " GROUP BY s.artist_name ORDER BY count DESC")
-  trackRows <- fetch "track" ("SELECT s.artist_name || ' — ' || s.track_name as name, COUNT(*) as count FROM scrobbles s WHERE s.track_name != '' AND s.artist_name != ''" <> timeFilter <> " GROUP BY s.artist_name, s.track_name ORDER BY count DESC")
+  genreRows <- fetch "genre" ("SELECT rm.genre as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.genre IS NOT NULL AND rm.genre != ''" <> timeFilter <> " GROUP BY rm.genre ORDER BY count DESC") []
+  labelRows <- fetch "label" ("SELECT rm.label as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.label IS NOT NULL AND rm.label != ''" <> timeFilter <> " GROUP BY rm.label ORDER BY count DESC") []
+  yearRows <- fetch "year" ("SELECT CAST(rm.release_year AS VARCHAR) as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.release_year IS NOT NULL" <> timeFilter <> " GROUP BY rm.release_year ORDER BY rm.release_year DESC") []
+  artistRows <- fetch "artist" ("SELECT s.artist_name as name, COUNT(*) as count FROM scrobbles s WHERE s.artist_name != ''" <> timeFilter <> " GROUP BY s.artist_name ORDER BY count DESC") []
+  trackRows <- fetch "track" ("SELECT s.artist_name || ' — ' || s.track_name as name, COUNT(*) as count FROM scrobbles s WHERE s.track_name != '' AND s.artist_name != ''" <> timeFilter <> " GROUP BY s.artist_name, s.track_name ORDER BY count DESC") []
   pure $ Stats
     { genres: mapMaybe rowToEntry genreRows
     , labels: mapMaybe rowToEntry labelRows
