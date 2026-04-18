@@ -167,7 +167,7 @@
             chmod -R u+w $HOME/.elm
 
             dhall-to-json --file users.dhall > users.json
-            npm run build
+            npm run release
           '';
 
           installPhase = ''

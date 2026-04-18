@@ -8,14 +8,19 @@ setup:
 
 # Build the project locally
 build:
-    dhall-to-json --file users.dhall > users.json
     npm run build
 
-dev: build run
+# Build a release
+release:
+    dhall-to-json --file users.dhall > users.json
+    npm run release
 
 # Run the project locally
 run:
     npx spago run
+
+# Build and run locally
+dev: build run
 
 # Run tests
 test:
