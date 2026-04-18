@@ -34,7 +34,7 @@ foreign import uploadToS3Impl
   :: S3ConfigJs -> String -> Buffer -> String -> (Nullable Error -> Effect Unit) -> Effect Unit
 
 foreign import existsInS3Impl
-  :: S3ConfigJs -> String -> (Boolean -> Effect Unit) -> Effect Unit
+  :: S3ConfigJs -> String -> (Nullable Error -> Boolean -> Effect Unit) -> Effect Unit
 
 foreign import getS3UrlImpl :: S3ConfigJs -> String -> String
 
@@ -48,7 +48,10 @@ uploadToS3 cfg key body contentType = makeAff \cb -> do
 
 existsInS3 :: S3Config -> String -> Aff Boolean
 existsInS3 cfg key = makeAff \cb -> do
-  existsInS3Impl (toJs cfg) key \exists -> cb (Right exists)
+  existsInS3Impl (toJs cfg) key \err exists ->
+    case toMaybe err of
+      Just e -> cb (Left e)
+      Nothing -> cb (Right exists)
   pure nonCanceler
 
 getS3Url :: S3Config -> String -> String

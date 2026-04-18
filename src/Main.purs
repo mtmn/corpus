@@ -38,9 +38,9 @@ import Data.Argonaut (decodeJson, encodeJson, parseJson)
 import Data.Argonaut.Core (Json, toObject, toArray, toString, stringify)
 import Data.Array ((!!), length, uncons, mapMaybe, find)
 import Data.Tuple (Tuple(..))
-import Data.Foldable (for_)
+import Data.Foldable (for_, foldM)
 import Data.Traversable (traverse)
-import Db (Connection, connect, initDb, upsertScrobble, getScrobbles, checkExists, getOldestTs, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb, withTransaction)
+import Db (Connection, FilterField(..), connect, initDb, upsertScrobble, getScrobbles, checkExists, getOldestTs, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb, withTransaction)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
 import Control.Monad.Rec.Class (forever)
 import Data.Time.Duration (Milliseconds(..))
@@ -221,20 +221,18 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
     liftEffect $ Metrics.setSyncLastSuccess slug "listenbrainz"
 
   processListens listens = do
-    syncRecursive 0 Nothing 0 listens
-
-  syncRecursive acc minTs hitCount listens = case uncons listens of
-    Nothing -> pure $ Tuple acc (Tuple minTs hitCount)
-    Just { head: l@(Listen { listenedAt: Just ts, trackMetadata: (TrackMetadata _) }), tail } -> do
+    s <- foldM step { added: 0, minTs: Nothing, hitCount: 0 } listens
+    pure $ Tuple s.added (Tuple s.minTs s.hitCount)
+    where
+    step s l@(Listen { listenedAt: Just ts }) = do
       exists <- checkExists conn ts
-      if exists then do
-        syncRecursive acc (Just ts) (hitCount + 1) tail
+      if exists then pure s { minTs = Just ts, hitCount = s.hitCount + 1 }
       else do
         upsertScrobble conn l
-        syncRecursive (acc + 1) (Just ts) hitCount tail
-    Just { head: _, tail } -> do
+        pure s { added = s.added + 1, minTs = Just ts }
+    step s _ = do
       Log.warn "Skipping scrobble without timestamp"
-      syncRecursive acc minTs hitCount tail
+      pure s
 
 lbSyncLoop :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
 lbSyncLoop conn username slug writeLock initialSyncEnabled = forever do
@@ -299,17 +297,17 @@ lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
     when (n > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "lastfm" n
     liftEffect $ Metrics.setSyncLastSuccess slug "lastfm"
 
-  processLastfmTracks tracks = syncLastfmRecursive 0 0 (mapMaybe lastfmTrackToListen tracks)
-
-  syncLastfmRecursive acc hitCount listens = case uncons listens of
-    Nothing -> pure $ Tuple acc hitCount
-    Just { head: l@(Listen { listenedAt: Just ts }), tail } -> do
+  processLastfmTracks tracks = do
+    s <- foldM step { added: 0, hitCount: 0 } (mapMaybe lastfmTrackToListen tracks)
+    pure $ Tuple s.added s.hitCount
+    where
+    step s l@(Listen { listenedAt: Just ts }) = do
       exists <- checkExists conn ts
-      if exists then syncLastfmRecursive acc (hitCount + 1) tail
+      if exists then pure s { hitCount = s.hitCount + 1 }
       else do
         upsertScrobble conn l
-        syncLastfmRecursive (acc + 1) hitCount tail
-    Just { head: _, tail } -> syncLastfmRecursive acc hitCount tail
+        pure s { added = s.added + 1 }
+    step s _ = pure s
 
 lfSyncLoop :: Connection -> String -> String -> String -> AVar Unit -> Boolean -> Aff Unit
 lfSyncLoop conn apiKey lfmUser slug writeLock initialSyncEnabled = forever do
@@ -400,45 +398,130 @@ serveClientJs res = do
 getQueryParam :: String -> URL -> Maybe String
 getQueryParam name url = URLSearchParams.get name (URL.searchParams url)
 
+parseFilterField :: String -> Maybe FilterField
+parseFilterField "artist" = Just FilterArtist
+parseFilterField "label" = Just FilterLabel
+parseFilterField "year" = Just FilterYear
+parseFilterField "genre" = Just FilterGenre
+parseFilterField _ = Nothing
+
 sanitizeKey :: String -> String
-sanitizeKey str =
+sanitizeKey = replace re1 "_" >>> replace re2 "_"
+  where
+  re1 = unsafeRegex "[^a-z0-9.-]" (parseFlags "gi")
+  re2 = unsafeRegex "_{2,}" (parseFlags "g")
+
+-- Fetch the Last.fm image URL for an artist/release (no caching, no serving).
+fetchLastfmCoverUrl :: UserConfig -> String -> String -> Aff (Maybe String)
+fetchLastfmCoverUrl cfg artist release = case cfg.lastfmApiKey of
+  Nothing -> pure Nothing
+  Just k -> do
+    let
+      searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&artist="
+        <> (fromMaybe "" $ encodeURIComponent artist)
+        <> "&album="
+        <> (fromMaybe "" $ encodeURIComponent release)
+        <> "&format=json&api_key="
+        <> k
+    Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
+    result <- try $ fetch searchUrl { method: GET }
+    case result of
+      Right fr | fr.status == 200 -> do
+        json <- fromJson fr.json
+        pure $ do
+          obj <- toObject json
+          album <- Object.lookup "album" obj >>= toObject
+          images <- Object.lookup "image" album >>= toArray
+          imgObj <- images !! 2 >>= toObject
+          u <- Object.lookup "#text" imgObj >>= toString
+          if u == "" then Nothing else Just u
+      _ -> pure Nothing
+
+-- Fetch the Discogs image URL for an artist/release (no caching, no serving).
+fetchDiscogsCoverUrl :: UserConfig -> String -> String -> Aff (Maybe String)
+fetchDiscogsCoverUrl cfg artist release = case cfg.discogsToken of
+  Nothing -> pure Nothing
+  Just t -> do
+    let
+      queryStr = artist <> " " <> release
+      searchUrl = "https://api.discogs.com/database/search?q="
+        <> (fromMaybe "" $ encodeURIComponent queryStr)
+        <> "&type=release&per_page=1"
+    Log.info $ "Searching Discogs for: " <> queryStr
+    result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0", "Authorization": "Discogs token=" <> t } }
+    case result of
+      Right fr | fr.status == 200 -> do
+        json <- fromJson fr.json
+        pure $ do
+          obj <- toObject json
+          results <- Object.lookup "results" obj >>= toArray
+          firstResult <- results !! 0 >>= toObject
+          Object.lookup "cover_image" firstResult >>= toString
+      _ -> pure Nothing
+
+type CoverSource =
+  { name :: String
+  , s3Key :: String
+  , findUrl :: Aff (Maybe String)
+  }
+
+coverSources :: String -> String -> String -> UserConfig -> Array CoverSource
+coverSources mbid artist release cfg =
   let
-    re1 = unsafeRegex "[^a-z0-9.-]" (parseFlags "gi")
-    re2 = unsafeRegex "_{2,}" (parseFlags "g")
+    safeArtist = sanitizeKey artist
+    safeRelease = sanitizeKey release
   in
-    replace re2 "_" (replace re1 "_" str)
+    [ { name: "caa"
+      , s3Key: "covers/caa/" <> sanitizeKey mbid <> ".jpg"
+      , findUrl:
+          if mbid == "" then pure Nothing
+          else pure $ Just $ "https://coverartarchive.org/release/" <> mbid <> "/front-250"
+      }
+    , { name: "lastfm"
+      , s3Key: "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+      , findUrl:
+          if artist == "" || release == "" then pure Nothing
+          else fetchLastfmCoverUrl cfg artist release
+      }
+    , { name: "discogs"
+      , s3Key: "covers/discogs/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+      , findUrl:
+          if artist == "" || release == "" then pure Nothing
+          else fetchDiscogsCoverUrl cfg artist release
+      }
+    ]
 
 serveCover :: UserConfig -> String -> URL -> Response -> Effect Unit
-serveCover cfg slug url res = do
-  launchAff_ do
-    let mbid = fromMaybe "" (getQueryParam "mbid" url)
-    let artistStr = fromMaybe "" (getQueryParam "artist" url)
-    let releaseStr = fromMaybe "" (getQueryParam "release" url)
-    let s3cfg = s3ConfigFromUser cfg
+serveCover cfg slug url res = launchAff_ do
+  let
+    mbid = fromMaybe "" (getQueryParam "mbid" url)
+    artist = fromMaybe "" (getQueryParam "artist" url)
+    release = fromMaybe "" (getQueryParam "release" url)
+    s3cfg = s3ConfigFromUser cfg
 
-    if mbid /= "" then do
-      let safeMbid = sanitizeKey mbid
-      let s3Key = "covers/caa/" <> safeMbid <> ".jpg"
-      cached <- checkS3 s3cfg s3Key
-      if cached then do
-        Log.info $ "Serving CAA cover from S3: " <> s3Key
-        liftEffect $ Metrics.incCoverRequest slug "caa" "s3_hit"
-        serveS3 s3cfg s3Key res
-      else do
-        Log.info $ "Fetching CAA cover: " <> mbid
-        let caaUrl = "https://coverartarchive.org/release/" <> mbid <> "/front-250"
-        success <- tryProxyAndCache s3cfg caaUrl s3Key res
-        if success then
-          liftEffect $ Metrics.incCoverRequest slug "caa" "fetch"
-        else do
-          liftEffect $ Metrics.incCoverRequest slug "caa" "miss"
-          Log.info $ "CAA cover not found for " <> mbid <> ", falling back to Last.fm"
-          tryLastfm s3cfg artistStr releaseStr res
-    else do
-      Log.info $ "No MBID provided, trying Last.fm for: " <> artistStr <> " - " <> releaseStr
-      tryLastfm s3cfg artistStr releaseStr res
+  served <- foldM (trySource s3cfg) false (coverSources mbid artist release cfg)
+  unless served $ liftEffect $ serveNotFound res
 
   where
+  trySource _ true _ = pure true
+  trySource s3cfg false { name, s3Key, findUrl } = do
+    cached <- checkS3 s3cfg s3Key
+    if cached then do
+      Log.info $ "Serving " <> name <> " cover from S3: " <> s3Key
+      liftEffect $ Metrics.incCoverRequest slug name "s3_hit"
+      serveS3 s3cfg s3Key res
+      pure true
+    else do
+      mUrl <- findUrl
+      case mUrl of
+        Nothing -> pure false
+        Just urlStr -> do
+          success <- tryProxyAndCache s3cfg urlStr s3Key res
+          liftEffect $
+            if success then Metrics.incCoverRequest slug name "fetch"
+            else Metrics.incCoverRequest slug name "miss"
+          pure success
+
   checkS3 s3cfg s3Key
     | not cfg.coverCacheEnabled = pure false
     | otherwise = do
@@ -467,7 +550,6 @@ serveCover cfg slug url res = do
           nativeBuf <- fromArrayBuffer buf
           void $ write writer nativeBuf
           end writer
-
         when cfg.coverCacheEnabled $ void $ forkAff $ do
           uploadResult <- try $ uploadToS3 s3cfg s3Key (unsafeCoerce buf) contentType
           case uploadResult of
@@ -475,103 +557,6 @@ serveCover cfg slug url res = do
             Left err -> Log.error $ "S3 upload failed: " <> Exception.message err
         pure true
       _ -> pure false
-
-  tryLastfm s3cfg artist release response
-    | artist == "" || release == "" = do
-        Log.warn "Missing artist or release for Last.fm fallback"
-        liftEffect $ serveNotFound response
-    | otherwise = do
-        let safeArtist = sanitizeKey artist
-        let safeRelease = sanitizeKey release
-        let s3Key = "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
-        cached <- checkS3 s3cfg s3Key
-        if cached then do
-          Log.info $ "Serving Last.fm cover from S3: " <> s3Key
-          liftEffect $ Metrics.incCoverRequest slug "lastfm" "s3_hit"
-          serveS3 s3cfg s3Key response
-        else case cfg.lastfmApiKey of
-          Nothing -> do
-            Log.warn "lastfmApiKey not configured, falling back to Discogs"
-            tryDiscogs s3cfg artist release response
-          Just k -> do
-            let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json" <> "&api_key=" <> k
-            Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
-            result <- try $ fetch searchUrl { method: GET }
-            case result of
-              Right fetchRes | fetchRes.status == 200 -> do
-                json <- fromJson fetchRes.json
-                let
-                  coverUrl = do
-                    obj <- toObject json
-                    album <- Object.lookup "album" obj >>= toObject
-                    images <- Object.lookup "image" album >>= toArray
-                    imageObj <- images !! 2 >>= toObject
-                    u <- Object.lookup "#text" imageObj >>= toString
-                    if u == "" then Nothing else Just u
-                case coverUrl of
-                  Just urlStr -> do
-                    Log.info $ "Found Last.fm cover: " <> urlStr
-                    success <- tryProxyAndCache s3cfg urlStr s3Key response
-                    if success then
-                      liftEffect $ Metrics.incCoverRequest slug "lastfm" "fetch"
-                    else do
-                      liftEffect $ Metrics.incCoverRequest slug "lastfm" "miss"
-                      Log.info "Last.fm image proxy failed, falling back to Discogs"
-                      tryDiscogs s3cfg artist release response
-                  Nothing -> do
-                    Log.info "No cover found on Last.fm, falling back to Discogs"
-                    liftEffect $ Metrics.incCoverRequest slug "lastfm" "not_found"
-                    tryDiscogs s3cfg artist release response
-              _ -> do
-                Log.info "Last.fm API request failed, falling back to Discogs"
-                liftEffect $ Metrics.incCoverRequest slug "lastfm" "error"
-                tryDiscogs s3cfg artist release response
-
-  tryDiscogs s3cfg artist release response = do
-    let safeArtist = sanitizeKey artist
-    let safeRelease = sanitizeKey release
-    let s3Key = "covers/discogs/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
-    cached <- checkS3 s3cfg s3Key
-    if cached then do
-      Log.info $ "Serving Discogs cover from S3: " <> s3Key
-      liftEffect $ Metrics.incCoverRequest slug "discogs" "s3_hit"
-      serveS3 s3cfg s3Key response
-    else case cfg.discogsToken of
-      Nothing -> do
-        Log.warn "discogsToken not configured, cannot fallback further"
-        liftEffect $ serveNotFound response
-      Just t -> do
-        let queryStr = artist <> " " <> release
-        let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1"
-        Log.info $ "Searching Discogs for: " <> queryStr
-        result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "ScrobblerPureScript/1.0", "Authorization": "Discogs token=" <> t } }
-        case result of
-          Right fetchRes | fetchRes.status == 200 -> do
-            json <- fromJson fetchRes.json
-            let
-              coverUrl = do
-                obj <- toObject json
-                results <- Object.lookup "results" obj >>= toArray
-                firstResult <- results !! 0 >>= toObject
-                Object.lookup "cover_image" firstResult >>= toString
-            case coverUrl of
-              Just urlStr -> do
-                Log.info $ "Found Discogs cover: " <> urlStr
-                success <- tryProxyAndCache s3cfg urlStr s3Key response
-                if success then
-                  liftEffect $ Metrics.incCoverRequest slug "discogs" "fetch"
-                else do
-                  liftEffect $ Metrics.incCoverRequest slug "discogs" "miss"
-                  Log.info "Discogs image proxy failed"
-                  liftEffect $ serveNotFound response
-              Nothing -> do
-                Log.info "No cover found on Discogs"
-                liftEffect $ Metrics.incCoverRequest slug "discogs" "not_found"
-                liftEffect $ serveNotFound response
-          _ -> do
-            Log.info "Discogs API request failed"
-            liftEffect $ Metrics.incCoverRequest slug "discogs" "error"
-            liftEffect $ serveNotFound response
 
 serveProxy :: Connection -> URL -> Response -> Effect Unit
 serveProxy db url res = do
@@ -582,7 +567,7 @@ serveProxy db url res = do
     let offset = fromMaybe 0 (getQueryParam "offset" url >>= fromString)
     let
       mFilter = do
-        field <- getQueryParam "filterField" url
+        field <- getQueryParam "filterField" url >>= parseFilterField
         value <- getQueryParam "filterValue" url
         pure { field, value }
 
@@ -760,6 +745,27 @@ fetchDiscogsGenre (Just t) artist release = do
       Log.warn "Discogs genre API request failed"
       pure Nothing
 
+type GenreSource =
+  { name :: String
+  , enabled :: Boolean
+  , fetch :: Aff (Maybe String)
+  }
+
+-- Try each source in order, stopping at the first that returns Just.
+-- Records found/not_found metrics only for sources that are enabled and queried.
+fetchFallbackGenre :: String -> Array GenreSource -> Aff (Maybe String)
+fetchFallbackGenre slug = foldM trySource Nothing
+  where
+  trySource (Just g) _ = pure (Just g)
+  trySource Nothing { name, enabled, fetch }
+    | not enabled = pure Nothing
+    | otherwise = do
+        result <- fetch
+        liftEffect $ case result of
+          Just _ -> Metrics.incEnrichmentFetch slug name "found"
+          Nothing -> Metrics.incEnrichmentFetch slug name "not_found"
+        pure result
+
 enrichMetadata :: Connection -> UserConfig -> String -> Aff Unit
 enrichMetadata conn cfg slug = forever do
   unenrichedMbids <- getUnenrichedMbids conn 10
@@ -787,37 +793,29 @@ enrichMetadata conn cfg slug = forever do
           touchGenreCheckedAt conn mbid
         Right (Just mbdata) -> do
           liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "success"
-          if mbdata.genre == Nothing then do
-            let artistRelease = Object.lookup mbid artistReleaseMap
-            case artistRelease of
-              Just { artist, release } -> do
-                lastfmGenre <- fetchLastfmGenre cfg.lastfmApiKey artist release
-                when (isJust cfg.lastfmApiKey) $ liftEffect $ case lastfmGenre of
-                  Just _ -> Metrics.incEnrichmentFetch slug "lastfm" "found"
-                  Nothing -> Metrics.incEnrichmentFetch slug "lastfm" "not_found"
-                finalGenre <- case lastfmGenre of
-                  Just _ -> pure lastfmGenre
-                  Nothing -> do
-                    g <- fetchDiscogsGenre cfg.discogsToken artist release
-                    when (isJust cfg.discogsToken) $ liftEffect $ case g of
-                      Just _ -> Metrics.incEnrichmentFetch slug "discogs" "found"
-                      Nothing -> Metrics.incEnrichmentFetch slug "discogs" "not_found"
-                    pure g
-
-                let finalMbdata = mbdata { genre = finalGenre }
-                upsertReleaseMetadata conn mbid finalMbdata.genre finalMbdata.label finalMbdata.year
-
-                case finalGenre of
-                  Just genre -> Log.info $ "Added fallback genre from " <> (if lastfmGenre /= Nothing then "Last.fm" else "Discogs") <> " for " <> mbid <> ": " <> genre
-                  Nothing -> do
-                    Log.info $ "No genre found in any source for " <> mbid
-                    touchGenreCheckedAt conn mbid
-              Nothing -> do
-                Log.warn $ "No artist/release info found for MBID " <> mbid <> ", cannot use fallback sources"
-                upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
-                touchGenreCheckedAt conn mbid
-          else do
-            upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
+          case mbdata.genre of
+            Just _ ->
+              upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
+            Nothing -> do
+              let artistRelease = Object.lookup mbid artistReleaseMap
+              case artistRelease of
+                Just { artist, release } -> do
+                  let
+                    sources =
+                      [ { name: "lastfm", enabled: isJust cfg.lastfmApiKey, fetch: fetchLastfmGenre cfg.lastfmApiKey artist release }
+                      , { name: "discogs", enabled: isJust cfg.discogsToken, fetch: fetchDiscogsGenre cfg.discogsToken artist release }
+                      ]
+                  finalGenre <- fetchFallbackGenre slug sources
+                  upsertReleaseMetadata conn mbid finalGenre mbdata.label mbdata.year
+                  case finalGenre of
+                    Just genre -> Log.info $ "Added fallback genre for " <> mbid <> ": " <> genre
+                    Nothing -> do
+                      Log.info $ "No genre found in any source for " <> mbid
+                      touchGenreCheckedAt conn mbid
+                Nothing -> do
+                  Log.warn $ "No artist/release info found for MBID " <> mbid <> ", cannot use fallback sources"
+                  upsertReleaseMetadata conn mbid mbdata.genre mbdata.label mbdata.year
+                  touchGenreCheckedAt conn mbid
 
 -- Initialise one user: connect DB, start sync loops, return a UserContext.
 startUser :: UserEntry -> Aff UserContext

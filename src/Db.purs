@@ -21,6 +21,7 @@ import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEn
 import Foreign.Object as Object
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Array (mapMaybe, uncons, (!!), last, length, replicate)
+import Data.Foldable (for_)
 import Data.String.Common (joinWith)
 import Data.Tuple (Tuple(..))
 import Data.Int (fromString)
@@ -33,6 +34,8 @@ import Log as Log
 import Metrics as Metrics
 
 foreign import data Connection :: Type
+
+data FilterField = FilterArtist | FilterLabel | FilterYear | FilterGenre
 
 foreign import connectImpl :: String -> (Nullable Error -> Nullable Connection -> Effect Unit) -> Effect Unit
 foreign import runImpl :: Connection -> String -> Array Foreign -> (Nullable Error -> Effect Unit) -> Effect Unit
@@ -149,51 +152,48 @@ getOldestTs conn = do
     if ts == 0 then Nothing else Just ts
 
 upsertScrobble :: Connection -> Listen -> Aff Unit
-upsertScrobble conn (Listen { listenedAt, trackMetadata: TrackMetadata track }) = do
-  case listenedAt of
-    Nothing -> pure unit
-    Just ts -> do
-      let
-        mbid = fromMaybe (MbidMapping { releaseMbid: Nothing, caaReleaseMbid: Nothing }) track.mbidMapping
-        MbidMapping m = mbid
-        params =
-          [ unsafeCoerce ts
-          , unsafeCoerce (fromMaybe "" track.trackName)
-          , unsafeCoerce (fromMaybe "" track.artistName)
-          , unsafeCoerce (fromMaybe "" track.releaseName)
-          , unsafeCoerce (fromMaybe "" m.releaseMbid)
-          , unsafeCoerce (fromMaybe "" m.caaReleaseMbid)
-          ]
-      _ <- run conn "INSERT INTO scrobbles SELECT * FROM (SELECT ? as listened_at, ? as track_name, ? as artist_name, ? as release_name, ? as release_mbid, ? as caa_release_mbid) t WHERE NOT EXISTS (SELECT 1 FROM scrobbles WHERE listened_at = t.listened_at)" params
-      pure unit
+upsertScrobble conn (Listen { listenedAt, trackMetadata: TrackMetadata track }) =
+  for_ listenedAt \ts -> do
+    let
+      mbid = fromMaybe (MbidMapping { releaseMbid: Nothing, caaReleaseMbid: Nothing }) track.mbidMapping
+      MbidMapping m = mbid
+      params =
+        [ unsafeCoerce ts
+        , unsafeCoerce (fromMaybe "" track.trackName)
+        , unsafeCoerce (fromMaybe "" track.artistName)
+        , unsafeCoerce (fromMaybe "" track.releaseName)
+        , unsafeCoerce (fromMaybe "" m.releaseMbid)
+        , unsafeCoerce (fromMaybe "" m.caaReleaseMbid)
+        ]
+    run conn "INSERT INTO scrobbles SELECT * FROM (SELECT ? as listened_at, ? as track_name, ? as artist_name, ? as release_name, ? as release_mbid, ? as caa_release_mbid) t WHERE NOT EXISTS (SELECT 1 FROM scrobbles WHERE listened_at = t.listened_at)" params
 
-getScrobbles :: Connection -> Int -> Int -> Maybe { field :: String, value :: String } -> Aff (Array Listen)
+getScrobbles :: Connection -> Int -> Int -> Maybe { field :: FilterField, value :: String } -> Aff (Array Listen)
 getScrobbles conn limit offset Nothing = do
   rows <- queryAll conn
     "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
     [ unsafeCoerce limit, unsafeCoerce offset ]
   pure $ mapMaybe rowToListen rows
 getScrobbles conn limit offset (Just { field, value }) = do
-  rows <- queryAll conn query [ unsafeCoerce value, unsafeCoerce limit, unsafeCoerce offset ]
+  rows <- queryAll conn (filterQuery field) [ unsafeCoerce value, unsafeCoerce limit, unsafeCoerce offset ]
   pure $ mapMaybe rowToListen rows
-  where
-  query = case field of
-    "artist" ->
-      "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
-        <> " FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
-        <> " WHERE s.artist_name = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
-    _ ->
-      let
-        col = case field of
-          "label" -> "rm.label"
-          "year" -> "rm.release_year::VARCHAR"
-          _ -> "rm.genre"
-      in
-        "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
-          <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
-          <> " WHERE "
-          <> col
-          <> " = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+
+filterQuery :: FilterField -> String
+filterQuery FilterArtist =
+  "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
+    <> " FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+    <> " WHERE s.artist_name = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+filterQuery FilterLabel =
+  "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
+    <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+    <> " WHERE rm.label = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+filterQuery FilterYear =
+  "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
+    <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+    <> " WHERE rm.release_year::VARCHAR = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+filterQuery FilterGenre =
+  "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
+    <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+    <> " WHERE rm.genre = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
 
 initReleaseMetadata :: Connection -> Aff Unit
 initReleaseMetadata conn = do
