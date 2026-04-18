@@ -22,7 +22,8 @@ import Node.Stream.Aff (readableToStringUtf8)
 import Node.Encoding (Encoding(UTF8))
 import Node.Net.Server (listenTcp, listeningH)
 import Node.Buffer (fromArrayBuffer)
-import Data.Either (Either(..))
+import Data.Either (Either(..), hush)
+import Control.Monad.Error.Class (throwError)
 import Effect.Exception as Exception
 import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff, joinFiber)
 import Effect.Aff.AVar (AVar)
@@ -355,6 +356,8 @@ handleRequest metricsEnabled contexts req res = do
             withUser url \ctx -> serveStats ctx.conn url res
           "/cover" ->
             withUser url \ctx -> serveCover ctx.config ctx.slug url res
+          "/similar" ->
+            withUser url \ctx -> serveSimilar ctx.config url res
           "/healthz" ->
             withUser url \ctx -> serveHealthz ctx.conn res
           _ ->
@@ -641,6 +644,74 @@ serveNotFound res = do
   void $ writeString w UTF8 "Not Found"
   end w
 
+serveBadRequest :: Response -> String -> Effect Unit
+serveBadRequest res message = do
+  setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
+  setStatusCode 400 res
+  let w = toWriteable (toOutgoingMessage res)
+  void $ writeString w UTF8 message
+  end w
+
+serveError :: Response -> Int -> String -> String -> Effect Unit
+serveError res statusCode statusName message = do
+  setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
+  setStatusCode statusCode res
+  let w = toWriteable (toOutgoingMessage res)
+  void $ writeString w UTF8 (statusName <> ": " <> message)
+  end w
+
+fetchCosineSimilar :: UserConfig -> String -> Aff String
+fetchCosineSimilar cfg query = do
+  let apiKey = fromMaybe "" cfg.cosineApiKey
+  if apiKey == "" then do
+    Log.warn "cosineApiKey not configured for similar tracks"
+    pure "{\"data\":{\"similar_tracks\":[]},\"success\":true}"
+  else do
+    let headers = { "User-Agent": "corpus/1.0 +https://codeberg.org/mtmn/corpus", "Authorization": "Bearer " <> apiKey }
+    let searchUrl = "https://cosine.club/api/v1/search?q=" <> (fromMaybe "" $ encodeURIComponent query) <> "&limit=1"
+    Log.info $ "Cosine Club: searching for: " <> query
+    searchResult <- try $ fetch searchUrl { method: GET, headers: headers }
+    case searchResult of
+      Left err ->
+        throwError err
+      Right searchRes ->
+        if searchRes.status == 429 then do
+          Log.warn "Cosine Club: rate limited on search"
+          throwError (Exception.error "Rate limit exceeded")
+        else if searchRes.status /= 200 then do
+          Log.warn $ "Cosine Club: search returned " <> show searchRes.status
+          throwError (Exception.error "Search API error")
+        else do
+          searchBody <- searchRes.text
+          let
+            mTrackId = do
+              json <- hush $ parseJson searchBody
+              obj <- toObject json
+              arr <- Object.lookup "data" obj >>= toArray
+              first <- arr !! 0
+              firstObj <- toObject first
+              Object.lookup "id" firstObj >>= toString
+          case mTrackId of
+            Nothing -> do
+              Log.info $ "Cosine Club: track not indexed: " <> query
+              pure "{\"data\":{\"similar_tracks\":[]},\"success\":true}"
+            Just trackId -> do
+              let similarUrl = "https://cosine.club/api/v1/tracks/" <> trackId <> "/similar?limit=10"
+              Log.info $ "Cosine Club: fetching similar for ID " <> trackId
+              similarResult <- try $ fetch similarUrl { method: GET, headers: headers }
+              case similarResult of
+                Left err ->
+                  throwError err
+                Right similarRes ->
+                  if similarRes.status == 429 then do
+                    Log.warn "Cosine Club: rate limited on similar"
+                    throwError (Exception.error "Rate limit exceeded")
+                  else if similarRes.status /= 200 then do
+                    Log.warn $ "Cosine Club: similar API returned " <> show similarRes.status
+                    throwError (Exception.error "Similar API error")
+                  else
+                    similarRes.text
+
 serveStats :: Connection -> URL -> Response -> Effect Unit
 serveStats db url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
@@ -657,6 +728,29 @@ serveStats db url res = do
       let w = toWriteable (toOutgoingMessage res)
       void $ writeString w UTF8 responseBody
       end w
+
+serveSimilar :: UserConfig -> URL -> Response -> Effect Unit
+serveSimilar cfg url res = do
+  setHeader "Content-Type" "application/json" (toOutgoingMessage res)
+  launchAff_ do
+    let artist = fromMaybe "" (getQueryParam "artist" url)
+    let track = fromMaybe "" (getQueryParam "track" url)
+    if artist == "" || track == "" then
+      liftEffect $ serveBadRequest res "Artist and track parameters are required"
+    else do
+      let query = artist <> " - " <> track
+      result <- try $ fetchCosineSimilar cfg query
+
+      case result of
+        Left err -> do
+          Log.error $ "Cosine Club API error: " <> Exception.message err
+          liftEffect $ serveError res 502 "Bad Gateway" "Failed to fetch similar tracks"
+        Right responseBody -> do
+          liftEffect $ do
+            setStatusCode 200 res
+            let w = toWriteable (toOutgoingMessage res)
+            void $ writeString w UTF8 responseBody
+            end w
 
 type MbData = { genre :: Maybe String, label :: Maybe String, year :: Maybe Int }
 
