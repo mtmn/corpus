@@ -70,9 +70,8 @@ type UserContext =
 listenBrainzUrl :: String -> String
 listenBrainzUrl username = "https://api.listenbrainz.org/1/user/" <> username <> "/listens"
 
-fetchListenBrainzData :: String -> Int -> Aff String
-fetchListenBrainzData username count = withRetry "ListenBrainz fetch" $ makeAff \callback -> do
-  let url = listenBrainzUrl username <> "?count=" <> show count
+fetchListenBrainzUrl :: String -> Aff String
+fetchListenBrainzUrl url = withRetry "ListenBrainz fetch" $ makeAff \callback -> do
   req <- HTTPS.get url
 
   req # on_ Client.responseH \res -> do
@@ -86,35 +85,7 @@ fetchListenBrainzData username count = withRetry "ListenBrainz fetch" $ makeAff 
           callback (Left $ Exception.error $ "ListenBrainz API returned status " <> show statusCode)
 
   let errorH = EventHandle "error" mkEffectFn1
-  on_ errorH
-    ( \err -> do
-        callback (Left err)
-    )
-    (unsafeCoerce req)
-
-  pure nonCanceler
-
-fetchListenBrainzDataBefore :: String -> Int -> Aff String
-fetchListenBrainzDataBefore username maxTs = withRetry "ListenBrainz fetch" $ makeAff \callback -> do
-  let url = listenBrainzUrl username <> "?count=100&max_ts=" <> show maxTs
-  req <- HTTPS.get url
-
-  req # on_ Client.responseH \res -> do
-    launchAff_ do
-      body <- readableToStringUtf8 (IM.toReadable res)
-      let statusCode = IM.statusCode res
-      liftEffect $
-        if statusCode == 200 then
-          callback (Right body)
-        else
-          callback (Left $ Exception.error $ "ListenBrainz API returned status " <> show statusCode)
-
-  let errorH = EventHandle "error" mkEffectFn1
-  on_ errorH
-    ( \err -> do
-        callback (Left err)
-    )
-    (unsafeCoerce req)
+  on_ errorH (\err -> callback (Left err)) (unsafeCoerce req)
 
   pure nonCanceler
 
@@ -194,7 +165,7 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
   where
   performFullSync = do
     when initialSyncEnabled $ Log.info $ "Starting ListenBrainz sync for " <> username
-    result <- try $ fetchListenBrainzData username 100
+    result <- try $ fetchListenBrainzUrl (listenBrainzUrl username <> "?count=100")
     case result of
       Right body -> do
         case parseJson body >>= decodeJson of
@@ -209,15 +180,11 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
             let allExist = hitCount == length listens && length listens > 0
             if allExist || length listens == 0 || not initialSyncEnabled then do
               when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
-              liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "success"
-              when (added > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "listenbrainz" added
-              liftEffect $ Metrics.setSyncLastSuccess slug "listenbrainz"
+              recordSuccess added
             else do
               total <- paginateUntilDone 2 minTs added
               Log.info $ "ListenBrainz sync complete. Added " <> show total <> " new scrobbles."
-              liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "success"
-              when (total > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "listenbrainz" total
-              liftEffect $ Metrics.setSyncLastSuccess slug "listenbrainz"
+              recordSuccess total
       Left err -> do
         Log.error $ "Sync fetch error: " <> Exception.message err
         liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
@@ -226,7 +193,7 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
     Nothing -> pure acc
     Just ts -> do
       Log.info $ "Fetching ListenBrainz batch " <> show batchNum <> " (before " <> show ts <> ")..."
-      result <- try $ fetchListenBrainzDataBefore username ts
+      result <- try $ fetchListenBrainzUrl (listenBrainzUrl username <> "?count=100&max_ts=" <> show ts)
       case result of
         Right body -> do
           case parseJson body >>= decodeJson of
@@ -244,6 +211,11 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
         Left err -> do
           Log.error $ "Sync fetch error: " <> Exception.message err
           pure acc
+
+  recordSuccess n = do
+    liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "success"
+    when (n > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "listenbrainz" n
+    liftEffect $ Metrics.setSyncLastSuccess slug "listenbrainz"
 
   processListens listens = do
     syncRecursive 0 Nothing 0 listens
@@ -283,15 +255,11 @@ lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
       allExist = hitCount == length validTracks && length validTracks > 0
     if allExist || totalPages <= 1 || not initialSyncEnabled then do
       when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
-      liftEffect $ Metrics.incSyncRuns slug "lastfm" "success"
-      when (added > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "lastfm" added
-      liftEffect $ Metrics.setSyncLastSuccess slug "lastfm"
+      recordSuccess added
     else do
       total <- paginateLastfmUntilDone 2 totalPages Nothing added
       Log.info $ "Last.fm sync complete. Added " <> show total <> " new scrobbles."
-      liftEffect $ Metrics.incSyncRuns slug "lastfm" "success"
-      when (total > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "lastfm" total
-      liftEffect $ Metrics.setSyncLastSuccess slug "lastfm"
+      recordSuccess total
 
   paginateLastfmUntilDone page totalPages mTo acc
     | page > totalPages = pure acc
@@ -322,6 +290,11 @@ lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
           Log.info $ "Last.fm backfill page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
           total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
           Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
+
+  recordSuccess n = do
+    liftEffect $ Metrics.incSyncRuns slug "lastfm" "success"
+    when (n > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "lastfm" n
+    liftEffect $ Metrics.setSyncLastSuccess slug "lastfm"
 
   processLastfmTracks tracks = syncLastfmRecursive 0 0 (mapMaybe lastfmTrackToListen tracks)
 
@@ -795,8 +768,8 @@ normalizePath path = case stripPrefix (Pattern "/~") path of
 -- Request handler
 -- API endpoints (/proxy, /stats, /cover, /healthz) select the user via ?user=<slug>.
 -- Index pages are served at / (root user) and /~<slug> (named users).
-handleRequest :: Array UserContext -> Request -> Response -> Effect Unit
-handleRequest contexts req res = do
+handleRequest :: Boolean -> Array UserContext -> Request -> Response -> Effect Unit
+handleRequest metricsEnabled contexts req res = do
   let method = IM.method req
   let rawUrl = IM.url req
   case URL.fromRelative rawUrl "http://localhost" of
@@ -808,7 +781,11 @@ handleRequest contexts req res = do
           "/client.js" -> serveClientJs res
           "/favicon.png" -> serveAsset "image/png" "assets/favicon.png" res
           "/" -> serveIndex "" res
-          "/metrics" -> serveMetrics res
+          "/metrics" ->
+            if metricsEnabled then serveMetrics res
+            else do
+              Log.warn "Path not found: /metrics"
+              serveNotFound res
           "/proxy" -> withUser url \ctx -> serveProxy ctx.conn url res
           "/stats" -> withUser url \ctx -> serveStats ctx.conn url res
           "/cover" -> withUser url \ctx -> serveCover ctx.config ctx.slug url res
@@ -1352,7 +1329,7 @@ main = do
         contexts <- traverse startUser appConfig.users
         liftEffect $ do
           server <- createServer
-          server # on_ Server.requestH (handleRequest contexts)
+          server # on_ Server.requestH (handleRequest appConfig.metricsEnabled contexts)
           let netServer = Server.toNetServer server
 
           netServer # on_ listeningH do

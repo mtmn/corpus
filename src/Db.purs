@@ -98,21 +98,25 @@ backupDb conn dbFile s3cfg intervalMs slug = forever do
     Right _ -> pure unit
 
 -- Acquires the write lock, runs the action inside a transaction, then releases.
--- If the action throws, the transaction is rolled back before the lock is released.
+-- The lock is always released: on success, on action failure (rollback), and on
+-- BEGIN/COMMIT failure. This prevents deadlock if the database throws unexpectedly.
 withTransaction :: forall a. Connection -> AVar Unit -> Aff a -> Aff a
 withTransaction conn lock action = do
   Avar.take lock
-  run conn "BEGIN TRANSACTION" []
-  result <- try action
+  result <- try do
+    run conn "BEGIN TRANSACTION" []
+    r <- try action
+    case r of
+      Left err -> do
+        void $ try $ run conn "ROLLBACK" []
+        throwError err
+      Right v -> do
+        run conn "COMMIT" []
+        pure v
+  Avar.put unit lock
   case result of
-    Left err -> do
-      void $ try $ run conn "ROLLBACK" []
-      Avar.put unit lock
-      throwError err
-    Right r -> do
-      run conn "COMMIT" []
-      Avar.put unit lock
-      pure r
+    Left err -> throwError err
+    Right v -> pure v
 
 queryAll :: Connection -> String -> Array Foreign -> Aff (Array Json)
 queryAll conn sql params = makeAff \cb -> do
@@ -129,11 +133,9 @@ initDb conn = do
 checkExists :: Connection -> Int -> Aff Boolean
 checkExists conn ts = do
   rows <- queryAll conn "SELECT 1 FROM scrobbles WHERE listened_at = ?" [ unsafeCoerce ts ]
-  pure $ fromMaybe false $ do
-    arr <- Just rows
-    case arr of
-      [] -> Just false
-      _ -> Just true
+  pure case rows of
+    [] -> false
+    _ -> true
 
 getOldestTs :: Connection -> Aff (Maybe Int)
 getOldestTs conn = do
@@ -141,7 +143,8 @@ getOldestTs conn = do
   pure $ do
     row <- rows !! 0
     obj <- toObject row
-    ts <- Object.lookup "min_ts" obj >>= (unsafeCoerce >>> Just)
+    v <- Object.lookup "min_ts" obj
+    ts <- toMaybe (unsafeCoerce v :: Nullable Int)
     if ts == 0 then Nothing else Just ts
 
 upsertScrobble :: Connection -> Listen -> Aff Unit
