@@ -12,9 +12,10 @@ import Test.Spec.Assertions (shouldEqual, fail)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..))
-import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName)
+import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt)
 import Data.Argonaut.Core (Json)
-import Main (sanitizeKey, listenBrainzUrl, lastfmTrackToListen)
+import Foreign.Object as Object
+import Main (sanitizeKey, listenBrainzUrl, lastfmTrackToListen, parseFilterField)
 import S3 (getS3Url)
 
 main :: Effect Unit
@@ -27,6 +28,17 @@ main = runSpecAndExitProcess [consoleReporter] do
         sanitizeKey "hello world!" `shouldEqual` "hello_world_"
         sanitizeKey "T.est-123" `shouldEqual` "T.est-123"
         sanitizeKey "multiple   spaces" `shouldEqual` "multiple_spaces"
+
+      describe "parseFilterField" do
+        it "maps all valid field names" do
+          parseFilterField "artist" `shouldEqual` Just FilterArtist
+          parseFilterField "label" `shouldEqual` Just FilterLabel
+          parseFilterField "year" `shouldEqual` Just FilterYear
+          parseFilterField "genre" `shouldEqual` Just FilterGenre
+
+        it "returns Nothing for unknown or empty input" do
+          parseFilterField "unknown" `shouldEqual` Nothing
+          parseFilterField "" `shouldEqual` Nothing
 
     describe "Corpus Types" do
       describe "MbidMapping Codecs" do
@@ -151,6 +163,223 @@ main = runSpecAndExitProcess [consoleReporter] do
 
         listensEmpty <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Jazz" })
         length listensEmpty `shouldEqual` 0
+
+      it "upsertScrobble is idempotent" do
+        conn <- connect ":memory:"
+        initDb conn
+        initReleaseMetadata conn
+        let listen = Listen
+              { listenedAt: Just 55555
+              , trackMetadata: TrackMetadata
+                  { trackName: Just "Song"
+                  , artistName: Just "Artist"
+                  , releaseName: Just "Album"
+                  , mbidMapping: Just (MbidMapping { releaseMbid: Just "mb1", caaReleaseMbid: Nothing })
+                  , genre: Nothing
+                  }
+              }
+        upsertScrobble conn listen
+        upsertScrobble conn listen
+        listens <- getScrobbles conn 10 0 Nothing
+        length listens `shouldEqual` 1
+
+      describe "getScrobbles filter variants" do
+        it "filters by artist" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          let
+            mkListen ts artist = Listen
+              { listenedAt: Just ts
+              , trackMetadata: TrackMetadata
+                  { trackName: Just "Song"
+                  , artistName: Just artist
+                  , releaseName: Nothing
+                  , mbidMapping: Nothing
+                  , genre: Nothing
+                  }
+              }
+          upsertScrobble conn (mkListen 1 "Alpha")
+          upsertScrobble conn (mkListen 2 "Beta")
+          listens <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Alpha" })
+          length listens `shouldEqual` 1
+          listensNone <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Gamma" })
+          length listensNone `shouldEqual` 0
+
+        it "filters by label" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          upsertScrobble conn
+            ( Listen
+                { listenedAt: Just 100
+                , trackMetadata: TrackMetadata
+                    { trackName: Just "Song"
+                    , artistName: Just "Artist"
+                    , releaseName: Just "Album"
+                    , mbidMapping: Just (MbidMapping { releaseMbid: Just "mb-label", caaReleaseMbid: Nothing })
+                    , genre: Nothing
+                    }
+                }
+            )
+          upsertReleaseMetadata conn "mb-label" Nothing (Just "Warp") (Just 2000)
+          listens <- getScrobbles conn 10 0 (Just { field: FilterLabel, value: "Warp" })
+          length listens `shouldEqual` 1
+          listensNone <- getScrobbles conn 10 0 (Just { field: FilterLabel, value: "Columbia" })
+          length listensNone `shouldEqual` 0
+
+        it "filters by year" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          upsertScrobble conn
+            ( Listen
+                { listenedAt: Just 200
+                , trackMetadata: TrackMetadata
+                    { trackName: Just "Song"
+                    , artistName: Just "Artist"
+                    , releaseName: Just "Album"
+                    , mbidMapping: Just (MbidMapping { releaseMbid: Just "mb-year", caaReleaseMbid: Nothing })
+                    , genre: Nothing
+                    }
+                }
+            )
+          upsertReleaseMetadata conn "mb-year" Nothing Nothing (Just 1994)
+          listens <- getScrobbles conn 10 0 (Just { field: FilterYear, value: "1994" })
+          length listens `shouldEqual` 1
+          listensNone <- getScrobbles conn 10 0 (Just { field: FilterYear, value: "1999" })
+          length listensNone `shouldEqual` 0
+
+      describe "getOldestTs" do
+        let
+          listenAt ts = Listen
+            { listenedAt: Just ts
+            , trackMetadata: TrackMetadata
+                { trackName: Just "T"
+                , artistName: Just "A"
+                , releaseName: Nothing
+                , mbidMapping: Nothing
+                , genre: Nothing
+                }
+            }
+        it "returns Nothing for an empty database" do
+          conn <- connect ":memory:"
+          initDb conn
+          result <- getOldestTs conn
+          result `shouldEqual` Nothing
+
+        it "returns the minimum listened_at" do
+          conn <- connect ":memory:"
+          initDb conn
+          upsertScrobble conn (listenAt 300)
+          upsertScrobble conn (listenAt 100)
+          upsertScrobble conn (listenAt 200)
+          result <- getOldestTs conn
+          result `shouldEqual` Just 100
+
+      describe "getUnenrichedMbids" do
+        let
+          listenWith ts mbid = Listen
+            { listenedAt: Just ts
+            , trackMetadata: TrackMetadata
+                { trackName: Just "T"
+                , artistName: Just "A"
+                , releaseName: Just "R"
+                , mbidMapping: Just (MbidMapping { releaseMbid: Just mbid, caaReleaseMbid: Nothing })
+                , genre: Nothing
+                }
+            }
+        it "returns MBIDs not yet in release_metadata" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          upsertScrobble conn (listenWith 1000 "un-mbid")
+          mbids <- getUnenrichedMbids conn 10
+          mbids `shouldEqual` [ "un-mbid" ]
+
+        it "excludes MBIDs already in release_metadata" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          upsertScrobble conn (listenWith 2000 "enriched")
+          upsertReleaseMetadata conn "enriched" (Just "Rock") (Just "Label") (Just 2020)
+          mbids <- getUnenrichedMbids conn 10
+          mbids `shouldEqual` []
+
+        it "excludes scrobbles with empty release_mbid" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          upsertScrobble conn
+            ( Listen
+                { listenedAt: Just 3000
+                , trackMetadata: TrackMetadata
+                    { trackName: Just "T"
+                    , artistName: Just "A"
+                    , releaseName: Nothing
+                    , mbidMapping: Nothing
+                    , genre: Nothing
+                    }
+                }
+            )
+          mbids <- getUnenrichedMbids conn 10
+          mbids `shouldEqual` []
+
+      describe "getEmptyGenreMbids" do
+        let
+          listenWith ts mbid = Listen
+            { listenedAt: Just ts
+            , trackMetadata: TrackMetadata
+                { trackName: Just "T"
+                , artistName: Just "A"
+                , releaseName: Just "R"
+                , mbidMapping: Just (MbidMapping { releaseMbid: Just mbid, caaReleaseMbid: Nothing })
+                , genre: Nothing
+                }
+            }
+        it "returns MBIDs whose genre is null in release_metadata" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          upsertScrobble conn (listenWith 4000 "eg-mbid")
+          upsertReleaseMetadata conn "eg-mbid" Nothing (Just "Label") (Just 2020)
+          mbids <- getEmptyGenreMbids conn 10
+          mbids `shouldEqual` [ "eg-mbid" ]
+
+        it "excludes MBIDs recently checked via touchGenreCheckedAt" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          upsertScrobble conn (listenWith 5000 "touched")
+          upsertReleaseMetadata conn "touched" Nothing Nothing Nothing
+          touchGenreCheckedAt conn "touched"
+          mbids <- getEmptyGenreMbids conn 10
+          mbids `shouldEqual` []
+
+      describe "getArtistReleasesByMbids" do
+        it "returns empty object for empty input" do
+          conn <- connect ":memory:"
+          initDb conn
+          result <- getArtistReleasesByMbids conn []
+          result `shouldEqual` Object.empty
+
+        it "returns artist and release name indexed by MBID" do
+          conn <- connect ":memory:"
+          initDb conn
+          upsertScrobble conn
+            ( Listen
+                { listenedAt: Just 6000
+                , trackMetadata: TrackMetadata
+                    { trackName: Just "Song"
+                    , artistName: Just "My Artist"
+                    , releaseName: Just "My Album"
+                    , mbidMapping: Just (MbidMapping { releaseMbid: Just "ar-mbid", caaReleaseMbid: Nothing })
+                    , genre: Nothing
+                    }
+                }
+            )
+          result <- getArtistReleasesByMbids conn [ "ar-mbid" ]
+          Object.lookup "ar-mbid" result `shouldEqual` Just { artist: "My Artist", release: "My Album" }
 
     describe "Corpus Backup" do
       describe "dbBaseName" do

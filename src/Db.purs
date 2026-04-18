@@ -37,6 +37,14 @@ foreign import data Connection :: Type
 
 data FilterField = FilterArtist | FilterLabel | FilterYear | FilterGenre
 
+derive instance Eq FilterField
+
+instance Show FilterField where
+  show FilterArtist = "FilterArtist"
+  show FilterLabel = "FilterLabel"
+  show FilterYear = "FilterYear"
+  show FilterGenre = "FilterGenre"
+
 foreign import connectImpl :: String -> (Nullable Error -> Nullable Connection -> Effect Unit) -> Effect Unit
 foreign import runImpl :: Connection -> String -> Array Foreign -> (Nullable Error -> Effect Unit) -> Effect Unit
 foreign import allImpl :: Connection -> String -> Array Foreign -> (Nullable Error -> Nullable (Array Json) -> Effect Unit) -> Effect Unit
