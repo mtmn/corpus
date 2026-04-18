@@ -26,6 +26,7 @@ in  { users =
             with listenbrainzUser = Some "mtmn"
             with databaseFile = "corpus-mtmn.db"
             with backupEnabled = True
+            with initialSync = True
         }
       ]
     }

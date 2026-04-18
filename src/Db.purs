@@ -262,8 +262,8 @@ getStats conn mPeriod mFrom mTo mSection = do
     buildTimeFilterAndParams :: { timeFilter :: String, params :: Array Foreign }
     buildTimeFilterAndParams = case mFrom, mTo of
       Just from, Just to ->
-        { timeFilter: " AND s.listened_at >= CAST(epoch(TIMESTAMP ?) AS INTEGER) AND s.listened_at < CAST(epoch(TIMESTAMP ?) AS INTEGER) + 86400"
-        , params: [ unsafeCoerce (from <> "T00:00:00"), unsafeCoerce (to <> "T00:00:00") ]
+        { timeFilter: " AND s.listened_at >= CAST(epoch(TIMESTAMP '" <> from <> " 00:00:00') AS INTEGER) AND s.listened_at < CAST(epoch(TIMESTAMP '" <> to <> " 00:00:00') AS INTEGER) + 86400"
+        , params: []
         }
       _, _ -> case mPeriod >>= fromString of
         Just days ->
