@@ -128,7 +128,7 @@
 
         corpus = pkgs.buildNpmPackage {
           pname = "corpus";
-          version = "1.2.0";
+          version = (builtins.fromJSON (builtins.readFile ./package.json)).version;
           inherit src;
 
           npmDepsHash = "sha256-RoFlR1p0UlDz+DASOBD5A06PDl5Wpk02YAf5jyb2Gn0=";
