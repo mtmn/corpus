@@ -128,10 +128,10 @@
 
         corpus = pkgs.buildNpmPackage {
           pname = "corpus";
-          version = "1.0.0";
+          version = "1.1.0";
           inherit src;
 
-          npmDepsHash = "sha256-r9omGeMcGZUkAhXz4ZdZSn2ZOhhJ9Oo3za7iqyZXbqY=";
+          npmDepsHash = "sha256-RoFlR1p0UlDz+DASOBD5A06PDl5Wpk02YAf5jyb2Gn0=";
           npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [

@@ -1,6 +1,6 @@
 {
 	"name": "corpus",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "ListenBrainz scrobble viewer",
 	"main": "index.js",
 	"type": "module",
@@ -13,7 +13,6 @@
 		"elm": "^0.19.1",
 		"esbuild": "^0.28.0",
 		"purescript": "^0.15.16",
-		"purescript-language-server": "^0.18.0",
 		"purescript-psa": "^0.9.0",
 		"purs-backend-es": "^1.4.3",
 		"purs-tidy": "^0.11.1",
