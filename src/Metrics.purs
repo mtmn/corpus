@@ -15,9 +15,10 @@ foreign import getMetricsImpl :: (String -> Effect Unit) -> (String -> Effect Un
 foreign import getContentType :: Effect String
 
 -- | Attaches a 'finish' listener to `res` so that, once the response is
--- | fully written, the request count and latency histogram are updated.
+-- | fully written, the request count and latency histogram are updated,
+-- | and the provided log function is called with "METHOD path status Nms".
 -- | Call once at the top of the request handler before routing.
-foreign import observeHttpRequest :: String -> String -> ServerResponse -> Effect Unit
+foreign import observeHttpRequest :: String -> String -> (String -> Effect Unit) -> ServerResponse -> Effect Unit
 
 -- Sync
 foreign import incSyncRuns :: String -> String -> String -> Effect Unit
