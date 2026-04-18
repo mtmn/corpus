@@ -18,7 +18,6 @@ import Data.Formatter.DateTime (formatDateTime)
 import Foreign (Foreign)
 import Unsafe.Coerce (unsafeCoerce)
 import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEntry(..))
-import Data.Traversable (traverse)
 import Foreign.Object as Object
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Array (mapMaybe, uncons, (!!), last, length, replicate)
@@ -173,10 +172,10 @@ getScrobbles conn limit offset Nothing = do
   rows <- queryAll conn
     "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
     [ unsafeCoerce limit, unsafeCoerce offset ]
-  pure $ fromMaybe [] $ traverse rowToListen rows
+  pure $ mapMaybe rowToListen rows
 getScrobbles conn limit offset (Just { field, value }) = do
   rows <- queryAll conn query [ unsafeCoerce value, unsafeCoerce limit, unsafeCoerce offset ]
-  pure $ fromMaybe [] $ traverse rowToListen rows
+  pure $ mapMaybe rowToListen rows
   where
   query = case field of
     "artist" ->

@@ -77,13 +77,14 @@ fetchListenBrainzUrl url = withRetry "ListenBrainz fetch" $ makeAff \callback ->
 
   req # on_ Client.responseH \res -> do
     launchAff_ do
-      body <- readableToStringUtf8 (IM.toReadable res)
-      let statusCode = IM.statusCode res
-      liftEffect $
-        if statusCode == 200 then
-          callback (Right body)
-        else
-          callback (Left $ Exception.error $ "ListenBrainz API returned status " <> show statusCode)
+      result <- try $ readableToStringUtf8 (IM.toReadable res)
+      liftEffect $ case result of
+        Left err -> callback (Left err)
+        Right body ->
+          if IM.statusCode res == 200 then
+            callback (Right body)
+          else
+            callback (Left $ Exception.error $ "ListenBrainz API returned status " <> show (IM.statusCode res))
 
   let errorH = EventHandle "error" mkEffectFn1
   on_ errorH (\err -> callback (Left err)) (unsafeCoerce req)
@@ -782,7 +783,8 @@ enrichMetadata conn cfg slug = forever do
           liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "error"
         Right Nothing -> do
           liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "retry"
-          pure unit
+          upsertReleaseMetadata conn mbid Nothing Nothing Nothing
+          touchGenreCheckedAt conn mbid
         Right (Just mbdata) -> do
           liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "success"
           if mbdata.genre == Nothing then do
