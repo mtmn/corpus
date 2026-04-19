@@ -428,6 +428,158 @@ indexHtml userSlug =
             font-size: 12px;
             margin-top: 4px;
         }
+
+        .similar-btn {
+            background: none;
+            border: 1px solid #50447f;
+            color: #9fbfe7;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 10px;
+            margin-top: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .similar-btn:hover {
+            background: #50447f;
+            color: #ffffff;
+            border-color: #ffffff;
+        }
+
+        .similar-btn.active {
+            background: #521e40;
+            color: #ffffff;
+            border-color: #50447f;
+            box-shadow: 2px 2px 0px #50447f;
+        }
+
+        .similar-panel {
+            margin-top: 10px;
+            background: #521e40;
+            border: 1px solid #50447f;
+            border-radius: 4px;
+            padding: 10px;
+            box-shadow: 2px 2px 0px #50447f;
+        }
+
+        .similar-panel-header {
+            font-size: 11px;
+            color: #9fbfe7;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .similar-loading {
+            color: #9fbfe7;
+            font-size: 12px;
+            text-align: center;
+            padding: 8px;
+        }
+
+        .similar-error {
+            color: #eca28f;
+            font-size: 12px;
+            text-align: center;
+            padding: 8px;
+        }
+
+        .similar-empty {
+            color: #9fbfe7;
+            font-size: 12px;
+            text-align: center;
+            padding: 8px;
+        }
+
+        .similar-track {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            margin-bottom: 4px;
+            background: rgba(82, 30, 64, 0.5);
+            border-radius: 3px;
+            border-left: 2px solid #50447f;
+        }
+
+        .similar-track:last-child {
+            margin-bottom: 0;
+        }
+
+        .similar-track-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .similar-track-name {
+            font-size: 12px;
+            color: #ffffff;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .similar-track-artist {
+            font-size: 11px;
+            color: #a0c0d0;
+            margin-top: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .similar-score {
+            font-size: 10px;
+            color: #9fbfe7;
+            background: #521e40;
+            border: 1px solid #50447f;
+            padding: 2px 6px;
+            border-radius: 2px;
+            margin-right: 8px;
+            font-weight: 500;
+        }
+
+        .similar-link {
+            color: #9fbfe7;
+            text-decoration: none;
+            font-size: 12px;
+            background: #521e40;
+            border: 1px solid #50447f;
+            padding: 2px 6px;
+            border-radius: 2px;
+            transition: all 0.2s ease;
+        }
+
+        .similar-link:hover {
+            color: #ffffff;
+            background: #50447f;
+        }
+
+        .tracks-with-similar {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .track-with-similar-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .track-item {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .track-item li {
+            margin: 0;
+        }
     </style>
 </head>
 <body>

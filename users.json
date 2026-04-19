@@ -6,7 +6,7 @@
         "backupIntervalHours": 1,
         "coverCacheEnabled": true,
         "databaseFile": "corpus-mtmn.db",
-        "initialSync": true,
+        "initialSync": false,
         "listenbrainzUser": "mtmn"
       },
       "slug": ""
