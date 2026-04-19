@@ -52,6 +52,7 @@ nix command:
 # Run quality and security checks
 check:
     npx spago build --strict
+    elm-analyse
     npx purs-tidy check "src/**/*.purs"
     statix check .
 
