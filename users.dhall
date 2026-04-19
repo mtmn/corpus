@@ -21,6 +21,7 @@ let defaults
 
 in  { users =
       [ { slug = ""
+        , name = Some "mtmn"
         , config =
             defaults
             with listenbrainzUser = Some "mtmn"
@@ -28,6 +29,7 @@ in  { users =
             with backupEnabled = True
         }
       , { slug = "mtmnn"
+        , name = None Text
         , config =
             defaults
             with lastfmUser = Some "mtmnn"

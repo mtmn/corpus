@@ -177,20 +177,31 @@ upsertScrobble conn (Listen { listenedAt, trackMetadata: TrackMetadata track }) 
         ]
     run conn "INSERT INTO scrobbles SELECT * FROM (SELECT ? as listened_at, ? as track_name, ? as artist_name, ? as release_name, ? as release_mbid, ? as caa_release_mbid) t WHERE NOT EXISTS (SELECT 1 FROM scrobbles WHERE listened_at = t.listened_at)" params
 
+scrobbleCols :: String
+scrobbleCols = "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre, rm.label"
+
+scrobbleFromLeft :: String
+scrobbleFromLeft = " FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+
+scrobbleFromInner :: String
+scrobbleFromInner = " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+
+scrobbleOrderPage :: String
+scrobbleOrderPage = " ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+
 getScrobbles :: Connection -> Int -> Int -> Maybe { field :: FilterField, value :: String } -> Maybe String -> Aff (Array Listen)
 getScrobbles conn limit offset _ (Just q) = do
   let pattern = "%" <> q <> "%"
   rows <- queryAll conn
-    ( "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
-        <> " FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+    ( scrobbleCols <> scrobbleFromLeft
         <> " WHERE (s.track_name ILIKE ? OR s.artist_name ILIKE ? OR s.release_name ILIKE ? OR rm.label ILIKE ?)"
-        <> " ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+        <> scrobbleOrderPage
     )
     [ unsafeCoerce pattern, unsafeCoerce pattern, unsafeCoerce pattern, unsafeCoerce pattern, unsafeCoerce limit, unsafeCoerce offset ]
   pure $ mapMaybe rowToListen rows
 getScrobbles conn limit offset Nothing Nothing = do
   rows <- queryAll conn
-    "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+    (scrobbleCols <> scrobbleFromLeft <> scrobbleOrderPage)
     [ unsafeCoerce limit, unsafeCoerce offset ]
   pure $ mapMaybe rowToListen rows
 getScrobbles conn limit offset (Just { field, value }) Nothing = do
@@ -199,21 +210,17 @@ getScrobbles conn limit offset (Just { field, value }) Nothing = do
 
 filterQuery :: FilterField -> String
 filterQuery FilterArtist =
-  "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
-    <> " FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
-    <> " WHERE s.artist_name = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+  scrobbleCols <> scrobbleFromLeft
+    <> " WHERE s.artist_name = ?" <> scrobbleOrderPage
 filterQuery FilterLabel =
-  "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
-    <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
-    <> " WHERE rm.label = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+  scrobbleCols <> scrobbleFromInner
+    <> " WHERE rm.label = ?" <> scrobbleOrderPage
 filterQuery FilterYear =
-  "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
-    <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
-    <> " WHERE rm.release_year::VARCHAR = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+  scrobbleCols <> scrobbleFromInner
+    <> " WHERE rm.release_year::VARCHAR = ?" <> scrobbleOrderPage
 filterQuery FilterGenre =
-  "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
-    <> " FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
-    <> " WHERE rm.genre = ? ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+  scrobbleCols <> scrobbleFromInner
+    <> " WHERE rm.genre = ?" <> scrobbleOrderPage
 
 initReleaseMetadata :: Connection -> Aff Unit
 initReleaseMetadata conn = do
@@ -333,6 +340,7 @@ rowToListen json = do
   releaseMbid <- Object.lookup "release_mbid" obj >>= toString
   caaReleaseMbid <- Object.lookup "caa_release_mbid" obj >>= toString
   let genre = Object.lookup "genre" obj >>= toString
+  let label = Object.lookup "label" obj >>= toString
 
   pure $ Listen
     { listenedAt: Just listenedAt
@@ -341,6 +349,7 @@ rowToListen json = do
         , artistName: Just artistName
         , releaseName: Just releaseName
         , genre
+        , label
         , mbidMapping: Just $ MbidMapping
             { releaseMbid: if releaseMbid == "" then Nothing else Just releaseMbid
             , caaReleaseMbid: if caaReleaseMbid == "" then Nothing else Just caaReleaseMbid

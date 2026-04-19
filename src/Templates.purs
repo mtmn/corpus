@@ -3,10 +3,11 @@ module Templates where
 import Prelude
 import Data.String.Common (joinWith)
 
-indexHtml :: String -> Array String -> String
+indexHtml :: String -> Array { slug :: String, name :: String } -> String
 indexHtml userSlug allUsers =
   let
-    usersJson = "[" <> joinWith "," (map (\s -> "\"" <> s <> "\"") allUsers) <> "]"
+    encodeUser { slug, name } = "{\"slug\":\"" <> slug <> "\",\"name\":\"" <> name <> "\"}"
+    usersJson = "[" <> joinWith "," (map encodeUser allUsers) <> "]"
   in
   """<!DOCTYPE html>
 <html lang="en">
@@ -98,6 +99,21 @@ indexHtml userSlug allUsers =
         }
 
         .album-link:hover {
+            color: #ffffff;
+        }
+
+        .label-link {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #9fbfe7;
+            text-decoration: underline;
+            font-family: inherit;
+            font-size: inherit;
+            cursor: pointer;
+        }
+
+        .label-link:hover {
             color: #ffffff;
         }
 
@@ -612,11 +628,48 @@ indexHtml userSlug allUsers =
             border-color: #6a5fa0;
         }
 
-        .about-description {
+        .about-lead {
             color: #a0c0d0;
             font-size: 13px;
             line-height: 1.8;
-            margin: 0 0 24px 0;
+            margin: 0 0 30px 0;
+        }
+
+        .about-link {
+            color: #9fbfe7;
+            text-decoration: underline;
+        }
+
+        .about-link:hover {
+            color: #ffffff;
+        }
+
+        .about-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .about-list li {
+            background: none;
+            border: none;
+            border-radius: 0;
+            padding: 3px 0;
+            margin-bottom: 0;
+            display: block;
+            box-shadow: none;
+            font-size: 13px;
+            color: #a0c0d0;
+        }
+
+        .about-list li::before {
+            content: "→  ";
+            color: #50447f;
+        }
+
+        .about-meta {
+            font-size: 13px;
+            margin: 0;
         }
 
         .about-users {

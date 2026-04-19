@@ -67,6 +67,7 @@ type UserContext =
   , writeLock :: AVar Unit
   , config :: UserConfig
   , slug :: String
+  , displayName :: String
   }
 
 listenBrainzUrl :: String -> String
@@ -157,6 +158,7 @@ lastfmTrackToListen json = do
         , artistName: Just artistName
         , releaseName: releaseName
         , genre: Nothing
+        , label: Nothing
         , mbidMapping: Just $ MbidMapping
             { releaseMbid: releaseMbid
             , caaReleaseMbid: releaseMbid
@@ -332,7 +334,7 @@ handleRequest :: Boolean -> Array UserContext -> Request -> Response -> Effect U
 handleRequest metricsEnabled contexts req res = do
   let method = IM.method req
   let rawUrl = IM.url req
-  let allSlugs = map _.slug contexts
+  let allUsers = map (\ctx -> { slug: ctx.slug, name: ctx.displayName }) contexts
   case URL.fromRelative rawUrl "http://localhost" of
     Nothing ->
       serveNotFound res
@@ -345,7 +347,7 @@ handleRequest metricsEnabled contexts req res = do
           "/favicon.png" ->
             serveAsset "image/png" "assets/favicon.png" res
           "/" ->
-            serveIndex allSlugs "" res
+            serveIndex allUsers "" res
           "/metrics" ->
             if metricsEnabled then serveMetrics res
             else do
@@ -364,7 +366,7 @@ handleRequest metricsEnabled contexts req res = do
           _ ->
             case stripPrefix (Pattern "/u/") path of
               Just slug ->
-                serveIndex allSlugs slug res
+                serveIndex allUsers slug res
               Nothing -> do
                 Log.warn $ "Path not found: " <> path
                 serveNotFound res
@@ -380,12 +382,12 @@ handleRequest metricsEnabled contexts req res = do
         Just ctx ->
           f ctx
 
-serveIndex :: Array String -> String -> Response -> Effect Unit
-serveIndex allSlugs slug res = do
+serveIndex :: Array { slug :: String, name :: String } -> String -> Response -> Effect Unit
+serveIndex allUsers slug res = do
   setHeader "Content-Type" "text/html" (toOutgoingMessage res)
   setStatusCode 200 res
   let w = toWriteable (toOutgoingMessage res)
-  void $ writeString w UTF8 (indexHtml slug allSlugs)
+  void $ writeString w UTF8 (indexHtml slug allUsers)
   end w
 
 serveMetrics :: Response -> Effect Unit
@@ -946,7 +948,7 @@ enrichMetadata conn cfg slug = forever do
 
 -- Initialise one user: connect DB, start sync loops, return a UserContext.
 startUser :: UserEntry -> Aff UserContext
-startUser { slug, config } = do
+startUser { slug, name, config } = do
   Log.info $ "Starting user: " <> if slug == "" then "(root)" else slug
   conn <- connect config.databaseFile
   initDb conn
@@ -984,7 +986,8 @@ startUser { slug, config } = do
       (toNumber config.backupIntervalHours * 3600000.0)
       slug
 
-  pure { conn, writeLock, config, slug }
+  let displayName = fromMaybe (if slug == "" then "root" else slug) name
+  pure { conn, writeLock, config, slug, displayName }
 
 foreign import dotenvConfig :: Effect Unit
 
