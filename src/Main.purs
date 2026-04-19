@@ -357,7 +357,7 @@ handleRequest metricsEnabled contexts req res = do
           "/cover" ->
             withUser url \ctx -> serveCover ctx.config ctx.slug url res
           "/similar" ->
-            withUser url \ctx -> serveSimilar ctx.config url res
+            withUser url \ctx -> serveSimilar ctx.slug ctx.config url res
           "/healthz" ->
             withUser url \ctx -> serveHealthz ctx.conn res
           _ ->
@@ -660,11 +660,12 @@ serveError res statusCode statusName message = do
   void $ writeString w UTF8 (statusName <> ": " <> message)
   end w
 
-fetchCosineSimilar :: UserConfig -> String -> Aff String
-fetchCosineSimilar cfg query = do
+fetchCosineSimilar :: String -> UserConfig -> String -> Aff String
+fetchCosineSimilar slug cfg query = do
   let apiKey = fromMaybe "" cfg.cosineApiKey
   if apiKey == "" then do
     Log.warn "cosineApiKey not configured for similar tracks"
+    liftEffect $ Metrics.incCosineRequest slug "not_configured"
     pure "{\"data\":{\"similar_tracks\":[]},\"success\":true}"
   else do
     let headers = { "User-Agent": "corpus/1.0 +https://codeberg.org/mtmn/corpus", "Authorization": "Bearer " <> apiKey }
@@ -672,14 +673,17 @@ fetchCosineSimilar cfg query = do
     Log.info $ "Cosine Club: searching for: " <> query
     searchResult <- try $ fetch searchUrl { method: GET, headers: headers }
     case searchResult of
-      Left err ->
+      Left err -> do
+        liftEffect $ Metrics.incCosineRequest slug "error"
         throwError err
       Right searchRes ->
         if searchRes.status == 429 then do
           Log.warn "Cosine Club: rate limited on search"
+          liftEffect $ Metrics.incCosineRequest slug "rate_limited"
           throwError (Exception.error "Rate limit exceeded")
         else if searchRes.status /= 200 then do
           Log.warn $ "Cosine Club: search returned " <> show searchRes.status
+          liftEffect $ Metrics.incCosineRequest slug "error"
           throwError (Exception.error "Search API error")
         else do
           searchBody <- searchRes.text
@@ -694,22 +698,27 @@ fetchCosineSimilar cfg query = do
           case mTrackId of
             Nothing -> do
               Log.info $ "Cosine Club: track not indexed: " <> query
+              liftEffect $ Metrics.incCosineRequest slug "not_indexed"
               pure "{\"data\":{\"similar_tracks\":[]},\"success\":true}"
             Just trackId -> do
               let similarUrl = "https://cosine.club/api/v1/tracks/" <> trackId <> "/similar?limit=10"
               Log.info $ "Cosine Club: fetching similar for ID " <> trackId
               similarResult <- try $ fetch similarUrl { method: GET, headers: headers }
               case similarResult of
-                Left err ->
+                Left err -> do
+                  liftEffect $ Metrics.incCosineRequest slug "error"
                   throwError err
                 Right similarRes ->
                   if similarRes.status == 429 then do
                     Log.warn "Cosine Club: rate limited on similar"
+                    liftEffect $ Metrics.incCosineRequest slug "rate_limited"
                     throwError (Exception.error "Rate limit exceeded")
                   else if similarRes.status /= 200 then do
                     Log.warn $ "Cosine Club: similar API returned " <> show similarRes.status
+                    liftEffect $ Metrics.incCosineRequest slug "error"
                     throwError (Exception.error "Similar API error")
-                  else
+                  else do
+                    liftEffect $ Metrics.incCosineRequest slug "success"
                     similarRes.text
 
 serveStats :: Connection -> URL -> Response -> Effect Unit
@@ -729,8 +738,8 @@ serveStats db url res = do
       void $ writeString w UTF8 responseBody
       end w
 
-serveSimilar :: UserConfig -> URL -> Response -> Effect Unit
-serveSimilar cfg url res = do
+serveSimilar :: String -> UserConfig -> URL -> Response -> Effect Unit
+serveSimilar slug cfg url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   launchAff_ do
     let artist = fromMaybe "" (getQueryParam "artist" url)
@@ -739,7 +748,7 @@ serveSimilar cfg url res = do
       liftEffect $ serveBadRequest res "Artist and track parameters are required"
     else do
       let query = artist <> " - " <> track
-      result <- try $ fetchCosineSimilar cfg query
+      result <- try $ fetchCosineSimilar slug cfg query
 
       case result of
         Left err -> do

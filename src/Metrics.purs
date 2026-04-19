@@ -14,10 +14,7 @@ foreign import getMetricsImpl :: (String -> Effect Unit) -> (String -> Effect Un
 -- | The MIME type to use for the /metrics response body.
 foreign import getContentType :: Effect String
 
--- | Runs the given `Effect Unit` handler inside the active context of a server
--- | span, so outbound HTTP/fetch calls become child spans automatically.
--- | Attaches a 'finish' listener to record metrics and end the span.
--- | W3C trace-context headers are extracted from `req` for span parenting.
+-- | Attaches a 'finish' listener to record metrics and log the request.
 foreign import wrapRequest :: String -> String -> (String -> Effect Unit) -> IncomingMessage IMServer -> ServerResponse -> Effect Unit -> Effect Unit
 
 -- Sync
@@ -31,6 +28,9 @@ foreign import setEnrichmentQueueSize :: String -> String -> Int -> Effect Unit
 
 -- Cover art
 foreign import incCoverRequest :: String -> String -> String -> Effect Unit
+
+-- Cosine Club
+foreign import incCosineRequest :: String -> String -> Effect Unit
 
 -- Database backup
 foreign import incDbBackupRun :: String -> String -> Effect Unit

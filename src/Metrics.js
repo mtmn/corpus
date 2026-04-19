@@ -5,17 +5,6 @@ import {
 	Histogram,
 	collectDefaultMetrics,
 } from "prom-client";
-import { NodeSDK } from "@opentelemetry/sdk-node";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
-import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
-import {
-	trace,
-	context,
-	propagation,
-	SpanKind,
-	SpanStatusCode,
-} from "@opentelemetry/api";
 
 // ---------------------------------------------------------------------------
 // Prometheus metrics — only active when METRICS_ENABLED=true
@@ -82,6 +71,13 @@ const makeActiveMetrics = () => {
 		registers: [registry],
 	});
 
+	const cosineRequestsTotal = new Counter({
+		name: "corpus_cosine_requests_total",
+		help: "Total Cosine Club API requests by user and result",
+		labelNames: ["user", "result"],
+		registers: [registry],
+	});
+
 	const dbBackupRunsTotal = new Counter({
 		name: "corpus_db_backup_runs_total",
 		help: "Total database backup runs",
@@ -109,6 +105,7 @@ const makeActiveMetrics = () => {
 		incEnrichmentFetch: (user, source, result) => enrichmentFetchesTotal.inc({ user, source, result }),
 		setEnrichmentQueueSize: (user, type, size) => enrichmentQueueSize.set({ user, type }, size),
 		incCoverRequest: (user, source, result) => coverRequestsTotal.inc({ user, source, result }),
+		incCosineRequest: (user, result) => cosineRequestsTotal.inc({ user, result }),
 		incDbBackupRun: (user, result) => dbBackupRunsTotal.inc({ user, result }),
 		setDbBackupLastSuccess: (user) => dbBackupLastSuccessSeconds.setToCurrentTime({ user }),
 	};
@@ -126,64 +123,13 @@ const makeNoOpMetrics = () => ({
 	incEnrichmentFetch: noOp,
 	setEnrichmentQueueSize: noOp,
 	incCoverRequest: noOp,
+	incCosineRequest: noOp,
 	incDbBackupRun: noOp,
 	setDbBackupLastSuccess: noOp,
 });
 
 const activeMetrics =
 	process.env.METRICS_ENABLED === "true" ? makeActiveMetrics() : makeNoOpMetrics();
-
-// ---------------------------------------------------------------------------
-// OpenTelemetry — only active when OTEL_EXPORTER_OTLP_ENDPOINT is set
-// ---------------------------------------------------------------------------
-
-const makeTracer = () => {
-	if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) return null;
-	const sdk = new NodeSDK({
-		traceExporter: new OTLPTraceExporter(),
-		instrumentations: [
-			new HttpInstrumentation({
-				// Incoming requests are traced manually via wrapRequest below
-				ignoreIncomingRequestHook: () => true,
-			}),
-			new UndiciInstrumentation(),
-		],
-	});
-	sdk.start();
-	const tracer = trace.getTracer(
-		process.env.OTEL_SERVICE_NAME || "corpus",
-		process.env.npm_package_version,
-	);
-	process.on("SIGTERM", () => sdk.shutdown().finally(() => process.exit(0)));
-	return tracer;
-};
-
-const tracer = makeTracer();
-
-const startHttpSpan = (method, path, headers) => {
-	if (!tracer) return null;
-	const parentCtx = propagation.extract(context.active(), headers);
-	return tracer.startSpan(
-		`${method} ${path}`,
-		{
-			kind: SpanKind.SERVER,
-			attributes: {
-				"http.method": method,
-				"http.target": path,
-			},
-		},
-		parentCtx,
-	);
-};
-
-const endHttpSpan = (span, statusCode) => {
-	if (!span) return;
-	span.setAttribute("http.status_code", statusCode);
-	span.setStatus({
-		code: statusCode >= 500 ? SpanStatusCode.ERROR : SpanStatusCode.OK,
-	});
-	span.end();
-};
 
 // ---------------------------------------------------------------------------
 // Exports
@@ -198,28 +144,18 @@ export const getMetricsImpl = (onSuccess) => (onError) => () => {
 
 export const getContentType = () => activeMetrics.contentType;
 
-// Runs `handler` inside the active context of a server span so that any
-// outbound HTTP/fetch calls made during handling automatically become child
-// spans. Attaches a 'finish' listener to record metrics and end the span.
+// Attaches a 'finish' listener to record metrics and log the request.
 // logFn: String -> Effect Unit — structured logger called on completion.
-// req: Node IncomingMessage — used to extract W3C trace-context headers.
 export const wrapRequest =
-	(method) => (path) => (logFn) => (req) => (res) => (handler) => () => {
+	(method) => (path) => (logFn) => (_req) => (res) => (handler) => () => {
 		const startMs = Date.now();
-		const span = startHttpSpan(method, path, req.headers || {});
 		res.once("finish", () => {
 			const durationMs = Date.now() - startMs;
 			const status = res.statusCode || 0;
 			activeMetrics.recordHttpRequest(method, path, status, durationMs);
-			endHttpSpan(span, status);
 			logFn(`${method} ${path} ${status} ${durationMs}ms`)();
 		});
-		if (span) {
-			const ctx = trace.setSpan(context.active(), span);
-			context.with(ctx, () => handler());
-		} else {
-			handler();
-		}
+		handler();
 	};
 
 export const incSyncRuns = (user) => (source) => (result) => () => {
@@ -244,6 +180,10 @@ export const setEnrichmentQueueSize = (user) => (type) => (size) => () => {
 
 export const incCoverRequest = (user) => (source) => (result) => () => {
 	activeMetrics.incCoverRequest(user, source, result);
+};
+
+export const incCosineRequest = (user) => (result) => () => {
+	activeMetrics.incCosineRequest(user, result);
 };
 
 export const incDbBackupRun = (user) => (result) => () => {
