@@ -3,7 +3,7 @@ A self-hosted [ListenBrainz](https://listenbrainz.org) and [Last.fm](https://las
 
 It includes storing scrobbles, metadata enrichment, and an interactive [PureScript](https://purescript.org) frontend for exploration of your listening habits.
 
-[Example instance](https://scrobbler.mtmn.name)
+You can see it for yourself - [scrobbler.mtmn.name](https://scrobbler.mtmn.name)
 
 ## Documentation
 
@@ -31,16 +31,20 @@ just nix run
 
 ```bash
 # Install dependencies
+npm install
 npx spago install
 
 # Build the project
-npx spago build
+npm run build
 
 # Run tests
 npx spago test
 
-# Bundle the client for the browser
-npx spago bundle --module Client --outfile client.js --platform browser
+# Build an optimized release
+npm run release
+
+# Run the application
+npx spago run
 ```
 
 
@@ -61,4 +65,14 @@ npx spago bundle --module Client --outfile client.js --platform browser
 | `AWS_S3_ADDRESSING_STYLE` | — | Set to `path` for path-style S3 URLs |
 | `METRICS_ENABLED` | `false` | Set to `true` to expose Prometheus metrics at `/metrics` |
 
-Per-user settings (`listenbrainzUser`, `lastfmUser`, `initialSync`, `coverCacheEnabled`, `backupEnabled`, `backupIntervalHours`, etc.) are configured in `users.json` (or `users.dhall`), not via environment variables.
+### Per-user configuration
+
+| Field | Default | Description |
+| :--- | :--- | :--- |
+| `listenbrainzUser` | — | ListenBrainz username to sync scrobbles from |
+| `lastfmUser` | — | Last.fm username to sync scrobbles from |
+| `databaseFile` | `corpus.db` | Path to the user's DuckDB database file |
+| `initialSync` | `false` | Perform a full historical sync on first run |
+| `coverCacheEnabled` | `true` | Enable cover art caching to S3 |
+| `backupEnabled` | `false` | Enable database backups to S3 |
+| `backupIntervalHours` | `1` | Backup frequency |
