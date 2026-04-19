@@ -2,7 +2,7 @@ port module Client exposing (main)
 
 import Browser
 import Dict exposing (Dict)
-import Html exposing (Html, a, button, div, h1, h2, img, input, li, span, strong, text, ul)
+import Html exposing (Html, a, button, div, h1, h2, img, input, li, p, span, strong, text, ul)
 import Html.Attributes as Attr exposing (class, disabled, href, placeholder, src, style, target, type_, value)
 import Html.Events exposing (on, onClick, onInput)
 import Http
@@ -22,6 +22,7 @@ port pushUrl : String -> Cmd msg
 type alias Flags =
     { search : String
     , userSlug : String
+    , allUsers : List String
     }
 
 
@@ -42,6 +43,7 @@ main =
 type Tab
     = ListensTab
     | StatsTab
+    | AboutTab
 
 
 type Period
@@ -120,6 +122,7 @@ type alias Model =
     , customError : Maybe String
     , userSlug : String
     , similarStates : Dict String SimilarState
+    , allUsers : List String
     }
 
 
@@ -151,6 +154,7 @@ init flags =
       , customError = Nothing
       , userSlug = flags.userSlug
       , similarStates = Dict.empty
+      , allUsers = flags.allUsers
       }
     , Cmd.batch
         [ fetchListens flags.userSlug 25 offset Nothing
@@ -310,6 +314,9 @@ update msg model =
                         Cmd.none
 
                 ListensTab ->
+                    Cmd.none
+
+                AboutTab ->
                     Cmd.none
             )
 
@@ -712,6 +719,19 @@ view model =
                 , onClick (SwitchTab StatsTab)
                 ]
                 [ text "stats" ]
+            , button
+                [ class
+                    ("tab-btn"
+                        ++ (if model.activeTab == AboutTab then
+                                " active"
+
+                            else
+                                ""
+                           )
+                    )
+                , onClick (SwitchTab AboutTab)
+                ]
+                [ text "about" ]
             ]
         , case model.activeTab of
             ListensTab ->
@@ -753,6 +773,9 @@ view model =
                     [ renderPeriodSelector model.statsPeriod model.showCustomInput model.customInput model.customError
                     , renderStatsView model.expandedSections model.loadedSections model.stats
                     ]
+
+            AboutTab ->
+                renderAboutView model.userSlug model.allUsers
         ]
 
 
@@ -1242,3 +1265,42 @@ timeAgo mNow mTimestamp =
 
         _ ->
             "unknown time"
+
+
+renderAboutView : String -> List String -> Html Msg
+renderAboutView currentSlug allUsers =
+    let
+        otherUsers =
+            List.filter (\s -> s /= currentSlug) allUsers
+
+        userLink slug =
+            let
+                url =
+                    if slug == "" then
+                        "/"
+
+                    else
+                        "/u/" ++ slug
+
+                label =
+                    if slug == "" then
+                        "root"
+
+                    else
+                        slug
+            in
+            li [] [ a [ href url ] [ text label ] ]
+    in
+    div []
+        [ p [ class "about-description" ]
+            [ text "corpus is a self-hosted music scrobble viewer. it aggregates listening history from ListenBrainz and Last.fm, enriches tracks with metadata from MusicBrainz, and provides browsable listen history and statistics." ]
+        , if List.isEmpty otherUsers then
+            text ""
+
+          else
+            div [ class "stats-section" ]
+                [ h2 [] [ text "users" ]
+                , ul [ class "about-users" ]
+                    (List.map userLink otherUsers)
+                ]
+        ]

@@ -1,9 +1,13 @@
 module Templates where
 
 import Prelude
+import Data.String.Common (joinWith)
 
-indexHtml :: String -> String
-indexHtml userSlug =
+indexHtml :: String -> Array String -> String
+indexHtml userSlug allUsers =
+  let
+    usersJson = "[" <> joinWith "," (map (\s -> "\"" <> s <> "\"") allUsers) <> "]"
+  in
   """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -31,15 +35,15 @@ indexHtml userSlug =
         .container {
             max-width: 800px;
             margin: 0 auto;
+            padding: 24px 20px;
         }
 
         h1 {
             color: #ffffff;
-            margin-bottom: 20px;
+            margin: 0 0 20px 0;
             font-size: 24px;
             border-bottom: 2px solid #50447f;
-            display: inline-block;
-            padding-bottom: 5px;
+            padding-bottom: 8px;
         }
 
         ul {
@@ -563,6 +567,40 @@ indexHtml userSlug =
         .track-item li {
             margin: 0;
         }
+
+        .about-description {
+            color: #a0c0d0;
+            font-size: 13px;
+            line-height: 1.8;
+            margin: 0 0 24px 0;
+        }
+
+        .about-users {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .about-users li {
+            background: none;
+            border: none;
+            border-radius: 0;
+            padding: 4px 0;
+            margin-bottom: 0;
+            display: block;
+            box-shadow: none;
+        }
+
+        .about-users a {
+            color: #9fbfe7;
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+        .about-users a:hover {
+            color: #ffffff;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -571,9 +609,11 @@ indexHtml userSlug =
     <script>
         var userSlug = '""" <> userSlug <>
     """';
+        var allUsers = """ <> usersJson <>
+    """;
         var app = Elm.Client.init({
             node: document.getElementById('app'),
-            flags: { search: window.location.search, userSlug: userSlug }
+            flags: { search: window.location.search, userSlug: userSlug, allUsers: allUsers }
         });
         app.ports.pushUrl.subscribe(function(url) {
             var prefix = userSlug ? '/u/' + userSlug : '';
