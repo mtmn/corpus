@@ -17,13 +17,16 @@ The server is built with PureScript running on Node.js. It handles several core 
 A Single Page Application (SPA) built with [Elm](https://elm-lang.org).
 - **Real-time Updates**: Periodically refreshes the scrobble list.
 - **Filtering & Search**: Supports deep filtering by genre, label, or release year.
+- **Search Functionality**: Global search across tracks, artists, albums, and labels with real-time results.
+- **About Page**: Provides system information, feature list, and links to related resources.
+- **Label Integration**: Clickable labels in track listings for quick filtering.
 - **Responsive UI**: Designed for both desktop and mobile viewing with a "retro-modern" aesthetic.
 
 ### Database
 Corpus uses **DuckDB** for its primary data storage. Each user has their own database file.
 - **Schema**:
     - `scrobbles`: Stores the core listening history (timestamp, track, artist, album, MBIDs). The `listened_at` Unix timestamp is the primary key — scrobbles from ListenBrainz and Last.fm deduplicate naturally.
-    - `release_metadata`: Stores enriched metadata indexed by MusicBrainz Release ID (MBID).
+    - `release_metadata`: Stores enriched metadata indexed by MusicBrainz Release ID (MBID), including genre, label, and release year.
 - **Performance**: DuckDB's columnar storage allows for extremely fast analytical queries across large listening histories.
 
 ### Storage
@@ -48,6 +51,16 @@ User configuration is split into two layers:
 2. **Environment variables** (runtime, sensitive): shared API keys and S3 credentials are read from the environment at startup and applied to all users.
 
 Each user gets their own `UserContext` with an independent DuckDB connection, sync loop, and write lock (`AVar Unit`). The write lock serializes all sync transactions — if a user has both ListenBrainz and Last.fm configured, their transactions are queued rather than run concurrently. HTTP reads do not acquire the lock; DuckDB's MVCC provides consistent snapshots.
+
+### Graceful Shutdown
+
+The server implements graceful shutdown handling to ensure clean termination of all background processes. When the server receives a shutdown signal, it:
+
+1. **Kills background fibers**: Terminates all running background tasks (metadata enrichment, database backups) for each user
+2. **Closes database connections**: Properly closes all DuckDB connections
+3. **Logs cleanup progress**: Provides detailed logging during the shutdown process
+
+This prevents data corruption and ensures that any in-progress operations are completed or safely aborted before the server exits.
 
 ## Configuration Reference
 
@@ -74,6 +87,7 @@ Each user gets their own `UserContext` with an independent DuckDB connection, sy
 | Field | Type | Purpose |
 |---|---|---|
 | `slug` | `Text` | URL slug (`""` for root user, `"filip"` for `/u/filip`) |
+| `name` | `Optional Text` | Display name for the user (defaults to slug if not provided) |
 | `listenbrainzUser` | `Optional Text` | ListenBrainz username |
 | `lastfmUser` | `Optional Text` | Last.fm username |
 | `databaseFile` | `Text` | DuckDB filename (relative to `DATABASE_PATH`) |

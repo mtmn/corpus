@@ -70,6 +70,8 @@ npx spago run
 
 | Field | Default | Description |
 | :--- | :--- | :--- |
+| `slug` | — | URL slug (`""` for root user, `"filip"` for `/u/filip`) |
+| `name` | — | Display name for the user (defaults to slug if not provided) |
 | `listenbrainzUser` | — | ListenBrainz username to sync scrobbles from |
 | `lastfmUser` | — | Last.fm username to sync scrobbles from |
 | `databaseFile` | `corpus.db` | Path to the user's DuckDB database file |

@@ -32,6 +32,7 @@ main = runSpecAndExitProcess [consoleReporter] do
       describe "parseFilterField" do
         it "maps all valid field names" do
           parseFilterField "artist" `shouldEqual` Just FilterArtist
+          parseFilterField "album" `shouldEqual` Just FilterAlbum
           parseFilterField "label" `shouldEqual` Just FilterLabel
           parseFilterField "year" `shouldEqual` Just FilterYear
           parseFilterField "genre" `shouldEqual` Just FilterGenre
@@ -209,6 +210,28 @@ main = runSpecAndExitProcess [consoleReporter] do
           listens <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Alpha" }) Nothing
           length listens `shouldEqual` 1
           listensNone <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Gamma" }) Nothing
+          length listensNone `shouldEqual` 0
+
+        it "filters by album" do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          let mkListen artist release = Listen
+                { listenedAt: Just 1
+                , trackMetadata: TrackMetadata
+                    { trackName: Just "Track"
+                    , artistName: Just artist
+                    , releaseName: Just release
+                    , mbidMapping: Nothing
+                    , genre: Nothing
+                    , label: Nothing
+                    }
+                }
+          upsertScrobble conn (mkListen "Artist" "Album A")
+          upsertScrobble conn (mkListen "Artist" "Album B")
+          listens <- getScrobbles conn 10 0 (Just { field: FilterAlbum, value: "Album A" }) Nothing
+          length listens `shouldEqual` 1
+          listensNone <- getScrobbles conn 10 0 (Just { field: FilterAlbum, value: "Album C" }) Nothing
           length listensNone `shouldEqual` 0
 
         it "filters by label" do
