@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.2.0](https://github.com/mtmn/corpus/compare/v2.1.1...v2.2.0) (2026-04-19)
+
+
+### Features
+
+* add about section ([70a9598](https://github.com/mtmn/corpus/commit/70a9598c92502e930f193b87d49961b070deea43))
+* add about, labels and fix search ([616884d](https://github.com/mtmn/corpus/commit/616884dc5a43105dd11e4a500dc282d0df13fef6))
+* add custom user name, fixes ([704cce1](https://github.com/mtmn/corpus/commit/704cce17520c36c66ac853323ad5764a2c16ccf8))
+* add search to listens section ([7eeea36](https://github.com/mtmn/corpus/commit/7eeea36d2f193271daf10b9db98e1dd11a2e236d))
+* change user slug, fixes ([0661ae7](https://github.com/mtmn/corpus/commit/0661ae7e6ef426453a33fd119d6ceb101ba6f40b))
+* scrobbles searchable by album ([4c1a772](https://github.com/mtmn/corpus/commit/4c1a7721dd7ebb9995a348efa383798492661cb6))
+* scrobbles searchable by album ([376ec03](https://github.com/mtmn/corpus/commit/376ec03a0338f84ec79c33377029ca8d92bd06b6))
+* shutdown handling, fix race conditions ([f397076](https://github.com/mtmn/corpus/commit/f397076870e8c54ccca437a591a2090ca87de917))
+* shutdown handling, fix race conditions ([b1dc26e](https://github.com/mtmn/corpus/commit/b1dc26e42cc45630af4cd116e212c55e315cbbd7))
+
+
+### Bug Fixes
+
+* add label to tests ([601c8e5](https://github.com/mtmn/corpus/commit/601c8e57af116fad0f2ea860f9da10b8fd40b7c2))
+* missing doc entries ([eddc3f7](https://github.com/mtmn/corpus/commit/eddc3f70a2591410612fe5e0db471958d40233f3))
+
 ## [2.1.1](https://github.com/mtmn/corpus/compare/v2.1.0...v2.1.1) (2026-04-19)
 
 
