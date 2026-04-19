@@ -797,7 +797,7 @@ view model =
                         [ input
                             [ type_ "text"
                             , class "search-input"
-                            , placeholder "search tracks, artists, albums, labels…"
+                            , placeholder "track, artist, album or label"
                             , value model.searchInput
                             , onInput UpdateSearchInput
                             , onEnter SubmitSearch
@@ -1407,7 +1407,10 @@ renderAboutView currentSlug allUsers =
         , div [ class "stats-section" ]
             [ h2 [] [ text "source" ]
             , p [ class "about-meta" ]
-                [ extLink "https://codeberg.org/mtmn/corpus" "codeberg.org/mtmn/corpus" ]
+                [ div [] [ extLink "https://github.com/mtmn/corpus" "github repo" ]
+                , div [] [ extLink "https://instagram.com/counterpoint303" "counterpoint" ]
+                , div [] [ extLink "https://mtmn.name" "mtmn.name" ]
+                ]
             ]
         , if List.isEmpty otherUsers then
             text ""

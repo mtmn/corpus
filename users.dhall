@@ -29,7 +29,7 @@ in  { users =
             with backupEnabled = True
         }
       , { slug = "mtmnn"
-        , name = None Text
+        , name = Some "mtmn (last.fm)"
         , config =
             defaults
             with lastfmUser = Some "mtmnn"
