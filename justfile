@@ -1,18 +1,22 @@
 help:
     @just --list
 
+
+# Convert users.dhall to users.json
+generate-users-json:
+    dhall-to-json --file users.dhall > users.json
+
 # Setup npm and spago
-setup:
+setup: generate-users-json
     npm install
     npx spago install
 
 # Build the project locally
-build:
+build: generate-users-json
     npm run build
 
 # Build a release
-release:
-    dhall-to-json --file users.dhall > users.json
+release: generate-users-json
     npm run release
 
 # Run the project locally
