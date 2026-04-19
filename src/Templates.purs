@@ -94,8 +94,14 @@ indexHtml userSlug allUsers =
         }
 
         .album-link {
+            background: none;
+            border: none;
+            padding: 0;
             color: #9fbfe7;
             text-decoration: underline;
+            font-family: inherit;
+            font-size: inherit;
+            cursor: pointer;
         }
 
         .album-link:hover {

@@ -435,6 +435,7 @@ getQueryParam name url = URLSearchParams.get name (URL.searchParams url)
 
 parseFilterField :: String -> Maybe FilterField
 parseFilterField "artist" = Just FilterArtist
+parseFilterField "album" = Just FilterAlbum
 parseFilterField "label" = Just FilterLabel
 parseFilterField "year" = Just FilterYear
 parseFilterField "genre" = Just FilterGenre
