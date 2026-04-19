@@ -332,6 +332,7 @@ handleRequest :: Boolean -> Array UserContext -> Request -> Response -> Effect U
 handleRequest metricsEnabled contexts req res = do
   let method = IM.method req
   let rawUrl = IM.url req
+  let allSlugs = map _.slug contexts
   case URL.fromRelative rawUrl "http://localhost" of
     Nothing ->
       serveNotFound res
@@ -344,7 +345,7 @@ handleRequest metricsEnabled contexts req res = do
           "/favicon.png" ->
             serveAsset "image/png" "assets/favicon.png" res
           "/" ->
-            serveIndex "" res
+            serveIndex allSlugs "" res
           "/metrics" ->
             if metricsEnabled then serveMetrics res
             else do
@@ -363,7 +364,7 @@ handleRequest metricsEnabled contexts req res = do
           _ ->
             case stripPrefix (Pattern "/u/") path of
               Just slug ->
-                serveIndex slug res
+                serveIndex allSlugs slug res
               Nothing -> do
                 Log.warn $ "Path not found: " <> path
                 serveNotFound res
@@ -379,12 +380,12 @@ handleRequest metricsEnabled contexts req res = do
         Just ctx ->
           f ctx
 
-serveIndex :: String -> Response -> Effect Unit
-serveIndex slug res = do
+serveIndex :: Array String -> String -> Response -> Effect Unit
+serveIndex allSlugs slug res = do
   setHeader "Content-Type" "text/html" (toOutgoingMessage res)
   setStatusCode 200 res
   let w = toWriteable (toOutgoingMessage res)
-  void $ writeString w UTF8 (indexHtml slug)
+  void $ writeString w UTF8 (indexHtml slug allSlugs)
   end w
 
 serveMetrics :: Response -> Effect Unit
