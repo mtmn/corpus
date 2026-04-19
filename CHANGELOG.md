@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/mtmn/corpus/compare/v2.1.0...v2.1.1) (2026-04-19)
+
+
+### Bug Fixes
+
+* make css less whimsical, i think ([16c92be](https://github.com/mtmn/corpus/commit/16c92be3c1d5a3ab72b74cd5b282e17c25ee82d0))
+
 ## [2.1.0](https://github.com/mtmn/corpus/compare/v2.0.0...v2.1.0) (2026-04-19)
 
 
