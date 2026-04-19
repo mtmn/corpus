@@ -1400,7 +1400,7 @@ renderAboutView currentSlug allUsers =
                 ]
             ]
         , div [ class "stats-section" ]
-            [ h2 [] [ text "source" ]
+            [ h2 [] [ text "links" ]
             , p [ class "about-meta" ]
                 [ div [] [ extLink "https://instagram.com/counterpoint303" "counterpoint" ]
                 , div [] [ extLink "https://github.com/mtmn/corpus" "github repo" ]
