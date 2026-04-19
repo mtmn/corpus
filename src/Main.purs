@@ -435,6 +435,7 @@ getQueryParam name url = URLSearchParams.get name (URL.searchParams url)
 
 parseFilterField :: String -> Maybe FilterField
 parseFilterField "artist" = Just FilterArtist
+parseFilterField "album" = Just FilterAlbum
 parseFilterField "label" = Just FilterLabel
 parseFilterField "year" = Just FilterYear
 parseFilterField "genre" = Just FilterGenre
@@ -693,7 +694,7 @@ fetchCosineSimilar slug cfg query = do
     liftEffect $ Metrics.incCosineRequest slug "not_configured"
     pure "{\"data\":{\"similar_tracks\":[]},\"success\":true}"
   else do
-    let headers = { "User-Agent": "corpus/1.0 +https://codeberg.org/mtmn/corpus", "Authorization": "Bearer " <> apiKey }
+    let headers = { "User-Agent": "corpus/1.0 +https://github.com/mtmn/corpus", "Authorization": "Bearer " <> apiKey }
     let searchUrl = "https://cosine.club/api/v1/search?q=" <> (fromMaybe "" $ encodeURIComponent query) <> "&limit=1"
     Log.info $ "Cosine Club: searching for: " <> query
     searchResult <- try $ fetch searchUrl { method: GET, headers: headers }
@@ -791,7 +792,7 @@ type MbData = { genre :: Maybe String, label :: Maybe String, year :: Maybe Int 
 fetchMusicBrainzRelease :: String -> Aff (Maybe MbData)
 fetchMusicBrainzRelease mbid = do
   let url = "https://musicbrainz.org/ws/2/release/" <> mbid <> "?inc=genres+labels+release-groups&fmt=json"
-  result <- try $ fetch url { method: GET, headers: { "User-Agent": "corpus/1.0 +https://codeberg.org/mtmn/corpus" } }
+  result <- try $ fetch url { method: GET, headers: { "User-Agent": "corpus/1.0 +https://github.com/mtmn/corpus" } }
   case result of
     Left err -> do
       Log.error $ "MusicBrainz fetch error for " <> mbid <> ": " <> Exception.message err
@@ -1017,12 +1018,14 @@ cleanupUser ctx = do
     Just fiber -> do
       Log.info "Killing enrich metadata fiber"
       void $ try $ killFiber (Exception.error "Server shutting down") fiber
-    Nothing -> pure unit
+    Nothing -> do
+      pure unit
   case ctx.backupFiber of
     Just fiber -> do
       Log.info "Killing backup fiber"
       void $ try $ killFiber (Exception.error "Server shutting down") fiber
-    Nothing -> pure unit
+    Nothing -> do
+      pure unit
   -- Close database connection
   Log.info "Closing database connection"
   void $ try $ ping ctx.conn

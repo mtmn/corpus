@@ -47,6 +47,17 @@ ORDER BY play_count DESC
 LIMIT 10;
 ```
 
+### Top 10 Labels
+```sql
+SELECT rm.label, count(*) as play_count
+FROM scrobbles s
+JOIN release_metadata rm ON s.release_mbid = rm.release_mbid
+WHERE rm.label IS NOT NULL AND rm.label != ''
+GROUP BY rm.label
+ORDER BY play_count DESC
+LIMIT 10;
+```
+
 ## Time-based Analysis
 
 ### Scrobbles per day (Last 30 days)

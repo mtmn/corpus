@@ -35,12 +35,13 @@ import Metrics as Metrics
 
 foreign import data Connection :: Type
 
-data FilterField = FilterArtist | FilterLabel | FilterYear | FilterGenre
+data FilterField = FilterArtist | FilterAlbum | FilterLabel | FilterYear | FilterGenre
 
 derive instance Eq FilterField
 
 instance Show FilterField where
   show FilterArtist = "FilterArtist"
+  show FilterAlbum = "FilterAlbum"
   show FilterLabel = "FilterLabel"
   show FilterYear = "FilterYear"
   show FilterGenre = "FilterGenre"
@@ -212,6 +213,10 @@ filterQuery :: FilterField -> String
 filterQuery FilterArtist =
   scrobbleCols <> scrobbleFromLeft
     <> " WHERE s.artist_name = ?"
+    <> scrobbleOrderPage
+filterQuery FilterAlbum =
+  scrobbleCols <> scrobbleFromLeft
+    <> " WHERE s.release_name = ?"
     <> scrobbleOrderPage
 filterQuery FilterLabel =
   scrobbleCols <> scrobbleFromInner

@@ -939,12 +939,7 @@ renderListen userSlug currentTime failedCovers hoveredCover similarStates idx li
             , div [ class "track-artist" ] [ text artist ]
             , div [ class "track-time" ]
                 [ span []
-                    (a
-                        [ href ("https://www.discogs.com/search/?q=" ++ Url.percentEncode (artist ++ " " ++ release) ++ "&type=release")
-                        , target "_blank"
-                        , class "album-link"
-                        ]
-                        [ text release ]
+                    (button [ class "album-link", onClick (FilterBy "album" release) ] [ text release ]
                         :: (case listen.label of
                                 Just l ->
                                     [ text " • "
