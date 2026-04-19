@@ -20,7 +20,6 @@ indexHtml userSlug =
             background: #000000;
             color: #ffffff;
             margin: 0;
-            padding: 20px;
             line-height: 1.6;
         }
 
@@ -53,8 +52,8 @@ indexHtml userSlug =
             background: #521e40;
             border: 1px solid #50447f;
             border-radius: 4px;
-            padding: 15px;
-            margin-bottom: 10px;
+            padding: 5px 15px 5px 15px;
+            margin-bottom: 5px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -64,6 +63,7 @@ indexHtml userSlug =
         li.success {
             background: #521e40;
             border-color: #50447f;
+            box-shadow: 4px 4px 0px #50447f;
         }
 
         .track-info {
@@ -162,6 +162,7 @@ indexHtml userSlug =
 
         .page-btn:hover {
             background: #50447f;
+            border-color: #50447f;
         }
 
         .page-btn:disabled {
@@ -203,6 +204,7 @@ indexHtml userSlug =
 
         .tab-btn:hover {
             color: #ffffff;
+            background: #50447f;
         }
 
         .stats-section {
@@ -270,6 +272,7 @@ indexHtml userSlug =
             display: flex;
             flex-direction: column;
             align-items: center;
+	    padding-top: 5px;
             margin-left: 15px;
             gap: 4px;
             flex-shrink: 0;
@@ -277,31 +280,10 @@ indexHtml userSlug =
         }
 
         .genre-tag {
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 10px;
-            color: #9fbfe7;
-            text-align: center;
-            max-width: 60px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            opacity: 0.8;
+            display: none;
         }
 
-        .genre-tag:hover {
-            max-width: none;
-            overflow: visible;
-            text-overflow: clip;
-            background: #521e40;
-            border: 1px solid #50447f;
-            border-radius: 4px;
-            padding: 2px 6px;
-            z-index: 100;
-            opacity: 1;
-        }
+
 
         .stat-row.clickable {
             cursor: pointer;
@@ -346,6 +328,7 @@ indexHtml userSlug =
         .filter-clear:hover {
             color: #ffffff;
             border-color: #ffffff;
+            background: #50447f;
         }
 
         .show-all-btn {
@@ -361,6 +344,7 @@ indexHtml userSlug =
 
         .show-all-btn:hover {
             color: #ffffff;
+            background: #50447f;
         }
 
         .period-selector {
@@ -388,7 +372,6 @@ indexHtml userSlug =
         .period-btn.active {
             background: #50447f;
             color: #ffffff;
-            border-color: #50447f;
         }
 
         .custom-range {
@@ -500,7 +483,7 @@ indexHtml userSlug =
             align-items: center;
             padding: 6px 8px;
             margin-bottom: 4px;
-            background: rgba(82, 30, 64, 0.5);
+            background: #521e40;
             border-radius: 3px;
             border-left: 2px solid #50447f;
         }
