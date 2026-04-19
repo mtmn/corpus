@@ -1,5 +1,6 @@
 let UserConfig =
-      { listenbrainzUser : Optional Text
+      { name : Optional Text
+      , listenbrainzUser : Optional Text
       , lastfmUser : Optional Text
       , databaseFile : Text
       , coverCacheEnabled : Bool
@@ -10,7 +11,8 @@ let UserConfig =
 
 let defaults
     : UserConfig
-    = { listenbrainzUser = None Text
+    = { name = None Text
+      , listenbrainzUser = None Text
       , lastfmUser = None Text
       , databaseFile = "corpus.db"
       , coverCacheEnabled = True
