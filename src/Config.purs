@@ -21,6 +21,7 @@ type UserConfig =
   , lastfmUser :: Maybe String
   , lastfmApiKey :: Maybe String
   , discogsToken :: Maybe String
+  , cosineApiKey :: Maybe String
   , databaseFile :: String
   , s3Bucket :: Maybe String
   , s3Region :: String
@@ -83,6 +84,7 @@ loadConfig path = do
   portStr <- liftEffect $ lookupEnv "PORT"
   lastfmApiKey <- liftEffect $ lookupEnv "LASTFM_API_KEY"
   discogsToken <- liftEffect $ lookupEnv "DISCOGS_TOKEN"
+  cosineApiKey <- liftEffect $ lookupEnv "COSINE_API_KEY"
   s3Bucket <- liftEffect $ lookupEnv "S3_BUCKET"
   s3Region <- liftEffect $ map (fromMaybe "us-east-1") $ lookupEnv "S3_REGION"
   awsAccessKeyId <- liftEffect $ lookupEnv "AWS_ACCESS_KEY_ID"
@@ -99,6 +101,7 @@ loadConfig path = do
     fillCreds cfg = cfg
       { lastfmApiKey = lastfmApiKey
       , discogsToken = discogsToken
+      , cosineApiKey = cosineApiKey
       , s3Bucket = s3Bucket
       , s3Region = s3Region
       , awsAccessKeyId = awsAccessKeyId
@@ -175,6 +178,7 @@ decodeUserConfig json = do
     , lastfmUser
     , lastfmApiKey: Nothing
     , discogsToken: Nothing
+    , cosineApiKey: Nothing
     , databaseFile
     , s3Bucket: Nothing
     , s3Region: "us-east-1"

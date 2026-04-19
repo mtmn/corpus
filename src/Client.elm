@@ -1,6 +1,7 @@
 port module Client exposing (main)
 
 import Browser
+import Dict exposing (Dict)
 import Html exposing (Html, a, button, div, h1, h2, img, input, li, span, strong, text, ul)
 import Html.Attributes as Attr exposing (class, disabled, href, placeholder, src, style, target, type_, value)
 import Html.Events exposing (on, onClick, onInput)
@@ -81,6 +82,20 @@ type alias Stats =
     }
 
 
+type alias SimilarTrack =
+    { artist : String
+    , track : String
+    , score : Maybe Float
+    , videoUri : Maybe String
+    }
+
+
+type SimilarState
+    = SimilarLoading
+    | SimilarLoaded (List SimilarTrack)
+    | SimilarError String
+
+
 
 -- MODEL
 
@@ -88,7 +103,6 @@ type alias Stats =
 type alias Model =
     { listens : List Listen
     , stats : Maybe Stats
-    , lastCheck : Maybe Time.Posix
     , error : Maybe String
     , loading : Bool
     , currentTime : Maybe Time.Posix
@@ -105,6 +119,7 @@ type alias Model =
     , showCustomInput : Bool
     , customError : Maybe String
     , userSlug : String
+    , similarStates : Dict String SimilarState
     }
 
 
@@ -119,7 +134,6 @@ init flags =
     in
     ( { listens = []
       , stats = Nothing
-      , lastCheck = Nothing
       , error = Nothing
       , loading = True
       , currentTime = Nothing
@@ -136,6 +150,7 @@ init flags =
       , showCustomInput = False
       , customError = Nothing
       , userSlug = flags.userSlug
+      , similarStates = Dict.empty
       }
     , Cmd.batch
         [ fetchListens flags.userSlug 25 offset Nothing
@@ -194,6 +209,8 @@ type Msg
     | ExpandSection String
     | ShowAllSection String
     | CollapseSection String
+    | FetchSimilar String String
+    | FetchSimilarTracks String String (Result Http.Error (List SimilarTrack))
 
 
 
@@ -213,7 +230,7 @@ update msg model =
                 ( { model | currentTime = Just time }, Cmd.none )
 
         GotTime time ->
-            ( { model | lastCheck = Just time, currentTime = Just time }, Cmd.none )
+            ( { model | currentTime = Just time }, Cmd.none )
 
         GotListens result ->
             let
@@ -398,6 +415,34 @@ update msg model =
             , Cmd.none
             )
 
+        FetchSimilar artist track ->
+            let
+                key =
+                    artist ++ "\t" ++ track
+            in
+            if Dict.member key model.similarStates then
+                ( { model | similarStates = Dict.remove key model.similarStates }, Cmd.none )
+
+            else
+                ( { model | similarStates = Dict.insert key SimilarLoading model.similarStates }
+                , fetchSimilarTracks artist track
+                )
+
+        FetchSimilarTracks artist track result ->
+            let
+                key =
+                    artist ++ "\t" ++ track
+
+                newStates =
+                    case result of
+                        Ok tracks ->
+                            Dict.insert key (SimilarLoaded tracks) model.similarStates
+
+                        Err err ->
+                            Dict.insert key (SimilarError (httpErrorToString err)) model.similarStates
+            in
+            ( { model | similarStates = newStates }, Cmd.none )
+
 
 patchStatSection : String -> List StatsEntry -> Stats -> Stats
 patchStatSection section entries stats =
@@ -493,6 +538,14 @@ statsUrl userSlug period mSection =
                     "&section=" ++ sec
     in
     "/stats?user=" ++ userSlug ++ periodPart ++ sectionPart
+
+
+fetchSimilarTracks : String -> String -> Cmd Msg
+fetchSimilarTracks artist track =
+    Http.get
+        { url = "/similar?artist=" ++ Url.percentEncode artist ++ "&track=" ++ Url.percentEncode track
+        , expect = Http.expectJson (FetchSimilarTracks artist track) similarTracksDecoder
+        }
 
 
 httpErrorToString : Http.Error -> String
@@ -604,6 +657,20 @@ sectionEntriesDecoder section =
         statsDecoder
 
 
+similarTracksDecoder : Decoder (List SimilarTrack)
+similarTracksDecoder =
+    D.at [ "data", "similar_tracks" ] (D.list similarTrackDecoder)
+
+
+similarTrackDecoder : Decoder SimilarTrack
+similarTrackDecoder =
+    D.map4 SimilarTrack
+        (D.field "artist" D.string)
+        (D.field "track" D.string)
+        (D.maybe (D.field "score" D.float))
+        (D.maybe (D.field "video_uri" D.string))
+
+
 
 -- VIEW
 
@@ -700,23 +767,43 @@ renderContent model =
                 ul [] [ li [ class "error" ] [ text err ] ]
 
             Nothing ->
-                ul [ Attr.id "tracks-container" ]
+                div [ class "tracks-with-similar" ]
                     (List.indexedMap
                         (\idx listen ->
-                            renderListen model.userSlug model.currentTime model.failedCovers model.hoveredCover idx listen
+                            let
+                                artist =
+                                    Maybe.withDefault "" listen.artistName
+
+                                trackName =
+                                    Maybe.withDefault "" listen.trackName
+
+                                key =
+                                    artist ++ "\t" ++ trackName
+                            in
+                            div [ class "track-with-similar-container" ]
+                                [ ul [ class "track-item" ]
+                                    [ renderListen model.userSlug model.currentTime model.failedCovers model.hoveredCover model.similarStates idx listen ]
+                                , renderSimilarPanel model.similarStates key
+                                ]
                         )
                         model.listens
                     )
 
 
-renderListen : String -> Maybe Time.Posix -> Set String -> Maybe Int -> Int -> Listen -> Html Msg
-renderListen userSlug currentTime failedCovers hoveredCover idx listen =
+renderListen : String -> Maybe Time.Posix -> Set String -> Maybe Int -> Dict String SimilarState -> Int -> Listen -> Html Msg
+renderListen userSlug currentTime failedCovers hoveredCover similarStates idx listen =
     let
         artist =
             Maybe.withDefault "" listen.artistName
 
+        trackName =
+            Maybe.withDefault "" listen.trackName
+
         release =
             Maybe.withDefault "" listen.releaseName
+
+        key =
+            artist ++ "\t" ++ trackName
 
         mbid =
             case listen.caaReleaseMbid of
@@ -743,6 +830,9 @@ renderListen userSlug currentTime failedCovers hoveredCover idx listen =
 
         isZoomed =
             hoveredCover == Just idx
+
+        isActive =
+            Dict.member key similarStates
     in
     li [ class "success" ]
         [ div [ class "track-info" ]
@@ -794,7 +884,72 @@ renderListen userSlug currentTime failedCovers hoveredCover idx listen =
 
                 Nothing ->
                     text ""
+            , if artist /= "" && trackName /= "" then
+                button
+                    [ class
+                        ("similar-btn"
+                            ++ (if isActive then
+                                    " active"
+
+                                else
+                                    ""
+                               )
+                        )
+                    , onClick (FetchSimilar artist trackName)
+                    ]
+                    [ text "similar" ]
+
+              else
+                text ""
             ]
+        ]
+
+
+renderSimilarPanel : Dict String SimilarState -> String -> Html Msg
+renderSimilarPanel similarStates key =
+    case Dict.get key similarStates of
+        Nothing ->
+            text ""
+
+        Just SimilarLoading ->
+            div [ class "similar-panel" ]
+                [ div [ class "similar-loading" ] [ text "⏳" ] ]
+
+        Just (SimilarError err) ->
+            div [ class "similar-panel" ]
+                [ div [ class "similar-error" ] [ text err ] ]
+
+        Just (SimilarLoaded tracks) ->
+            div [ class "similar-panel" ]
+                [ if List.isEmpty tracks then
+                    div [ class "similar-empty" ] [ text "no similar songs found" ]
+
+                  else
+                    div [] (List.map renderSimilarTrack tracks)
+                ]
+
+
+renderSimilarTrack : SimilarTrack -> Html Msg
+renderSimilarTrack track =
+    div [ class "similar-track" ]
+        [ div [ class "similar-track-info" ]
+            [ div [ class "similar-track-name" ] [ text track.track ]
+            , div [ class "similar-track-artist" ] [ text track.artist ]
+            ]
+        , case track.score of
+            Just score ->
+                span [ class "similar-score" ]
+                    [ text (String.fromInt (round (score * 100)) ++ "%") ]
+
+            Nothing ->
+                text ""
+        , case track.videoUri of
+            Just link ->
+                a [ class "similar-link", href link, target "_blank" ]
+                    [ text "▶" ]
+
+            Nothing ->
+                text ""
         ]
 
 
