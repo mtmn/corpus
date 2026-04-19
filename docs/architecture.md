@@ -6,7 +6,7 @@ Corpus is a self-hosted music listening history dashboard and analytics service.
 
 ### Web Server
 The server is built with PureScript running on Node.js. It handles several core responsibilities:
-- **HTTP API**: Serves the frontend, scrobble data (with filtering/pagination), and statistics.
+- **HTTP API**: Serves the frontend, scrobble data (with filtering/pagination), statistics, and similar tracks (via [cosine.club](https://cosine.club)).
 - **ListenBrainz Sync**: A background process that polls the ListenBrainz API every 60 seconds to fetch new scrobbles.
 - **Last.fm Sync**: A background process that polls the Last.fm API every 60 seconds to fetch new scrobbles. Both syncs write to the same `scrobbles` table; duplicate timestamps are silently ignored.
 - **Metadata Enrichment**: A background process that identifies scrobbles with missing metadata (genres, labels, release years) and fetches information from MusicBrainz, Last.fm, and Discogs.
@@ -65,6 +65,7 @@ Each user gets their own `UserContext` with an independent DuckDB connection, sy
 | `AWS_SECRET_ACCESS_KEY` | — | S3 credentials |
 | `AWS_ENDPOINT_URL` | — | S3 endpoint (for S3-compatible storage) |
 | `AWS_S3_ADDRESSING_STYLE` | — | `virtual` or `path` |
+| `COSINE_API_KEY` | — | [cosine.club](https://cosine.club) API key for similar tracks |
 | `PORT` | `8000` | HTTP listen port |
 | `METRICS_ENABLED` | `false` | Set to `true` to enable the Prometheus `/metrics` endpoint |
 
