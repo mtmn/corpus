@@ -9,7 +9,7 @@ indexHtml userSlug allUsers =
     encodeUser { slug, name } = "{\"slug\":\"" <> slug <> "\",\"name\":\"" <> name <> "\"}"
     usersJson = "[" <> joinWith "," (map encodeUser allUsers) <> "]"
   in
-  """<!DOCTYPE html>
+    """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -704,10 +704,13 @@ indexHtml userSlug allUsers =
     <div id="app"></div>
     <script src="/client.js"></script>
     <script>
-        var userSlug = '""" <> userSlug <>
-    """';
-        var allUsers = """ <> usersJson <>
-    """;
+        var userSlug = '""" <> userSlug
+      <>
+        """';
+        var allUsers = """
+      <> usersJson
+      <>
+        """;
         var app = Elm.Client.init({
             node: document.getElementById('app'),
             flags: { search: window.location.search, userSlug: userSlug, allUsers: allUsers }

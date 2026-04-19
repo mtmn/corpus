@@ -125,7 +125,7 @@ withTransaction conn lock action = do
         void $ try $ run conn "ROLLBACK" []
         throwError err
       Right v -> do
-        run conn "COMMIT" []
+        void $ try $ run conn "COMMIT" []
         pure v
   Avar.put unit lock
   case result of
@@ -211,16 +211,20 @@ getScrobbles conn limit offset (Just { field, value }) Nothing = do
 filterQuery :: FilterField -> String
 filterQuery FilterArtist =
   scrobbleCols <> scrobbleFromLeft
-    <> " WHERE s.artist_name = ?" <> scrobbleOrderPage
+    <> " WHERE s.artist_name = ?"
+    <> scrobbleOrderPage
 filterQuery FilterLabel =
   scrobbleCols <> scrobbleFromInner
-    <> " WHERE rm.label = ?" <> scrobbleOrderPage
+    <> " WHERE rm.label = ?"
+    <> scrobbleOrderPage
 filterQuery FilterYear =
   scrobbleCols <> scrobbleFromInner
-    <> " WHERE rm.release_year::VARCHAR = ?" <> scrobbleOrderPage
+    <> " WHERE rm.release_year::VARCHAR = ?"
+    <> scrobbleOrderPage
 filterQuery FilterGenre =
   scrobbleCols <> scrobbleFromInner
-    <> " WHERE rm.genre = ?" <> scrobbleOrderPage
+    <> " WHERE rm.genre = ?"
+    <> scrobbleOrderPage
 
 initReleaseMetadata :: Connection -> Aff Unit
 initReleaseMetadata conn = do

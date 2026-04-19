@@ -797,7 +797,7 @@ view model =
                         [ input
                             [ type_ "text"
                             , class "search-input"
-                            , placeholder "track, artist, album or label"
+                            , placeholder "search by track, artist, album or label"
                             , value model.searchInput
                             , onInput UpdateSearchInput
                             , onEnter SubmitSearch
