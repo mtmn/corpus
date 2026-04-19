@@ -2,7 +2,7 @@ module Db where
 
 import Prelude
 
-import Data.Argonaut.Core (Json, toObject, toString)
+import Data.Argonaut.Core (Json, toObject, toNumber, toString)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Time.Duration (Milliseconds(..))
@@ -24,7 +24,7 @@ import Data.Array (mapMaybe, (!!), last, length, null, replicate)
 import Data.Foldable (for_)
 import Data.String.Common (joinWith)
 import Data.Tuple (Tuple(..))
-import Data.Int (fromString)
+import Data.Int (fromString, round)
 import Data.String (Pattern(..), split, stripSuffix)
 import Control.Monad.Rec.Class (forever)
 import Node.FS.Aff as FSA
@@ -157,8 +157,8 @@ getOldestTs conn = do
   pure $ do
     row <- rows !! 0
     obj <- toObject row
-    v <- Object.lookup "min_ts" obj
-    ts <- toMaybe (unsafeCoerce v :: Nullable Int)
+    n <- Object.lookup "min_ts" obj >>= toNumber
+    let ts = round n
     if ts == 0 then Nothing else Just ts
 
 upsertScrobble :: Connection -> Listen -> Aff Unit
@@ -207,15 +207,12 @@ filterQuery FilterGenre =
 
 initReleaseMetadata :: Connection -> Aff Unit
 initReleaseMetadata conn = do
-  _ <- run conn "CREATE TABLE IF NOT EXISTS release_metadata (release_mbid VARCHAR PRIMARY KEY, genre VARCHAR, label VARCHAR, release_year INTEGER, genre_checked_at INTEGER)" []
+  run conn "CREATE TABLE IF NOT EXISTS release_metadata (release_mbid VARCHAR PRIMARY KEY, genre VARCHAR, label VARCHAR, release_year INTEGER, genre_checked_at INTEGER)" []
   -- Migration for existing databases; DuckDB supports IF NOT EXISTS for adding columns
-  _ <- run conn "ALTER TABLE release_metadata ADD COLUMN IF NOT EXISTS genre_checked_at INTEGER" []
-  pure unit
+  run conn "ALTER TABLE release_metadata ADD COLUMN IF NOT EXISTS genre_checked_at INTEGER" []
 
 ping :: Connection -> Aff Unit
-ping conn = do
-  _ <- queryAll conn "SELECT 1" []
-  pure unit
+ping conn = void $ queryAll conn "SELECT 1" []
 
 getUnenrichedMbids :: Connection -> Int -> Aff (Array String)
 getUnenrichedMbids conn limit = do
@@ -240,15 +237,14 @@ getEmptyGenreMbids conn limit = do
     Object.lookup "release_mbid" obj >>= toString
 
 upsertReleaseMetadata :: Connection -> String -> Maybe String -> Maybe String -> Maybe Int -> Aff Unit
-upsertReleaseMetadata conn mbid genre label year = do
-  _ <- run conn
+upsertReleaseMetadata conn mbid genre label year =
+  run conn
     "INSERT INTO release_metadata (release_mbid, genre, label, release_year) VALUES (?, ?, ?, ?) ON CONFLICT(release_mbid) DO UPDATE SET genre=excluded.genre, label=excluded.label, release_year=excluded.release_year"
     [ unsafeCoerce mbid
     , unsafeCoerce (toNullable genre)
     , unsafeCoerce (toNullable label)
     , unsafeCoerce (toNullable year)
     ]
-  pure unit
 
 touchGenreCheckedAt :: Connection -> String -> Aff Unit
 touchGenreCheckedAt conn mbid = do
@@ -294,7 +290,7 @@ rowToEntry :: Json -> Maybe StatsEntry
 rowToEntry json = do
   obj <- toObject json
   name <- Object.lookup "name" obj >>= toString
-  count <- Object.lookup "count" obj >>= (unsafeCoerce >>> Just)
+  count <- map round $ Object.lookup "count" obj >>= toNumber
   pure $ StatsEntry { name, count }
 
 getArtistReleasesByMbids :: Connection -> Array String -> Aff (Object.Object { artist :: String, release :: String })
@@ -320,7 +316,7 @@ getArtistReleasesByMbids conn mbids = do
 rowToListen :: Json -> Maybe Listen
 rowToListen json = do
   obj <- toObject json
-  listenedAt <- Object.lookup "listened_at" obj >>= (unsafeCoerce >>> Just)
+  listenedAt <- map round $ Object.lookup "listened_at" obj >>= toNumber
   trackName <- Object.lookup "track_name" obj >>= toString
   artistName <- Object.lookup "artist_name" obj >>= toString
   releaseName <- Object.lookup "release_name" obj >>= toString

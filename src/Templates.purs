@@ -576,7 +576,7 @@ indexHtml userSlug =
             flags: { search: window.location.search, userSlug: userSlug }
         });
         app.ports.pushUrl.subscribe(function(url) {
-            var prefix = userSlug ? '/~' + userSlug : '';
+            var prefix = userSlug ? '/u/' + userSlug : '';
             history.pushState({}, '', prefix + url);
         });
     </script>
