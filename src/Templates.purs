@@ -568,6 +568,50 @@ indexHtml userSlug allUsers =
             margin: 0;
         }
 
+        .search-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+
+        .search-input {
+            flex: 1;
+            background: #521e40;
+            border: 1px solid #50447f;
+            color: #ffffff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 13px;
+        }
+
+        .search-input::placeholder {
+            color: #9fbfe7;
+            opacity: 0.7;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #ffffff;
+        }
+
+        .search-btn {
+            background: #50447f;
+            border: 1px solid #50447f;
+            color: #ffffff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+        }
+
+        .search-btn:hover {
+            background: #6a5fa0;
+            border-color: #6a5fa0;
+        }
+
         .about-description {
             color: #a0c0d0;
             font-size: 13px;

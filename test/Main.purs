@@ -140,12 +140,12 @@ main = runSpecAndExitProcess [consoleReporter] do
         exists2 <- checkExists conn 12345
         exists2 `shouldEqual` true
 
-        listens <- getScrobbles conn 10 0 Nothing
+        listens <- getScrobbles conn 10 0 Nothing Nothing
         length listens `shouldEqual` 1
 
         upsertReleaseMetadata conn "rb1" (Just "Rock") (Just "Label") (Just 2023)
 
-        listensWithGenre <- getScrobbles conn 10 0 Nothing
+        listensWithGenre <- getScrobbles conn 10 0 Nothing Nothing
         case listensWithGenre of
           [Listen { trackMetadata: TrackMetadata m }] -> m.genre `shouldEqual` Just "Rock"
           _ -> fail "Expected 1 listen"
@@ -158,10 +158,10 @@ main = runSpecAndExitProcess [consoleReporter] do
         length s.tracks `shouldEqual` 1
 
         -- Test Filtering (as mentioned in architecture.md)
-        listensFiltered <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Rock" })
+        listensFiltered <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Rock" }) Nothing
         length listensFiltered `shouldEqual` 1
 
-        listensEmpty <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Jazz" })
+        listensEmpty <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Jazz" }) Nothing
         length listensEmpty `shouldEqual` 0
 
       it "upsertScrobble is idempotent" do
@@ -180,7 +180,7 @@ main = runSpecAndExitProcess [consoleReporter] do
               }
         upsertScrobble conn listen
         upsertScrobble conn listen
-        listens <- getScrobbles conn 10 0 Nothing
+        listens <- getScrobbles conn 10 0 Nothing Nothing
         length listens `shouldEqual` 1
 
       describe "getScrobbles filter variants" do
@@ -201,9 +201,9 @@ main = runSpecAndExitProcess [consoleReporter] do
               }
           upsertScrobble conn (mkListen 1 "Alpha")
           upsertScrobble conn (mkListen 2 "Beta")
-          listens <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Alpha" })
+          listens <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Alpha" }) Nothing
           length listens `shouldEqual` 1
-          listensNone <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Gamma" })
+          listensNone <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Gamma" }) Nothing
           length listensNone `shouldEqual` 0
 
         it "filters by label" do
@@ -223,9 +223,9 @@ main = runSpecAndExitProcess [consoleReporter] do
                 }
             )
           upsertReleaseMetadata conn "mb-label" Nothing (Just "Warp") (Just 2000)
-          listens <- getScrobbles conn 10 0 (Just { field: FilterLabel, value: "Warp" })
+          listens <- getScrobbles conn 10 0 (Just { field: FilterLabel, value: "Warp" }) Nothing
           length listens `shouldEqual` 1
-          listensNone <- getScrobbles conn 10 0 (Just { field: FilterLabel, value: "Columbia" })
+          listensNone <- getScrobbles conn 10 0 (Just { field: FilterLabel, value: "Columbia" }) Nothing
           length listensNone `shouldEqual` 0
 
         it "filters by year" do
@@ -245,9 +245,9 @@ main = runSpecAndExitProcess [consoleReporter] do
                 }
             )
           upsertReleaseMetadata conn "mb-year" Nothing Nothing (Just 1994)
-          listens <- getScrobbles conn 10 0 (Just { field: FilterYear, value: "1994" })
+          listens <- getScrobbles conn 10 0 (Just { field: FilterYear, value: "1994" }) Nothing
           length listens `shouldEqual` 1
-          listensNone <- getScrobbles conn 10 0 (Just { field: FilterYear, value: "1999" })
+          listensNone <- getScrobbles conn 10 0 (Just { field: FilterYear, value: "1999" }) Nothing
           length listensNone `shouldEqual` 0
 
       describe "getOldestTs" do
@@ -497,7 +497,7 @@ main = runSpecAndExitProcess [consoleReporter] do
               upsertScrobble conn listen
               exists <- checkExists conn 1700000000
               exists `shouldEqual` true
-              listens <- getScrobbles conn 10 0 Nothing
+              listens <- getScrobbles conn 10 0 Nothing Nothing
               length listens `shouldEqual` 1
 
     describe "Corpus S3" do

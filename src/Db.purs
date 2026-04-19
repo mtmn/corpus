@@ -177,13 +177,23 @@ upsertScrobble conn (Listen { listenedAt, trackMetadata: TrackMetadata track }) 
         ]
     run conn "INSERT INTO scrobbles SELECT * FROM (SELECT ? as listened_at, ? as track_name, ? as artist_name, ? as release_name, ? as release_mbid, ? as caa_release_mbid) t WHERE NOT EXISTS (SELECT 1 FROM scrobbles WHERE listened_at = t.listened_at)" params
 
-getScrobbles :: Connection -> Int -> Int -> Maybe { field :: FilterField, value :: String } -> Aff (Array Listen)
-getScrobbles conn limit offset Nothing = do
+getScrobbles :: Connection -> Int -> Int -> Maybe { field :: FilterField, value :: String } -> Maybe String -> Aff (Array Listen)
+getScrobbles conn limit offset _ (Just q) = do
+  let pattern = "%" <> q <> "%"
+  rows <- queryAll conn
+    ( "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre"
+        <> " FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid"
+        <> " WHERE (s.track_name ILIKE ? OR s.artist_name ILIKE ? OR s.release_name ILIKE ? OR rm.label ILIKE ?)"
+        <> " ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
+    )
+    [ unsafeCoerce pattern, unsafeCoerce pattern, unsafeCoerce pattern, unsafeCoerce pattern, unsafeCoerce limit, unsafeCoerce offset ]
+  pure $ mapMaybe rowToListen rows
+getScrobbles conn limit offset Nothing Nothing = do
   rows <- queryAll conn
     "SELECT s.listened_at, s.track_name, s.artist_name, s.release_name, s.release_mbid, s.caa_release_mbid, rm.genre FROM scrobbles s LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid ORDER BY s.listened_at DESC LIMIT ? OFFSET ?"
     [ unsafeCoerce limit, unsafeCoerce offset ]
   pure $ mapMaybe rowToListen rows
-getScrobbles conn limit offset (Just { field, value }) = do
+getScrobbles conn limit offset (Just { field, value }) Nothing = do
   rows <- queryAll conn (filterQuery field) [ unsafeCoerce value, unsafeCoerce limit, unsafeCoerce offset ]
   pure $ mapMaybe rowToListen rows
 

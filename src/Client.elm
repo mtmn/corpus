@@ -123,6 +123,8 @@ type alias Model =
     , userSlug : String
     , similarStates : Dict String SimilarState
     , allUsers : List String
+    , searchInput : String
+    , activeSearch : Maybe String
     }
 
 
@@ -155,9 +157,11 @@ init flags =
       , userSlug = flags.userSlug
       , similarStates = Dict.empty
       , allUsers = flags.allUsers
+      , searchInput = ""
+      , activeSearch = Nothing
       }
     , Cmd.batch
-        [ fetchListens flags.userSlug 25 offset Nothing
+        [ fetchListens flags.userSlug 25 offset Nothing Nothing
         , Task.perform GotTime Time.now
         ]
     )
@@ -215,6 +219,9 @@ type Msg
     | CollapseSection String
     | FetchSimilar String String
     | FetchSimilarTracks String String (Result Http.Error (List SimilarTrack))
+    | UpdateSearchInput String
+    | SubmitSearch
+    | ClearSearch
 
 
 
@@ -227,7 +234,7 @@ update msg model =
         Tick time ->
             if not model.loading then
                 ( { model | currentTime = Just time, loading = True }
-                , fetchListens model.userSlug model.limit model.offset model.activeFilter
+                , fetchListens model.userSlug model.limit model.offset model.activeFilter model.activeSearch
                 )
 
             else
@@ -283,7 +290,7 @@ update msg model =
             in
             ( { model | offset = newOffset, loading = True }
             , Cmd.batch
-                [ fetchListens model.userSlug model.limit newOffset model.activeFilter
+                [ fetchListens model.userSlug model.limit newOffset model.activeFilter model.activeSearch
                 , pushUrl ("?page=" ++ String.fromInt page)
                 ]
             )
@@ -298,7 +305,7 @@ update msg model =
             in
             ( { model | offset = newOffset, loading = True }
             , Cmd.batch
-                [ fetchListens model.userSlug model.limit newOffset model.activeFilter
+                [ fetchListens model.userSlug model.limit newOffset model.activeFilter model.activeSearch
                 , pushUrl ("?page=" ++ String.fromInt page)
                 ]
             )
@@ -387,9 +394,9 @@ update msg model =
                 filter =
                     Just { field = field, value = value }
             in
-            ( { model | activeFilter = filter, offset = 0, activeTab = ListensTab, loading = True }
+            ( { model | activeFilter = filter, activeSearch = Nothing, searchInput = "", offset = 0, activeTab = ListensTab, loading = True }
             , Cmd.batch
-                [ fetchListens model.userSlug model.limit 0 filter
+                [ fetchListens model.userSlug model.limit 0 filter Nothing
                 , pushUrl "?page=1"
                 ]
             )
@@ -397,7 +404,39 @@ update msg model =
         ClearFilter ->
             ( { model | activeFilter = Nothing, offset = 0, loading = True }
             , Cmd.batch
-                [ fetchListens model.userSlug model.limit 0 Nothing
+                [ fetchListens model.userSlug model.limit 0 Nothing model.activeSearch
+                , pushUrl "?page=1"
+                ]
+            )
+
+        UpdateSearchInput str ->
+            ( { model | searchInput = str }, Cmd.none )
+
+        SubmitSearch ->
+            let
+                q =
+                    String.trim model.searchInput
+            in
+            if String.isEmpty q then
+                ( { model | activeSearch = Nothing, offset = 0, loading = True }
+                , Cmd.batch
+                    [ fetchListens model.userSlug model.limit 0 Nothing Nothing
+                    , pushUrl "?page=1"
+                    ]
+                )
+
+            else
+                ( { model | activeSearch = Just q, activeFilter = Nothing, offset = 0, loading = True }
+                , Cmd.batch
+                    [ fetchListens model.userSlug model.limit 0 Nothing (Just q)
+                    , pushUrl "?page=1"
+                    ]
+                )
+
+        ClearSearch ->
+            ( { model | searchInput = "", activeSearch = Nothing, offset = 0, loading = True }
+            , Cmd.batch
+                [ fetchListens model.userSlug model.limit 0 Nothing Nothing
                 , pushUrl "?page=1"
                 ]
             )
@@ -486,8 +525,8 @@ subscriptions _ =
 -- HTTP
 
 
-fetchListens : String -> Int -> Int -> Maybe ActiveFilter -> Cmd Msg
-fetchListens userSlug limit offset mFilter =
+fetchListens : String -> Int -> Int -> Maybe ActiveFilter -> Maybe String -> Cmd Msg
+fetchListens userSlug limit offset mFilter mSearch =
     let
         filterParams =
             case mFilter of
@@ -497,8 +536,16 @@ fetchListens userSlug limit offset mFilter =
                 Just { field, value } ->
                     "&filterField=" ++ field ++ "&filterValue=" ++ Url.percentEncode value
 
+        searchParam =
+            case mSearch of
+                Nothing ->
+                    ""
+
+                Just q ->
+                    "&search=" ++ Url.percentEncode q
+
         url =
-            "/proxy?user=" ++ userSlug ++ "&limit=" ++ String.fromInt limit ++ "&offset=" ++ String.fromInt offset ++ filterParams
+            "/proxy?user=" ++ userSlug ++ "&limit=" ++ String.fromInt limit ++ "&offset=" ++ String.fromInt offset ++ filterParams ++ searchParam
     in
     Http.get
         { url = url
@@ -736,7 +783,25 @@ view model =
         , case model.activeTab of
             ListensTab ->
                 div []
-                    [ case model.activeFilter of
+                    [ div [ class "search-bar" ]
+                        [ input
+                            [ type_ "text"
+                            , class "search-input"
+                            , placeholder "search tracks, artists, albums, labels…"
+                            , value model.searchInput
+                            , onInput UpdateSearchInput
+                            , onEnter SubmitSearch
+                            ]
+                            []
+                        , button [ class "search-btn", onClick SubmitSearch ] [ text "search" ]
+                        , case model.activeSearch of
+                            Just _ ->
+                                button [ class "filter-clear", onClick ClearSearch ] [ text "✕ clear" ]
+
+                            Nothing ->
+                                text ""
+                        ]
+                    , case model.activeFilter of
                         Nothing ->
                             text ""
 
@@ -1198,6 +1263,22 @@ renderPeriodSelector current showInput customVal mError =
           else
             text ""
         ]
+
+
+
+onEnter : msg -> Html.Attribute msg
+onEnter msg =
+    on "keydown"
+        (D.field "key" D.string
+            |> D.andThen
+                (\key ->
+                    if key == "Enter" then
+                        D.succeed msg
+
+                    else
+                        D.fail "not enter"
+                )
+        )
 
 
 
