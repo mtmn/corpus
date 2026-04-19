@@ -60,7 +60,5 @@ npx spago bundle --module Client --outfile client.js --platform browser
 | `AWS_ENDPOINT_URL` | — | S3-compatible endpoint (e.g. for MinIO) |
 | `AWS_S3_ADDRESSING_STYLE` | — | Set to `path` for path-style S3 URLs |
 | `METRICS_ENABLED` | `false` | Set to `true` to expose Prometheus metrics at `/metrics` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | If set, enables OpenTelemetry tracing and exports spans to this OTLP HTTP endpoint |
-| `OTEL_SERVICE_NAME` | `corpus` | Service name reported in OTel spans |
 
 Per-user settings (`listenbrainzUser`, `lastfmUser`, `initialSync`, `coverCacheEnabled`, `backupEnabled`, `backupIntervalHours`, etc.) are configured in `users.json` (or `users.dhall`), not via environment variables.

@@ -11,7 +11,7 @@ The server is built with PureScript running on Node.js. It handles several core 
 - **Last.fm Sync**: A background process that polls the Last.fm API every 60 seconds to fetch new scrobbles. Both syncs write to the same `scrobbles` table; duplicate timestamps are silently ignored.
 - **Metadata Enrichment**: A background process that identifies scrobbles with missing metadata (genres, labels, release years) and fetches information from MusicBrainz, Last.fm, and Discogs.
 - **Cover Art Proxy**: A specialized endpoint that fetches, caches, and serves cover art, utilizing a multi-source fallback strategy (CAA → Last.fm → Discogs).
-- **Observability**: Prometheus metrics exposed at `/metrics` and optional OpenTelemetry tracing of all HTTP requests.
+- **Observability**: Prometheus metrics exposed at `/metrics`.
 
 ### Frontend
 A Single Page Application (SPA) built with [Elm](https://elm-lang.org).
@@ -67,8 +67,6 @@ Each user gets their own `UserContext` with an independent DuckDB connection, sy
 | `AWS_S3_ADDRESSING_STYLE` | — | `virtual` or `path` |
 | `PORT` | `8000` | HTTP listen port |
 | `METRICS_ENABLED` | `false` | Set to `true` to enable the Prometheus `/metrics` endpoint |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | If set, enables OpenTelemetry tracing and exports spans to this OTLP HTTP endpoint |
-| `OTEL_SERVICE_NAME` | `corpus` | Service name reported in OTel spans |
 
 ### users.dhall Fields
 
@@ -137,10 +135,6 @@ Prometheus metrics are **disabled by default**. Set `METRICS_ENABLED=true` to en
 
 Node.js default metrics (GC, event loop, memory) are also collected via `prom-client`'s `collectDefaultMetrics`.
 
-### OpenTelemetry Tracing
-
-Tracing is opt-in: the OTel SDK starts only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Spans are exported over OTLP/HTTP. Each incoming HTTP request becomes a server span; outbound `fetch`/`undici` calls made during that request automatically become child spans via the `HttpInstrumentation` and `UndiciInstrumentation` auto-instrumentation packages. W3C `traceparent` headers are extracted from incoming requests for distributed trace propagation.
-
 ## Tech Stack
 
 - **Language**: [PureScript](https://purescript.org) (server), [Elm](https://elm-lang.org) (frontend)
@@ -158,7 +152,7 @@ Corpus relies on FFI to interact with the Node.js ecosystem where native PureScr
 - **Cloud Storage (`S3.js`)**: AWS SDK (`@aws-sdk/client-s3`) for cover art caching. Takes explicit config structs rather than reading `process.env`.
 - **System Utilities (`Main.js`)**: Bridges PureScript with Node.js — `dotenv` loading and request helpers.
 - **Config (`Config.js`)**: Reads and parses `users.json` from the path given by `CORPUS_USERS_FILE`.
-- **Observability (`Metrics.js`)**: Initialises `prom-client` (Prometheus) and the OpenTelemetry Node SDK. Exports metric-increment helpers called from PureScript and the `wrapRequest` function that wraps each HTTP handler in an OTel server span.
+- **Observability (`Metrics.js`)**: Initialises `prom-client` (Prometheus). Exports metric-increment helpers called from PureScript and the `wrapRequest` function that records metrics and logs each HTTP request.
 
 ## System Flow
 
