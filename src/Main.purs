@@ -4,13 +4,13 @@ import Prelude
 
 import Config (AppConfig, UserConfig, UserEntry, loadConfig, s3ConfigFromUser)
 import Effect (Effect)
+import Node.EventEmitter (on_, EventHandle(..))
 import Effect.Class (liftEffect)
 import Log as Log
 import Metrics as Metrics
 import Node.HTTP (createServer)
 import Node.HTTPS as HTTPS
 import Node.HTTP.Server as Server
-import Node.EventEmitter (on_, EventHandle(..))
 import Effect.Uncurried (mkEffectFn1)
 import Node.HTTP.ClientRequest as Client
 import Node.HTTP.IncomingMessage as IM
@@ -25,7 +25,7 @@ import Node.Buffer (fromArrayBuffer)
 import Data.Either (Either(..), hush)
 import Control.Monad.Error.Class (throwError)
 import Effect.Exception as Exception
-import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff, joinFiber)
+import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff, joinFiber, killFiber, Fiber)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as Avar
 import Unsafe.Coerce (unsafeCoerce)
@@ -39,7 +39,7 @@ import Data.Argonaut (decodeJson, encodeJson, parseJson)
 import Data.Argonaut.Core (Json, toObject, toArray, toString, stringify)
 import Data.Array ((!!), length, null, mapMaybe, find)
 import Data.Tuple (Tuple(..))
-import Data.Foldable (for_, foldM)
+import Data.Foldable (for_, foldM, traverse_)
 import Data.Traversable (traverse)
 import Db (Connection, FilterField(..), connect, initDb, upsertScrobble, getScrobbles, checkExists, getOldestTs, initReleaseMetadata, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, upsertReleaseMetadata, touchGenreCheckedAt, getStats, ping, backupDb, withTransaction)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
@@ -60,6 +60,7 @@ import Templates (indexHtml)
 
 -- Types
 type Request = IncomingMessage IMServer
+
 type Response = ServerResponse
 
 type UserContext =
@@ -68,6 +69,8 @@ type UserContext =
   , config :: UserConfig
   , slug :: String
   , displayName :: String
+  , enrichMetadataFiber :: Maybe (Fiber Unit)
+  , backupFiber :: Maybe (Fiber Unit)
   }
 
 listenBrainzUrl :: String -> String
@@ -341,39 +344,49 @@ handleRequest metricsEnabled contexts req res = do
     Just url -> do
       let path = URL.pathname url
       Metrics.wrapRequest method (normalizePath path) Log.info req res do
-        case path of
-          "/client.js" ->
-            serveClientJs res
-          "/favicon.png" ->
-            serveAsset "image/png" "assets/favicon.png" res
-          "/" ->
-            serveIndex allUsers "" res
-          "/metrics" ->
-            if metricsEnabled then serveMetrics res
-            else do
-              Log.warn "Path not found: /metrics"
-              serveNotFound res
-          "/proxy" ->
-            withUser url \ctx -> serveProxy ctx.conn url res
-          "/stats" ->
-            withUser url \ctx -> serveStats ctx.conn url res
-          "/cover" ->
-            withUser url \ctx -> serveCover ctx.config ctx.slug url res
-          "/similar" ->
-            withUser url \ctx -> serveSimilar ctx.slug ctx.config url res
-          "/healthz" ->
-            withUser url \ctx -> serveHealthz ctx.conn res
-          _ ->
-            case stripPrefix (Pattern "/u/") path of
-              Just slug ->
-                serveIndex allUsers slug res
-              Nothing -> do
-                Log.warn $ "Path not found: " <> path
-                serveNotFound res
+        launchAff_ $ do
+          result <- try $ routeRequest metricsEnabled contexts url path allUsers res
+          case result of
+            Left err -> do
+              Log.error $ "Internal server error: " <> Exception.message err
+              liftEffect $ serveInternalError res
+            Right _ ->
+              pure unit
+
+routeRequest :: Boolean -> Array UserContext -> URL -> String -> Array { slug :: String, name :: String } -> Response -> Aff Unit
+routeRequest metricsEnabled contexts url path allUsers res = liftEffect $ case path of
+  "/client.js" ->
+    serveClientJs res
+  "/favicon.png" ->
+    serveAsset "image/png" "assets/favicon.png" res
+  "/" ->
+    serveIndex allUsers "" res
+  "/metrics" ->
+    if metricsEnabled then serveMetrics res
+    else do
+      Log.warn "Path not found: /metrics"
+      serveNotFound res
+  "/proxy" ->
+    withUser url \ctx -> serveProxy ctx.conn url res
+  "/stats" ->
+    withUser url \ctx -> serveStats ctx.conn url res
+  "/cover" ->
+    withUser url \ctx -> serveCover ctx.config ctx.slug url res
+  "/similar" ->
+    withUser url \ctx -> serveSimilar ctx.slug ctx.config url res
+  "/healthz" ->
+    withUser url \ctx -> serveHealthz ctx.conn res
+  _ ->
+    case stripPrefix (Pattern "/u/") path of
+      Just slug ->
+        serveIndex allUsers slug res
+      Nothing -> do
+        Log.warn $ "Path not found: " <> path
+        serveNotFound res
   where
-  withUser url f =
+  withUser urlParam f =
     let
-      slug = fromMaybe "" (getQueryParam "user" url)
+      slug = fromMaybe "" (getQueryParam "user" urlParam)
     in
       case find (\c -> c.slug == slug) contexts of
         Nothing -> do
@@ -646,6 +659,14 @@ serveNotFound res = do
   setStatusCode 404 res
   let w = toWriteable (toOutgoingMessage res)
   void $ writeString w UTF8 "Not Found"
+  end w
+
+serveInternalError :: Response -> Effect Unit
+serveInternalError res = do
+  setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
+  setStatusCode 500 res
+  let w = toWriteable (toOutgoingMessage res)
+  void $ writeString w UTF8 "Internal Server Error"
   end w
 
 serveBadRequest :: Response -> String -> Effect Unit
@@ -980,14 +1001,33 @@ startUser { slug, name, config } = do
       _, _ -> pure unit
 
   -- Background tasks that don't depend on initial sync completion.
-  void $ forkAff $ enrichMetadata conn config slug
-  when config.backupEnabled $ void $ forkAff $
-    backupDb conn config.databaseFile (s3ConfigFromUser config)
-      (toNumber config.backupIntervalHours * 3600000.0)
-      slug
+  enrichMetadataFiber <- forkAff $ enrichMetadata conn config slug
+  backupFiber <-
+    if config.backupEnabled then Just <$> forkAff (backupDb conn config.databaseFile (s3ConfigFromUser config) (toNumber config.backupIntervalHours * 3600000.0) slug)
+    else pure Nothing
 
   let displayName = fromMaybe (if slug == "" then "root" else slug) name
-  pure { conn, writeLock, config, slug, displayName }
+  pure { conn, writeLock, config, slug, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber }
+
+cleanupUser :: UserContext -> Aff Unit
+cleanupUser ctx = do
+  Log.info $ "Cleaning up user: " <> if ctx.slug == "" then "(root)" else ctx.slug
+  -- Kill background fibers
+  case ctx.enrichMetadataFiber of
+    Just fiber -> do
+      Log.info "Killing enrich metadata fiber"
+      void $ try $ killFiber (Exception.error "Server shutting down") fiber
+    Nothing -> do
+      pure unit
+  case ctx.backupFiber of
+    Just fiber -> do
+      Log.info "Killing backup fiber"
+      void $ try $ killFiber (Exception.error "Server shutting down") fiber
+    Nothing -> do
+      pure unit
+  -- Close database connection
+  Log.info "Closing database connection"
+  void $ try $ ping ctx.conn
 
 foreign import dotenvConfig :: Effect Unit
 
@@ -1013,3 +1053,9 @@ main = do
             Log.info $ "Server is running on port " <> show appConfig.port
 
           listenTcp netServer { host: "127.0.0.1", port: appConfig.port, backlog: 128 }
+
+cleanupAll :: Array UserContext -> Aff Unit
+cleanupAll contexts = do
+  Log.info "Starting graceful shutdown of all users"
+  traverse_ cleanupUser contexts
+  Log.info "Graceful shutdown complete"
