@@ -695,7 +695,7 @@ view model =
                         "/"
 
                      else
-                        "/~" ++ model.userSlug
+                        "/u/" ++ model.userSlug
                     )
                 ]
                 [ text "listens" ]

@@ -164,6 +164,12 @@ lastfmTrackToListen json = do
         }
     }
 
+recordSyncSuccess :: String -> String -> Int -> Aff Unit
+recordSyncSuccess slug source n = do
+  liftEffect $ Metrics.incSyncRuns slug source "success"
+  when (n > 0) $ liftEffect $ Metrics.incSyncScrobbles slug source n
+  liftEffect $ Metrics.setSyncLastSuccess slug source
+
 -- One complete paginated pass; used for both initial and recurring syncs.
 lbSyncOnce :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
 lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSync
@@ -221,10 +227,7 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
           Log.error $ "Sync fetch error: " <> Exception.message err
           pure acc
 
-  recordSuccess n = do
-    liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "success"
-    when (n > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "listenbrainz" n
-    liftEffect $ Metrics.setSyncLastSuccess slug "listenbrainz"
+  recordSuccess = recordSyncSuccess slug "listenbrainz"
 
   processListens listens = do
     s <- foldM step { added: 0, minTs: Nothing, hitCount: 0 } listens
@@ -298,10 +301,7 @@ lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
         total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
         Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
 
-  recordSuccess n = do
-    liftEffect $ Metrics.incSyncRuns slug "lastfm" "success"
-    when (n > 0) $ liftEffect $ Metrics.incSyncScrobbles slug "lastfm" n
-    liftEffect $ Metrics.setSyncLastSuccess slug "lastfm"
+  recordSuccess = recordSyncSuccess slug "lastfm"
 
   processLastfmTracks tracks = do
     s <- foldM step { added: 0, hitCount: 0 } (mapMaybe lastfmTrackToListen tracks)
@@ -321,13 +321,13 @@ lfSyncLoop conn apiKey lfmUser slug writeLock initialSyncEnabled = forever do
   lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled
 
 normalizePath :: String -> String
-normalizePath path = case stripPrefix (Pattern "/~") path of
-  Just _ -> "/~:slug"
+normalizePath path = case stripPrefix (Pattern "/u/") path of
+  Just _ -> "/u/:slug"
   Nothing -> path
 
 -- Request handler
 -- API endpoints (/proxy, /stats, /cover, /healthz) select the user via ?user=<slug>.
--- Index pages are served at / (root user) and /~<slug> (named users).
+-- Index pages are served at / (root user) and /u/<slug> (named users).
 handleRequest :: Boolean -> Array UserContext -> Request -> Response -> Effect Unit
 handleRequest metricsEnabled contexts req res = do
   let method = IM.method req
@@ -361,7 +361,7 @@ handleRequest metricsEnabled contexts req res = do
           "/healthz" ->
             withUser url \ctx -> serveHealthz ctx.conn res
           _ ->
-            case stripPrefix (Pattern "/~") path of
+            case stripPrefix (Pattern "/u/") path of
               Just slug ->
                 serveIndex slug res
               Nothing -> do
@@ -899,7 +899,7 @@ enrichMetadata conn cfg slug = forever do
   liftEffect $ Metrics.setEnrichmentQueueSize slug "unenriched" (length unenrichedMbids)
   liftEffect $ Metrics.setEnrichmentQueueSize slug "empty_genre" (length emptyGenreMbids)
 
-  if length allMbids == 0 then
+  if null allMbids then
     delay (Milliseconds 60000.0)
   else do
     Log.info $ "Processing " <> show (length unenrichedMbids) <> " unenriched + " <> show (length emptyGenreMbids) <> " empty genre releases"

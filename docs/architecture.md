@@ -35,7 +35,7 @@ Uses an S3-compatible bucket to cache cover art images.
 Corpus runs as a single server process serving multiple users. User configuration is defined in `users.dhall`, compiled to `users.json` at build time.
 
 ### Routing
-- `/` and `/~<slug>` — serve the Elm SPA for the root user and named users respectively
+- `/` and `/u/<slug>` — serve the Elm SPA for the root user and named users respectively
 - `/proxy?user=<slug>`, `/stats?user=<slug>`, `/cover?user=<slug>` — shared API endpoints, user selected via query parameter
 - `/healthz?user=<slug>` — liveness check; pings the user's DuckDB connection
 - `/metrics` — Prometheus metrics (no user parameter; covers all users; only available when `METRICS_ENABLED=true`)
@@ -73,7 +73,7 @@ Each user gets their own `UserContext` with an independent DuckDB connection, sy
 
 | Field | Type | Purpose |
 |---|---|---|
-| `slug` | `Text` | URL slug (`""` for root user, `"filip"` for `/~filip`) |
+| `slug` | `Text` | URL slug (`""` for root user, `"filip"` for `/u/filip`) |
 | `listenbrainzUser` | `Optional Text` | ListenBrainz username |
 | `lastfmUser` | `Optional Text` | Last.fm username |
 | `databaseFile` | `Text` | DuckDB filename (relative to `DATABASE_PATH`) |
