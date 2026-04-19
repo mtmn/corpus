@@ -37,6 +37,7 @@ type UserConfig =
 
 type UserEntry =
   { slug :: String
+  , name :: Maybe String
   , config :: UserConfig
   }
 
@@ -157,9 +158,10 @@ decodeUserEntry :: Json -> Either String UserEntry
 decodeUserEntry json = do
   obj <- mapLeft show $ decodeJson json
   slug <- mapLeft show $ obj .: "slug"
+  name <- mapLeft show $ obj .:? "name"
   configJson <- mapLeft show (obj .: "config" :: Either _ Json)
   config <- decodeUserConfig configJson
-  pure { slug, config }
+  pure { slug, name, config }
 
 -- Decodes only the non-sensitive, per-user fields from users.json.
 -- Shared credentials are injected from environment variables in loadConfig.

@@ -19,10 +19,16 @@ import Url
 port pushUrl : String -> Cmd msg
 
 
+type alias UserInfo =
+    { slug : String
+    , name : String
+    }
+
+
 type alias Flags =
     { search : String
     , userSlug : String
-    , allUsers : List String
+    , allUsers : List UserInfo
     }
 
 
@@ -64,6 +70,7 @@ type alias Listen =
     , releaseName : Maybe String
     , listenedAt : Maybe Int
     , genre : Maybe String
+    , label : Maybe String
     , releaseMbid : Maybe String
     , caaReleaseMbid : Maybe String
     }
@@ -122,7 +129,7 @@ type alias Model =
     , customError : Maybe String
     , userSlug : String
     , similarStates : Dict String SimilarState
-    , allUsers : List String
+    , allUsers : List UserInfo
     , searchInput : String
     , activeSearch : Maybe String
     }
@@ -639,6 +646,7 @@ listenDecoder =
             , releaseName = meta.releaseName
             , listenedAt = listenedAt
             , genre = meta.genre
+            , label = meta.label
             , releaseMbid = meta.releaseMbid
             , caaReleaseMbid = meta.caaReleaseMbid
             }
@@ -654,18 +662,20 @@ type alias TrackMeta =
     , genre : Maybe String
     , releaseMbid : Maybe String
     , caaReleaseMbid : Maybe String
+    , label : Maybe String
     }
 
 
 trackMetaDecoder : Decoder TrackMeta
 trackMetaDecoder =
-    D.map6 TrackMeta
+    D.map7 TrackMeta
         (D.maybe (D.field "track_name" D.string))
         (D.maybe (D.field "artist_name" D.string))
         (D.maybe (D.field "release_name" D.string))
         (D.maybe (D.field "genre" D.string))
         (D.maybe (D.at [ "mbid_mapping", "release_mbid" ] D.string))
         (D.maybe (D.at [ "mbid_mapping", "caa_release_mbid" ] D.string))
+        (D.maybe (D.field "label" D.string))
 
 
 statsDecoder : Decoder Stats
@@ -929,14 +939,23 @@ renderListen userSlug currentTime failedCovers hoveredCover similarStates idx li
             , div [ class "track-artist" ] [ text artist ]
             , div [ class "track-time" ]
                 [ span []
-                    [ a
+                    (a
                         [ href ("https://www.discogs.com/search/?q=" ++ Url.percentEncode (artist ++ " " ++ release) ++ "&type=release")
                         , target "_blank"
                         , class "album-link"
                         ]
                         [ text release ]
-                    , text (" • " ++ timeAgo currentTime listen.listenedAt)
-                    ]
+                        :: (case listen.label of
+                                Just l ->
+                                    [ text " • "
+                                    , button [ class "label-link", onClick (FilterBy "label" l) ] [ text l ]
+                                    ]
+
+                                Nothing ->
+                                    []
+                           )
+                        ++ [ text (" • " ++ timeAgo currentTime listen.listenedAt) ]
+                    )
                 ]
             ]
         , div [ class "cover-wrapper" ]
@@ -1265,7 +1284,6 @@ renderPeriodSelector current showInput customVal mError =
         ]
 
 
-
 onEnter : msg -> Html.Attribute msg
 onEnter msg =
     on "keydown"
@@ -1348,13 +1366,13 @@ timeAgo mNow mTimestamp =
             "unknown time"
 
 
-renderAboutView : String -> List String -> Html Msg
+renderAboutView : String -> List UserInfo -> Html Msg
 renderAboutView currentSlug allUsers =
     let
         otherUsers =
-            List.filter (\s -> s /= currentSlug) allUsers
+            List.filter (\u -> u.slug /= currentSlug) allUsers
 
-        userLink slug =
+        userLink { slug, name } =
             let
                 url =
                     if slug == "" then
@@ -1362,25 +1380,41 @@ renderAboutView currentSlug allUsers =
 
                     else
                         "/u/" ++ slug
-
-                label =
-                    if slug == "" then
-                        "root"
-
-                    else
-                        slug
             in
-            li [] [ a [ href url ] [ text label ] ]
+            li [] [ a [ href url ] [ text name ] ]
+
+        extLink url label =
+            a [ href url, target "_blank", class "about-link" ] [ text label ]
     in
     div []
-        [ p [ class "about-description" ]
-            [ text "corpus is a self-hosted music scrobble viewer. it aggregates listening history from ListenBrainz and Last.fm, enriches tracks with metadata from MusicBrainz, and provides browsable listen history and statistics." ]
+        [ p [ class "about-lead" ]
+            [ text "corpus is a self-hosted listen history proxy that syncs scrobbles from "
+            , extLink "https://listenbrainz.org" "ListenBrainz"
+            , text " and "
+            , extLink "https://www.last.fm" "Last.fm."
+            ]
+        , div [ class "stats-section" ]
+            [ h2 [] [ text "features" ]
+            , ul [ class "about-list" ]
+                [ li [] [ text "searchable listen history with pagination" ]
+                , li [] [ text "stats by artist, track, label, year, and genre" ]
+                , li [] [ text "filter listens by label, artist, genre, or year" ]
+                , li [] [ text "cover art from Cover Art Archive, Last.fm, and Discogs" ]
+                , li [] [ text "similar track discovery via cosine.club" ]
+                , li [] [ text "metadata enrichment via MusicBrainz, Last.fm, and Discogs" ]
+                ]
+            ]
+        , div [ class "stats-section" ]
+            [ h2 [] [ text "source" ]
+            , p [ class "about-meta" ]
+                [ extLink "https://codeberg.org/mtmn/corpus" "codeberg.org/mtmn/corpus" ]
+            ]
         , if List.isEmpty otherUsers then
             text ""
 
           else
             div [ class "stats-section" ]
-                [ h2 [] [ text "users" ]
+                [ h2 [] [ text "friends" ]
                 , ul [ class "about-users" ]
                     (List.map userLink otherUsers)
                 ]
