@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/mtmn/corpus/compare/v1.4.0...v2.0.0) (2026-04-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove otel, add cosine.club metrics
+
+### Features
+
+* remove otel, add cosine.club metrics ([e7cb4e5](https://github.com/mtmn/corpus/commit/e7cb4e51e3a7ecd8e1cde6bd20777031d162a63c))
+
 ## [1.4.0](https://github.com/mtmn/corpus/compare/v1.3.1...v1.4.0) (2026-04-19)
 
 
