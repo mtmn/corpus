@@ -27,5 +27,13 @@ in  { users =
             with databaseFile = "corpus-mtmn.db"
             with backupEnabled = True
         }
+      , { slug = "mtmnn"
+        , config =
+            defaults
+            with lastfmUser = Some "mtmnn"
+            with databaseFile = "corpus-lastfm-mtmnn.db"
+            with backupEnabled = True
+            with initialSync = True
+        }
       ]
     }

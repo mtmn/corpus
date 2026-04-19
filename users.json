@@ -10,6 +10,17 @@
         "listenbrainzUser": "mtmn"
       },
       "slug": ""
+    },
+    {
+      "config": {
+        "backupEnabled": true,
+        "backupIntervalHours": 1,
+        "coverCacheEnabled": true,
+        "databaseFile": "corpus-lastfm-mtmnn.db",
+        "initialSync": true,
+        "lastfmUser": "mtmnn"
+      },
+      "slug": "mtmnn"
     }
   ]
 }

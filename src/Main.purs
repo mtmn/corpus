@@ -597,7 +597,8 @@ serveProxy db url res = do
         value <- getQueryParam "filterValue" url
         pure { field, value }
 
-    listens <- getScrobbles db limit offset mFilter
+    let mSearch = getQueryParam "search" url
+    listens <- getScrobbles db limit offset mFilter mSearch
     let responseBody = stringify $ encodeJson { payload: { listens: listens } }
 
     liftEffect $ do
