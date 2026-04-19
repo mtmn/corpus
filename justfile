@@ -51,9 +51,10 @@ nix command:
 
 # Run quality and security checks
 check:
+    npx whine
     npx spago build --strict
-    elm-analyse
     npx purs-tidy check "src/**/*.purs"
+    elm-analyse
     statix check .
 
 # Manage the container image (build, load, push)
