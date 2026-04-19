@@ -59,6 +59,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                 , releaseName: Just "Album"
                 , mbidMapping: Just (MbidMapping { releaseMbid: Just "rb", caaReleaseMbid: Nothing })
                 , genre: Just "Rock"
+                , label: Nothing
                 }
           decodeJson (encodeJson meta) `shouldEqual` Right meta
 
@@ -71,6 +72,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                     , releaseName: Nothing
                     , mbidMapping: Nothing
                     , genre: Nothing
+                    , label: Nothing
                     }
                 , listenedAt: Just 1600000000
                 }
@@ -132,6 +134,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                   , releaseName: Just "Album"
                   , mbidMapping: Just (MbidMapping { releaseMbid: Just "rb1", caaReleaseMbid: Nothing })
                   , genre: Nothing
+                  , label: Nothing
                   }
               , listenedAt: Just 12345
               }
@@ -176,6 +179,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                   , releaseName: Just "Album"
                   , mbidMapping: Just (MbidMapping { releaseMbid: Just "mb1", caaReleaseMbid: Nothing })
                   , genre: Nothing
+                  , label: Nothing
                   }
               }
         upsertScrobble conn listen
@@ -197,6 +201,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                   , releaseName: Nothing
                   , mbidMapping: Nothing
                   , genre: Nothing
+                  , label: Nothing
                   }
               }
           upsertScrobble conn (mkListen 1 "Alpha")
@@ -219,6 +224,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                     , releaseName: Just "Album"
                     , mbidMapping: Just (MbidMapping { releaseMbid: Just "mb-label", caaReleaseMbid: Nothing })
                     , genre: Nothing
+                    , label: Nothing
                     }
                 }
             )
@@ -241,6 +247,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                     , releaseName: Just "Album"
                     , mbidMapping: Just (MbidMapping { releaseMbid: Just "mb-year", caaReleaseMbid: Nothing })
                     , genre: Nothing
+                    , label: Nothing
                     }
                 }
             )
@@ -260,6 +267,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                 , releaseName: Nothing
                 , mbidMapping: Nothing
                 , genre: Nothing
+                , label: Nothing
                 }
             }
         it "returns Nothing for an empty database" do
@@ -287,6 +295,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                 , releaseName: Just "R"
                 , mbidMapping: Just (MbidMapping { releaseMbid: Just mbid, caaReleaseMbid: Nothing })
                 , genre: Nothing
+                , label: Nothing
                 }
             }
         it "returns MBIDs not yet in release_metadata" do
@@ -319,6 +328,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                     , releaseName: Nothing
                     , mbidMapping: Nothing
                     , genre: Nothing
+                    , label: Nothing
                     }
                 }
             )
@@ -335,6 +345,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                 , releaseName: Just "R"
                 , mbidMapping: Just (MbidMapping { releaseMbid: Just mbid, caaReleaseMbid: Nothing })
                 , genre: Nothing
+                , label: Nothing
                 }
             }
         it "returns MBIDs whose genre is null in release_metadata" do
@@ -375,6 +386,7 @@ main = runSpecAndExitProcess [consoleReporter] do
                     , releaseName: Just "My Album"
                     , mbidMapping: Just (MbidMapping { releaseMbid: Just "ar-mbid", caaReleaseMbid: Nothing })
                     , genre: Nothing
+                    , label: Nothing
                     }
                 }
             )
