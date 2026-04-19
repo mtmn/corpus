@@ -63,6 +63,7 @@ npx spago run
 | `AWS_SECRET_ACCESS_KEY` | — | S3 credentials |
 | `AWS_ENDPOINT_URL` | — | S3-compatible endpoint (e.g. for MinIO) |
 | `AWS_S3_ADDRESSING_STYLE` | — | Set to `path` for path-style S3 URLs |
+| `COSINE_API_KEY` | — | [cosine.club](https://cosine.club) API key for similar tracks |
 | `METRICS_ENABLED` | `false` | Set to `true` to expose Prometheus metrics at `/metrics` |
 
 ### Per-user configuration
