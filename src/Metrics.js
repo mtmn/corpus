@@ -135,7 +135,7 @@ const activeMetrics =
 // Exports
 // ---------------------------------------------------------------------------
 
-export const getMetricsImpl = (onSuccess) => (onError) => () => {
+export const getMetricsImpl = (onSuccess, onError) => () => {
 	activeMetrics.getMetrics().then(
 		(s) => onSuccess(s)(),
 		(err) => onError(err.message)(),
@@ -146,47 +146,46 @@ export const getContentType = () => activeMetrics.contentType;
 
 // Attaches a 'finish' listener to record metrics and log the request.
 // logFn: String -> Effect Unit — structured logger called on completion.
-export const wrapRequest =
-	(method) => (path) => (logFn) => (_req) => (res) => (handler) => () => {
-		const startMs = Date.now();
-		res.once("finish", () => {
-			const durationMs = Date.now() - startMs;
-			const status = res.statusCode || 0;
-			activeMetrics.recordHttpRequest(method, path, status, durationMs);
-			logFn(`${method} ${path} ${status} ${durationMs}ms`)();
-		});
-		handler();
-	};
+export const wrapRequestImpl = (method, path, logFn, _req, res, handler) => () => {
+	const startMs = Date.now();
+	res.once("finish", () => {
+		const durationMs = Date.now() - startMs;
+		const status = res.statusCode || 0;
+		activeMetrics.recordHttpRequest(method, path, status, durationMs);
+		logFn(`${method} ${path} ${status} ${durationMs}ms`)();
+	});
+	handler();
+};
 
-export const incSyncRuns = (user) => (source) => (result) => () => {
+export const incSyncRunsImpl = (user, source, result) => () => {
 	activeMetrics.incSyncRuns(user, source, result);
 };
 
-export const incSyncScrobbles = (user) => (source) => (count) => () => {
+export const incSyncScrobblesImpl = (user, source, count) => () => {
 	activeMetrics.incSyncScrobbles(user, source, count);
 };
 
-export const setSyncLastSuccess = (user) => (source) => () => {
+export const setSyncLastSuccessImpl = (user, source) => () => {
 	activeMetrics.setSyncLastSuccess(user, source);
 };
 
-export const incEnrichmentFetch = (user) => (source) => (result) => () => {
+export const incEnrichmentFetchImpl = (user, source, result) => () => {
 	activeMetrics.incEnrichmentFetch(user, source, result);
 };
 
-export const setEnrichmentQueueSize = (user) => (type) => (size) => () => {
+export const setEnrichmentQueueSizeImpl = (user, type, size) => () => {
 	activeMetrics.setEnrichmentQueueSize(user, type, size);
 };
 
-export const incCoverRequest = (user) => (source) => (result) => () => {
+export const incCoverRequestImpl = (user, source, result) => () => {
 	activeMetrics.incCoverRequest(user, source, result);
 };
 
-export const incCosineRequest = (user) => (result) => () => {
+export const incCosineRequestImpl = (user, result) => () => {
 	activeMetrics.incCosineRequest(user, result);
 };
 
-export const incDbBackupRun = (user) => (result) => () => {
+export const incDbBackupRunImpl = (user, result) => () => {
 	activeMetrics.incDbBackupRun(user, result);
 };
 

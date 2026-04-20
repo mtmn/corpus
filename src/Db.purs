@@ -15,6 +15,7 @@ import Effect.Exception (Error, error, message)
 import Control.Monad.Error.Class (throwError)
 import Effect.Now (nowDateTime)
 import Data.Formatter.DateTime (formatDateTime)
+import Data.Function.Uncurried (Fn2, Fn4, runFn2, runFn4)
 import Foreign (Foreign)
 import Unsafe.Coerce (unsafeCoerce)
 import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEntry(..))
@@ -46,14 +47,14 @@ instance Show FilterField where
   show FilterYear = "FilterYear"
   show FilterGenre = "FilterGenre"
 
-foreign import connectImpl :: String -> (Nullable Error -> Nullable Connection -> Effect Unit) -> Effect Unit
-foreign import runImpl :: Connection -> String -> Array Foreign -> (Nullable Error -> Effect Unit) -> Effect Unit
-foreign import allImpl :: Connection -> String -> Array Foreign -> (Nullable Error -> Nullable (Array Json) -> Effect Unit) -> Effect Unit
-foreign import checkpointImpl :: Connection -> (Nullable Error -> Effect Unit) -> Effect Unit
+foreign import connectImpl :: Fn2 String (Nullable Error -> Nullable Connection -> Effect Unit) (Effect Unit)
+foreign import runImpl :: Fn4 Connection String (Array Foreign) (Nullable Error -> Effect Unit) (Effect Unit)
+foreign import allImpl :: Fn4 Connection String (Array Foreign) (Nullable Error -> Nullable (Array Json) -> Effect Unit) (Effect Unit)
+foreign import checkpointImpl :: Fn2 Connection (Nullable Error -> Effect Unit) (Effect Unit)
 
 connect :: String -> Aff Connection
 connect path = makeAff \cb -> do
-  connectImpl path \err conn ->
+  runFn2 connectImpl path \err conn ->
     case toMaybe err of
       Just e ->
         cb (Left e)
@@ -64,7 +65,7 @@ connect path = makeAff \cb -> do
 
 run :: Connection -> String -> Array Foreign -> Aff Unit
 run conn sql params = makeAff \cb -> do
-  runImpl conn sql params \err ->
+  runFn4 runImpl conn sql params \err ->
     case toMaybe err of
       Just e -> cb (Left e)
       Nothing -> cb (Right unit)
@@ -72,7 +73,7 @@ run conn sql params = makeAff \cb -> do
 
 checkpoint :: Connection -> Aff Unit
 checkpoint conn = makeAff \cb -> do
-  checkpointImpl conn \err ->
+  runFn2 checkpointImpl conn \err ->
     case toMaybe err of
       Just e -> cb (Left e)
       Nothing -> cb (Right unit)
@@ -135,7 +136,7 @@ withTransaction conn lock action = do
 
 queryAll :: Connection -> String -> Array Foreign -> Aff (Array Json)
 queryAll conn sql params = makeAff \cb -> do
-  allImpl conn sql params \err rows ->
+  runFn4 allImpl conn sql params \err rows ->
     case toMaybe err of
       Just e -> cb (Left e)
       Nothing -> cb (Right (fromMaybe [] (toMaybe rows)))

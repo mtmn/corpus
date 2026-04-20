@@ -1,6 +1,6 @@
 import duckdb from "duckdb";
 
-export const connectImpl = (path) => (cb) => () => {
+export const connectImpl = (path, cb) => () => {
 	const db = new duckdb.Database(path, (err) => {
 		if (err) {
 			cb(err)(null)();
@@ -15,13 +15,13 @@ export const connectImpl = (path) => (cb) => () => {
 	});
 };
 
-export const runImpl = (conn) => (sql) => (params) => (cb) => () => {
+export const runImpl = (conn, sql, params, cb) => () => {
 	conn.run(sql, ...params, (err) => {
 		cb(err)();
 	});
 };
 
-export const checkpointImpl = (conn) => (cb) => () => {
+export const checkpointImpl = (conn, cb) => () => {
 	conn.run("CHECKPOINT", (err) => {
 		cb(err)();
 	});
@@ -34,7 +34,7 @@ const convertBigInts = (row) =>
 		Object.entries(row).map(([k, v]) => [k, typeof v === "bigint" ? Number(v) : v]),
 	);
 
-export const allImpl = (conn) => (sql) => (params) => (cb) => () => {
+export const allImpl = (conn, sql, params, cb) => () => {
 	conn.all(sql, ...params, (err, rows) => {
 		cb(err)(rows ? rows.map(convertBigInts) : rows)();
 	});
