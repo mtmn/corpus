@@ -3,7 +3,7 @@
     {
       "config": {
         "backupEnabled": true,
-        "backupIntervalHours": 1,
+        "backupIntervalHours": 24,
         "coverCacheEnabled": true,
         "databaseFile": "corpus-mtmn.db",
         "initialSync": false,
@@ -15,7 +15,7 @@
     {
       "config": {
         "backupEnabled": true,
-        "backupIntervalHours": 1,
+        "backupIntervalHours": 24,
         "coverCacheEnabled": true,
         "databaseFile": "corpus-lastfm-mtmnn.db",
         "initialSync": true,
