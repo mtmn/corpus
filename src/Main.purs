@@ -439,6 +439,7 @@ parseFilterField "album" = Just FilterAlbum
 parseFilterField "label" = Just FilterLabel
 parseFilterField "year" = Just FilterYear
 parseFilterField "genre" = Just FilterGenre
+parseFilterField "track" = Just FilterTrack
 parseFilterField _ = Nothing
 
 sanitizeKey :: String -> String

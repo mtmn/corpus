@@ -19,7 +19,7 @@ A Single Page Application (SPA) built with [Elm](https://elm-lang.org).
 - **Filtering & Search**: Supports deep filtering by genre, label, or release year.
 - **Search Functionality**: Global search across tracks, artists, albums, and labels with real-time results.
 - **About Page**: Provides system information, feature list, and links to related resources.
-- **Label Integration**: Clickable labels in track listings for quick filtering.
+- **Clickable Metadata**: Track name, artist, album, and label in listen entries are all clickable for quick filtering.
 - **Responsive UI**: Designed for both desktop and mobile viewing with a "retro-modern" aesthetic.
 
 ### Database
