@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/mtmn/corpus/compare/v2.2.0...v2.3.0) (2026-04-20)
+
+
+### Features
+
+* add track filter and make all filters clickable ([424e247](https://github.com/mtmn/corpus/commit/424e247b8f4ce94d373d1dca220dc05555c0c0cb))
+
 ## [2.2.0](https://github.com/mtmn/corpus/compare/v2.1.1...v2.2.0) (2026-04-19)
 
 
