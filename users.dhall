@@ -17,7 +17,7 @@ let defaults
       , databaseFile = "corpus.db"
       , coverCacheEnabled = True
       , backupEnabled = False
-      , backupIntervalHours = 1
+      , backupIntervalHours = 24
       , initialSync = False
       }
 

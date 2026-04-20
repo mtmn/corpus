@@ -78,4 +78,4 @@ npx spago run
 | `initialSync` | `false` | Perform a full historical sync on first run |
 | `coverCacheEnabled` | `true` | Enable cover art caching to S3 |
 | `backupEnabled` | `false` | Enable database backups to S3 |
-| `backupIntervalHours` | `1` | Backup frequency |
+| `backupIntervalHours` | `24` | Backup frequency in hours |
