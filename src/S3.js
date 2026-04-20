@@ -18,23 +18,22 @@ const makeClient = (cfg) =>
 				: undefined,
 	});
 
-export const uploadToS3Impl =
-	(cfg) => (key) => (body) => (contentType) => (cb) => () => {
-		const client = makeClient(cfg);
-		const command = new PutObjectCommand({
-			Bucket: cfg.bucket,
-			Key: key,
-			Body: body,
-			ContentType: contentType,
-		});
+export const uploadToS3Impl = (cfg, key, body, contentType, cb) => () => {
+	const client = makeClient(cfg);
+	const command = new PutObjectCommand({
+		Bucket: cfg.bucket,
+		Key: key,
+		Body: body,
+		ContentType: contentType,
+	});
 
-		client
-			.send(command)
-			.then(() => cb(null)())
-			.catch((err) => cb(err)());
-	};
+	client
+		.send(command)
+		.then(() => cb(null)())
+		.catch((err) => cb(err)());
+};
 
-export const existsInS3Impl = (cfg) => (key) => (cb) => () => {
+export const existsInS3Impl = (cfg, key, cb) => () => {
 	const client = makeClient(cfg);
 	const command = new HeadObjectCommand({
 		Bucket: cfg.bucket,
@@ -53,7 +52,7 @@ export const existsInS3Impl = (cfg) => (key) => (cb) => () => {
 		});
 };
 
-export const getS3UrlImpl = (cfg) => (key) => {
+export const getS3UrlImpl = (cfg, key) => {
 	const endpoint = cfg.endpointUrl || "";
 	const bucket = cfg.bucket || "";
 	if (cfg.addressingStyle === "path") {

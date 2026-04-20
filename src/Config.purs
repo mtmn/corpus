@@ -3,6 +3,7 @@ module Config where
 import Prelude
 
 import Data.Argonaut.Core (Json)
+import Data.Function.Uncurried (Fn3, runFn3)
 import Data.Argonaut (decodeJson, (.:), (.:?))
 import Data.Either (Either(..))
 import Data.Int (fromString) as Data.Int
@@ -67,15 +68,12 @@ s3ConfigFromUser cfg =
   }
 
 foreign import loadConfigImpl
-  :: String
-  -> (String -> Effect Unit)
-  -> (Json -> Effect Unit)
-  -> Effect Unit
+  :: Fn3 String (String -> Effect Unit) (Json -> Effect Unit) (Effect Unit)
 
 loadConfig :: String -> Aff AppConfig
 loadConfig path = do
   json <- makeAff \cb ->
-    loadConfigImpl path
+    runFn3 loadConfigImpl path
       (\msg -> cb (Left (error msg)))
       (\j -> cb (Right j))
       *> pure nonCanceler
