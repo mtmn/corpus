@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/mtmn/corpus/compare/v2.3.0...v2.3.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* missing selection for track and album ([ae926cd](https://github.com/mtmn/corpus/commit/ae926cd79f917e5ed298aad0cff70830fb682198))
+
 ## [2.3.0](https://github.com/mtmn/corpus/compare/v2.2.0...v2.3.0) (2026-04-20)
 
 
