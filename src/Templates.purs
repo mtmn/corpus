@@ -103,6 +103,7 @@ indexHtml userSlug allUsers =
             font-family: inherit;
             cursor: pointer;
             text-align: left;
+            user-select: text;
         }
 
         .artist-link {
@@ -114,6 +115,7 @@ indexHtml userSlug allUsers =
             font-family: inherit;
             cursor: pointer;
             text-align: left;
+            user-select: text;
         }
 
         .album-link {
