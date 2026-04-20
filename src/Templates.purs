@@ -93,6 +93,29 @@ indexHtml userSlug allUsers =
             margin-top: 2px;
         }
 
+        .track-link {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 16px;
+            font-family: inherit;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .artist-link {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #a0c0d0;
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+            text-align: left;
+        }
+
         .album-link {
             background: none;
             border: none;

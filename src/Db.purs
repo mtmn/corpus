@@ -36,7 +36,7 @@ import Metrics as Metrics
 
 foreign import data Connection :: Type
 
-data FilterField = FilterArtist | FilterAlbum | FilterLabel | FilterYear | FilterGenre
+data FilterField = FilterArtist | FilterAlbum | FilterLabel | FilterYear | FilterGenre | FilterTrack
 
 derive instance Eq FilterField
 
@@ -46,6 +46,7 @@ instance Show FilterField where
   show FilterLabel = "FilterLabel"
   show FilterYear = "FilterYear"
   show FilterGenre = "FilterGenre"
+  show FilterTrack = "FilterTrack"
 
 foreign import connectImpl :: Fn2 String (Nullable Error -> Nullable Connection -> Effect Unit) (Effect Unit)
 foreign import runImpl :: Fn4 Connection String (Array Foreign) (Nullable Error -> Effect Unit) (Effect Unit)
@@ -230,6 +231,10 @@ filterQuery FilterYear =
 filterQuery FilterGenre =
   scrobbleCols <> scrobbleFromInner
     <> " WHERE rm.genre = ?"
+    <> scrobbleOrderPage
+filterQuery FilterTrack =
+  scrobbleCols <> scrobbleFromLeft
+    <> " WHERE s.track_name = ?"
     <> scrobbleOrderPage
 
 initReleaseMetadata :: Connection -> Aff Unit
