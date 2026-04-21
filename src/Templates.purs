@@ -22,15 +22,15 @@ indexHtml userSlug allUsers =
     <style>
         body {
             font-family: 'Intel One Mono', 'Courier New', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            background: #000000;
-            color: #ffffff;
+            background: #181818;
+            color: #e7e7e7;
             margin: 0;
             line-height: 1.6;
         }
 
         ::selection {
-            background: #50447f;
-            color: #ffffff;
+            background: #505050;
+            color: #e7e7e7;
         }
 
         .container {
@@ -40,10 +40,10 @@ indexHtml userSlug allUsers =
         }
 
         h1 {
-            color: #ffffff;
+            color: #e7e7e7;
             margin: 0 0 20px 0;
             font-size: 24px;
-            border-bottom: 2px solid #50447f;
+            border-bottom: 2px solid #505050;
             padding-bottom: 8px;
         }
 
@@ -54,21 +54,21 @@ indexHtml userSlug allUsers =
         }
 
         li {
-            background: #521e40;
-            border: 1px solid #50447f;
+            background: #2f2f2f;
+            border: 1px solid #505050;
             border-radius: 4px;
             padding: 5px 15px 5px 15px;
             margin-bottom: 5px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 4px 4px 0px #50447f;
+            box-shadow: 4px 4px 0px #505050;
         }
 
         li.success {
-            background: #521e40;
-            border-color: #50447f;
-            box-shadow: 4px 4px 0px #50447f;
+            background: #2f2f2f;
+            border-color: #505050;
+            box-shadow: 4px 4px 0px #505050;
         }
 
         .track-info {
@@ -78,7 +78,7 @@ indexHtml userSlug allUsers =
         .track-name {
             font-weight: bold;
             font-size: 16px;
-            color: #ffffff;
+            color: #e7e7e7;
         }
 
         .track-artist {
@@ -97,7 +97,7 @@ indexHtml userSlug allUsers =
             background: none;
             border: none;
             padding: 0;
-            color: #ffffff;
+            color: #e7e7e7;
             font-weight: bold;
             font-size: 16px;
             font-family: inherit;
@@ -130,7 +130,7 @@ indexHtml userSlug allUsers =
         }
 
         .album-link:hover {
-            color: #ffffff;
+            color: #e7e7e7;
         }
 
         .label-link {
@@ -145,7 +145,7 @@ indexHtml userSlug allUsers =
         }
 
         .label-link:hover {
-            color: #ffffff;
+            color: #e7e7e7;
         }
 
         .track-cover {
@@ -189,7 +189,7 @@ indexHtml userSlug allUsers =
         }
 
         .small a:hover {
-            color: #ffffff;
+            color: #e7e7e7;
             text-decoration: underline;
         }
 
@@ -201,19 +201,19 @@ indexHtml userSlug allUsers =
         }
 
         .page-btn {
-            background: #521e40;
-            border: 1px solid #50447f;
-            color: #ffffff;
+            background: #2f2f2f;
+            border: 1px solid #505050;
+            color: #e7e7e7;
             padding: 8px 16px;
             border-radius: 4px;
             cursor: pointer;
             font-family: inherit;
-            box-shadow: 2px 2px 0px #50447f;
+            box-shadow: 2px 2px 0px #505050;
         }
 
         .page-btn:hover {
-            background: #50447f;
-            border-color: #50447f;
+            background: #505050;
+            border-color: #505050;
         }
 
         .page-btn:disabled {
@@ -236,7 +236,7 @@ indexHtml userSlug allUsers =
 
         .tab-btn {
             background: none;
-            border: 1px solid #50447f;
+            border: 1px solid #505050;
             color: #9fbfe7;
             padding: 6px 14px;
             border-radius: 4px;
@@ -248,14 +248,14 @@ indexHtml userSlug allUsers =
         }
 
         .tab-btn.active {
-            background: #521e40;
-            color: #ffffff;
-            box-shadow: 2px 2px 0px #50447f;
+            background: #2f2f2f;
+            color: #e7e7e7;
+            box-shadow: 2px 2px 0px #505050;
         }
 
         .tab-btn:hover {
-            color: #ffffff;
-            background: #50447f;
+            color: #e7e7e7;
+            background: #505050;
         }
 
         .stats-section {
@@ -268,7 +268,7 @@ indexHtml userSlug allUsers =
             text-transform: uppercase;
             letter-spacing: 3px;
             margin: 0 0 10px 0;
-            border-bottom: 1px solid #50447f;
+            border-bottom: 1px solid #505050;
             padding-bottom: 5px;
         }
 
@@ -289,15 +289,15 @@ indexHtml userSlug allUsers =
             left: 0;
             top: 0;
             height: 100%;
-            background: #521e40;
-            border-right: 1px solid #50447f;
+            background: #2f2f2f;
+            border-right: 1px solid #505050;
             z-index: 0;
         }
 
         .stat-name {
             position: relative;
             z-index: 1;
-            color: #ffffff;
+            color: #e7e7e7;
             flex: 1;
             padding-right: 10px;
             white-space: nowrap;
@@ -348,8 +348,8 @@ indexHtml userSlug allUsers =
             display: flex;
             align-items: center;
             gap: 10px;
-            background: #521e40;
-            border: 1px solid #50447f;
+            background: #2f2f2f;
+            border: 1px solid #505050;
             border-radius: 4px;
             padding: 8px 12px;
             margin-bottom: 12px;
@@ -362,12 +362,12 @@ indexHtml userSlug allUsers =
         }
 
         .filter-label strong {
-            color: #ffffff;
+            color: #e7e7e7;
         }
 
         .filter-clear {
             background: none;
-            border: 1px solid #50447f;
+            border: 1px solid #505050;
             color: #9fbfe7;
             padding: 2px 8px;
             border-radius: 3px;
@@ -377,9 +377,9 @@ indexHtml userSlug allUsers =
         }
 
         .filter-clear:hover {
-            color: #ffffff;
-            border-color: #ffffff;
-            background: #50447f;
+            color: #e7e7e7;
+            border-color: #e7e7e7;
+            background: #505050;
         }
 
         .show-all-btn {
@@ -394,8 +394,8 @@ indexHtml userSlug allUsers =
         }
 
         .show-all-btn:hover {
-            color: #ffffff;
-            background: #50447f;
+            color: #e7e7e7;
+            background: #505050;
         }
 
         .period-selector {
@@ -406,7 +406,7 @@ indexHtml userSlug allUsers =
 
         .period-btn {
             background: none;
-            border: 1px solid #50447f;
+            border: 1px solid #505050;
             color: #9fbfe7;
             padding: 4px 12px;
             border-radius: 3px;
@@ -416,13 +416,13 @@ indexHtml userSlug allUsers =
         }
 
         .period-btn:hover {
-            color: #ffffff;
-            border-color: #ffffff;
+            color: #e7e7e7;
+            border-color: #e7e7e7;
         }
 
         .period-btn.active {
-            background: #50447f;
-            color: #ffffff;
+            background: #505050;
+            color: #e7e7e7;
         }
 
         .custom-range {
@@ -433,9 +433,9 @@ indexHtml userSlug allUsers =
         }
 
         .custom-range-input {
-            background: #521e40;
-            border: 1px solid #50447f;
-            color: #ffffff;
+            background: #2f2f2f;
+            border: 1px solid #505050;
+            color: #e7e7e7;
             padding: 4px 8px;
             border-radius: 3px;
             font-family: inherit;
@@ -450,7 +450,7 @@ indexHtml userSlug allUsers =
 
         .custom-range-input:focus {
             outline: none;
-            border-color: #ffffff;
+            border-color: #e7e7e7;
         }
 
         .custom-range-input.error {
@@ -465,7 +465,7 @@ indexHtml userSlug allUsers =
 
         .similar-btn {
             background: none;
-            border: 1px solid #50447f;
+            border: 1px solid #505050;
             color: #9fbfe7;
             padding: 2px 8px;
             border-radius: 3px;
@@ -477,25 +477,25 @@ indexHtml userSlug allUsers =
         }
 
         .similar-btn:hover {
-            background: #50447f;
-            color: #ffffff;
-            border-color: #ffffff;
+            background: #505050;
+            color: #e7e7e7;
+            border-color: #e7e7e7;
         }
 
         .similar-btn.active {
-            background: #521e40;
-            color: #ffffff;
-            border-color: #50447f;
-            box-shadow: 2px 2px 0px #50447f;
+            background: #2f2f2f;
+            color: #e7e7e7;
+            border-color: #505050;
+            box-shadow: 2px 2px 0px #505050;
         }
 
         .similar-panel {
             margin-top: 10px;
-            background: #521e40;
-            border: 1px solid #50447f;
+            background: #2f2f2f;
+            border: 1px solid #505050;
             border-radius: 4px;
             padding: 10px;
-            box-shadow: 2px 2px 0px #50447f;
+            box-shadow: 2px 2px 0px #505050;
         }
 
         .similar-panel-header {
@@ -534,9 +534,9 @@ indexHtml userSlug allUsers =
             align-items: center;
             padding: 6px 8px;
             margin-bottom: 4px;
-            background: #521e40;
+            background: #2f2f2f;
             border-radius: 3px;
-            border-left: 2px solid #50447f;
+            border-left: 2px solid #505050;
         }
 
         .similar-track:last-child {
@@ -550,7 +550,7 @@ indexHtml userSlug allUsers =
 
         .similar-track-name {
             font-size: 12px;
-            color: #ffffff;
+            color: #e7e7e7;
             font-weight: 500;
             white-space: nowrap;
             overflow: hidden;
@@ -569,8 +569,8 @@ indexHtml userSlug allUsers =
         .similar-score {
             font-size: 10px;
             color: #9fbfe7;
-            background: #521e40;
-            border: 1px solid #50447f;
+            background: #2f2f2f;
+            border: 1px solid #505050;
             padding: 2px 6px;
             border-radius: 2px;
             margin-right: 8px;
@@ -581,16 +581,16 @@ indexHtml userSlug allUsers =
             color: #9fbfe7;
             text-decoration: none;
             font-size: 12px;
-            background: #521e40;
-            border: 1px solid #50447f;
+            background: #2f2f2f;
+            border: 1px solid #505050;
             padding: 2px 6px;
             border-radius: 2px;
             transition: all 0.2s ease;
         }
 
         .similar-link:hover {
-            color: #ffffff;
-            background: #50447f;
+            color: #e7e7e7;
+            background: #505050;
         }
 
         .tracks-with-similar {
@@ -624,9 +624,9 @@ indexHtml userSlug allUsers =
 
         .search-input {
             flex: 1;
-            background: #521e40;
-            border: 1px solid #50447f;
-            color: #ffffff;
+            background: #2f2f2f;
+            border: 1px solid #505050;
+            color: #e7e7e7;
             padding: 6px 10px;
             border-radius: 4px;
             font-family: inherit;
@@ -640,13 +640,13 @@ indexHtml userSlug allUsers =
 
         .search-input:focus {
             outline: none;
-            border-color: #ffffff;
+            border-color: #e7e7e7;
         }
 
         .search-btn {
-            background: #50447f;
-            border: 1px solid #50447f;
-            color: #ffffff;
+            background: #505050;
+            border: 1px solid #505050;
+            color: #e7e7e7;
             padding: 6px 12px;
             border-radius: 4px;
             cursor: pointer;
@@ -655,8 +655,8 @@ indexHtml userSlug allUsers =
         }
 
         .search-btn:hover {
-            background: #6a5fa0;
-            border-color: #6a5fa0;
+            background: #707070;
+            border-color: #707070;
         }
 
         .about-lead {
@@ -672,7 +672,7 @@ indexHtml userSlug allUsers =
         }
 
         .about-link:hover {
-            color: #ffffff;
+            color: #e7e7e7;
         }
 
         .about-list {
@@ -695,7 +695,7 @@ indexHtml userSlug allUsers =
 
         .about-list li::before {
             content: "→  ";
-            color: #50447f;
+            color: #505050;
         }
 
         .about-meta {
@@ -726,7 +726,7 @@ indexHtml userSlug allUsers =
         }
 
         .about-users a:hover {
-            color: #ffffff;
+            color: #e7e7e7;
             text-decoration: underline;
         }
     </style>
