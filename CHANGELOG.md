@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.0](https://github.com/mtmn/corpus/compare/v2.3.1...v2.4.0) (2026-04-21)
+
+
+### Features
+
+* match colors to doric-obsidian ([2dff439](https://github.com/mtmn/corpus/commit/2dff439d76ee01df3471a570b507348acf5d267c))
+* update user agents with github repo ([3d79cd7](https://github.com/mtmn/corpus/commit/3d79cd73c22979b5cb233437a7fea246cae328ca))
+
 ## [2.3.1](https://github.com/mtmn/corpus/compare/v2.3.0...v2.3.1) (2026-04-20)
 
 
