@@ -3,22 +3,20 @@ module Main where
 import Prelude
 
 import Config (AppConfig, UserConfig, UserEntry, loadConfig, s3ConfigFromUser)
-import Control.Monad.Rec.Class (forever)
 import Cover (serveCover)
 import Cosine (serveSimilar)
 import Data.Array (find, length)
 import Data.Either (Either(..))
-import Data.Foldable (for_, traverse_)
+import Data.Foldable (for_)
 import Data.Int (fromString, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (Pattern(..), stripPrefix)
 import Data.String.Regex (replace, parseFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (traverse)
-import Data.Tuple (Tuple(..))
-import Db (Connection, FilterField(..), backupDb, connect, getScrobbles, getStats, initDb, initReleaseMetadata, ping, withTransaction)
+import Db (Connection, FilterField(..), backupDb, connect, getScrobbles, getStats, initDb, initReleaseMetadata, ping)
 import Effect (Effect)
-import Effect.Aff (Aff, launchAff_, try, delay, forkAff, joinFiber, killFiber, Fiber)
+import Effect.Aff (Aff, Fiber, forkAff, joinFiber, killFiber, launchAff_, try)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
@@ -39,11 +37,7 @@ import Node.Net.Server (listenTcp, listeningH)
 import Node.Process (lookupEnv)
 import Node.Stream (end, write, writeString)
 import Data.Argonaut (encodeJson, stringify)
-import Data.Argonaut.Core (toObject, toArray, toString, Json)
-import Foreign.Object as Object
 import Sync (lbSync, lbSyncLoop, lfSync, lfSyncLoop)
-import Types (Listen(..), ListenBrainzResponse(..), Payload(..), TrackMetadata(..))
-import Unsafe.Coerce (unsafeCoerce)
 import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
