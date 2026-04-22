@@ -673,7 +673,7 @@ renderAboutView currentSlug allUsers =
     in
     div []
         [ p [ class "about-lead" ]
-            [ text "corpus is a self-hosted listen history proxy that syncs scrobbles from "
+            [ text "corpus is a self-hosted proxy that syncs scrobbles from "
             , extLink "https://listenbrainz.org" "ListenBrainz"
             , text " and "
             , extLink "https://www.last.fm" "Last.fm."
