@@ -9,9 +9,8 @@ module Cover
 
 import Prelude
 
-import Config (S3Config, UserConfig, s3ConfigFromUser)
+import Config (UserConfig, s3ConfigFromUser)
 import S3 (existsInS3, getS3Url, uploadToS3)
-import Control.Monad.Error.Class (throwError)
 import Data.Array ((!!))
 import Data.Either (Either(..))
 import Data.Foldable (foldM)
@@ -21,7 +20,7 @@ import Data.String.CaseInsensitive (CaseInsensitiveString(..))
 import Data.String.Regex (replace, parseFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Effect (Effect)
-import Effect.Aff (Aff, forkAff, launchAff_, try)
+import Effect.Aff (Aff, forkAff, try)
 import Effect.Class (liftEffect)
 import Effect.Exception as Exception
 import Fetch (fetch, Method(GET))
@@ -32,12 +31,10 @@ import Image (convertToAvif)
 import JSURI (encodeURIComponent)
 import Log as Log
 import Metrics as Metrics
-import Node.Buffer (fromArrayBuffer)
 import Node.HTTP.OutgoingMessage (setHeader, toWriteable)
 import Node.HTTP.ServerResponse (setStatusCode, toOutgoingMessage)
 import Node.HTTP.Types (ServerResponse)
-import Node.Stream (end, write)
-import S3 (existsInS3, getS3Url, uploadToS3)
+import Node.Stream (end)
 import Unsafe.Coerce (unsafeCoerce)
 import Web.URL (URL)
 import Web.URL as URL
