@@ -33,7 +33,6 @@ type UserConfig =
   , coverCacheEnabled :: Boolean
   , backupEnabled :: Boolean
   , backupIntervalHours :: Int
-  , initialSync :: Boolean
   }
 
 type UserEntry =
@@ -172,7 +171,6 @@ decodeUserConfig json = do
   coverCacheEnabled <- mapLeft show $ obj .: "coverCacheEnabled"
   backupEnabled <- mapLeft show $ obj .: "backupEnabled"
   backupIntervalHours <- mapLeft show $ obj .: "backupIntervalHours"
-  initialSync <- mapLeft show $ obj .: "initialSync"
   pure
     { listenbrainzUser
     , lastfmUser
@@ -189,5 +187,4 @@ decodeUserConfig json = do
     , coverCacheEnabled
     , backupEnabled
     , backupIntervalHours
-    , initialSync
     }
