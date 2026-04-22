@@ -1,14 +1,11 @@
 import sharp from 'sharp';
 
-export const convertToAvifImpl = (buffer) => () => {
-  return sharp(buffer)
-    .avif()
-    .toBuffer()
-    .then(resultBuffer => {
-      // Extract the underlying ArrayBuffer
-      return resultBuffer.buffer.slice(
-        resultBuffer.byteOffset,
-        resultBuffer.byteOffset + resultBuffer.byteLength
-      );
-    });
-};
+export const convertToAvifImpl = (buffer) => () =>
+  new Promise((resolve, reject) =>
+    sharp(buffer)
+      .avif()
+      .toBuffer((err, data) => {
+        if (err) return reject(err);
+        resolve(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+      })
+  );
