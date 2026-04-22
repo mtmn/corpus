@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/mtmn/corpus/compare/v2.5.0...v2.5.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* unhandled last.fm json serialization ([6415fc5](https://github.com/mtmn/corpus/commit/6415fc57d14f369c0d21d31194ee69f8cc186a7c))
+
 ## [2.5.0](https://github.com/mtmn/corpus/compare/v2.4.0...v2.5.0) (2026-04-22)
 
 
