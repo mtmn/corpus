@@ -131,7 +131,7 @@
           inherit ((builtins.fromJSON (builtins.readFile ./package.json))) version;
           inherit src;
 
-          npmDepsHash = "sha256-DG9zoiR/T450nrcfjNwttI7soubNzcfR1rLzgyQYJXQ=";
+          npmDepsHash = "sha256-Fo2A9zFBIcFVQmqtTniSr2nQNKtVjiP0654R9tnyrBM=";
           npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [
