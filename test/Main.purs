@@ -15,7 +15,8 @@ import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..)
 import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt)
 import Data.Argonaut.Core (Json)
 import Foreign.Object as Object
-import Main (sanitizeKey, listenBrainzUrl, lastfmTrackToListen, parseFilterField)
+import Main (listenBrainzUrl, lastfmTrackToListen, parseFilterField)
+import Cover (sanitizeKey)
 import S3 (getS3Url)
 
 main :: Effect Unit
