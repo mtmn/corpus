@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.6.0](https://github.com/mtmn/corpus/compare/v2.5.1...v2.6.0) (2026-04-22)
+
+
+### Features
+
+* try various cover art sizes ([03a2a16](https://github.com/mtmn/corpus/commit/03a2a16595cea7816c8ab1c72f25c72001bf648b))
+
+
+### Bug Fixes
+
+* remove unused imports ([a32b34d](https://github.com/mtmn/corpus/commit/a32b34df7f24440e4b0a2d9d43d33ee6a79ee408))
+* unhandled last.fm errors ([ef0cfc5](https://github.com/mtmn/corpus/commit/ef0cfc5adc80ef861db8afca6a5151fbb949b677))
+
 ## [2.5.1](https://github.com/mtmn/corpus/compare/v2.5.0...v2.5.1) (2026-04-22)
 
 
