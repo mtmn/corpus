@@ -71,7 +71,7 @@ fetchLastfmCoverUrl cfg artist release = case cfg.lastfmApiKey of
         <> k
     Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
     let headers = { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)" }
-     result <- try $ fetch searchUrl { method: GET, headers }
+    result <- try $ fetch searchUrl { method: GET, headers }
     case result of
       Right fr | fr.status == 200 -> do
         json <- fromJson fr.json
@@ -108,17 +108,16 @@ fetchDiscogsCoverUrl cfg artist release = case cfg.discogsToken of
       _ ->
         pure Nothing
 
-coverSources :: String -> String -> String -> Maybe String -> UserConfig -> Array CoverSource
-coverSources mbid artist release mVariant cfg =
+coverSources :: String -> String -> String -> String -> UserConfig -> Array CoverSource
+coverSources mbid artist release variant cfg =
   let
     safeArtist = sanitizeKey artist
     safeRelease = sanitizeKey release
-    variant = fromMaybe "front-500" mVariant
     caaSource =
-      if mbid == "" then []
+      if mbid == "" || variant == "" then []
       else
         [ { name: "caa"
-          , s3Key: "covers/caa/" <> sanitizeKey mbid <> (if variant == "front-500" then "" else "-" <> variant) <> ".avif"
+          , s3Key: "covers/caa/" <> sanitizeKey mbid <> "-" <> variant <> ".avif"
           , findUrl: pure $ Just $ "https://coverartarchive.org/release/" <> mbid <> "/" <> variant
           }
         ]
@@ -144,7 +143,7 @@ serveCover serveNotFound cfg slug url res = do
     mbid = fromMaybe "" (getQueryParam "mbid" url)
     artist = fromMaybe "" (getQueryParam "artist" url)
     release = fromMaybe "" (getQueryParam "release" url)
-    variant = getQueryParam "variant" url
+    variant = fromMaybe "" (getQueryParam "variant" url)
     s3cfg = s3ConfigFromUser cfg
 
   served <- foldM (trySource s3cfg) false (coverSources mbid artist release variant cfg)
