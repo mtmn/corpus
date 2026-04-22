@@ -120,7 +120,7 @@ coverSources mbid artist release cfg =
       , s3Key: "covers/caa/" <> sanitizeKey mbid <> ".avif"
       , findUrl:
           if mbid == "" then pure Nothing
-          else pure $ Just $ "https://coverartarchive.org/release/" <> mbid <> "/front-250"
+          else pure $ Just $ "https://coverartarchive.org/release/" <> mbid <> "/front-500"
       }
     , { name: "lastfm"
       , s3Key: "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".avif"
