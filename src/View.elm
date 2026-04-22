@@ -161,7 +161,7 @@ renderContent model =
                             in
                             div [ class "track-with-similar-container" ]
                                 [ ul [ class "track-item" ]
-                                    [ renderListen model.userSlug model.currentTime model.failedCovers model.hoveredCover model.similarStates idx listen ]
+                                    [ renderListen model.userSlug model.currentTime model.failedCovers model.coverFallbacks model.hoveredCover model.similarStates idx listen ]
                                 , renderSimilarPanel model.similarStates key
                                 ]
                         )
@@ -169,8 +169,8 @@ renderContent model =
                     )
 
 
-renderListen : String -> Maybe Time.Posix -> Set String -> Maybe Int -> Dict String SimilarState -> Int -> Listen -> Html Msg
-renderListen userSlug currentTime failedCovers hoveredCover similarStates idx listen =
+renderListen : String -> Maybe Time.Posix -> Set String -> Dict String Int -> Maybe Int -> Dict String SimilarState -> Int -> Listen -> Html Msg
+renderListen userSlug currentTime failedCovers coverFallbacks hoveredCover similarStates idx listen =
     let
         artist =
             Maybe.withDefault "" listen.artistName
@@ -192,7 +192,7 @@ renderListen userSlug currentTime failedCovers hoveredCover similarStates idx li
                 Nothing ->
                     listen.releaseMbid
 
-        coverUrl =
+        baseCoverUrl =
             "/cover?user="
                 ++ userSlug
                 ++ "&artist="
@@ -206,6 +206,15 @@ renderListen userSlug currentTime failedCovers hoveredCover similarStates idx li
                         Nothing ->
                             ""
                    )
+
+        variant =
+            case Dict.get baseCoverUrl coverFallbacks |> Maybe.withDefault 0 of
+                1 -> "&variant=front-250"
+                2 -> "&variant=back-500"
+                3 -> "&variant=back-250"
+                _ -> ""
+
+        coverUrl = baseCoverUrl ++ variant
 
         isZoomed =
             hoveredCover == Just idx
@@ -235,7 +244,7 @@ renderListen userSlug currentTime failedCovers hoveredCover similarStates idx li
                 ]
             ]
         , div [ class "cover-wrapper" ]
-            [ if Set.member coverUrl failedCovers then
+            [ if Set.member baseCoverUrl failedCovers then
                 text ""
 
               else
