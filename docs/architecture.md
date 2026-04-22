@@ -94,7 +94,6 @@ This prevents data corruption and ensures that any in-progress operations are co
 | `coverCacheEnabled` | `Bool` | Enable S3 cover art caching |
 | `backupEnabled` | `Bool` | Enable periodic S3 database backups |
 | `backupIntervalHours` | `Natural` | Backup frequency |
-| `initialSync` | `Bool` | Paginate full history on first startup |
 
 ## Data Flow
 

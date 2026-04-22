@@ -2,6 +2,7 @@ package:
   name: corpus
   dependencies:
     - aff
+    - aff-promise
     - aff-retry
     - argonaut
     - argonaut-core

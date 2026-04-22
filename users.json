@@ -6,7 +6,6 @@
         "backupIntervalHours": 24,
         "coverCacheEnabled": true,
         "databaseFile": "corpus-mtmn.db",
-        "initialSync": false,
         "listenbrainzUser": "mtmn"
       },
       "name": "mtmn",
@@ -18,7 +17,6 @@
         "backupIntervalHours": 24,
         "coverCacheEnabled": true,
         "databaseFile": "corpus-lastfm-mtmnn.db",
-        "initialSync": true,
         "lastfmUser": "mtmnn"
       },
       "name": "mtmn (last.fm)",
