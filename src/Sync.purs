@@ -227,46 +227,60 @@ lfSync conn apiKey lfmUser slug writeLock = do
   where
   performLastfmSync = do
     Log.info $ "Starting Last.fm sync for " <> lfmUser
-    { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1 Nothing
-    Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
-    Log.info $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
-    let
-      validTracks = mapMaybe lastfmTrackToListen tracks
-      allExist = hitCount == length validTracks && not (null validTracks)
-    if allExist || totalPages <= 1 then do
-      when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
-      recordSyncSuccess slug "lastfm" added
-    else do
-      total <- paginateLastfmUntilDone 2 totalPages Nothing added
-      Log.info $ "Last.fm sync complete. Added " <> show total <> " new scrobbles."
-      recordSyncSuccess slug "lastfm" total
+    res <- try $ fetchLastfmPage apiKey lfmUser 1 Nothing
+    case res of
+      Left err -> do
+        Log.error $ "Last.fm sync fetch error: " <> Exception.message err
+        liftEffect $ Metrics.incSyncRuns slug "lastfm" "error"
+      Right { tracks, totalPages } -> do
+        Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
+        Log.info $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+        let
+          validTracks = mapMaybe lastfmTrackToListen tracks
+          allExist = hitCount == length validTracks && not (null validTracks)
+        if allExist || totalPages <= 1 then do
+          when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
+          recordSyncSuccess slug "lastfm" added
+        else do
+          total <- paginateLastfmUntilDone 2 totalPages Nothing added
+          Log.info $ "Last.fm sync complete. Added " <> show total <> " new scrobbles."
+          recordSyncSuccess slug "lastfm" total
 
   paginateLastfmUntilDone page totalPages mTo acc
     | page > totalPages = pure acc
     | otherwise = do
         Log.info $ "Fetching Last.fm page " <> show page <> "/" <> show totalPages <> "..."
-        { tracks } <- fetchLastfmPage apiKey lfmUser page mTo
-        Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
-        Log.info $ "Last.fm page " <> show page <> "/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
-        let
-          validTracks = mapMaybe lastfmTrackToListen tracks
-          allExist = hitCount == length validTracks && not (null validTracks)
-        if allExist || null tracks then pure (acc + added)
-        else paginateLastfmUntilDone (page + 1) totalPages mTo (acc + added)
+        res <- try $ fetchLastfmPage apiKey lfmUser page mTo
+        case res of
+          Left err -> do
+            Log.error $ "Last.fm sync fetch error: " <> Exception.message err
+            pure acc
+          Right { tracks } -> do
+            Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
+            Log.info $ "Last.fm page " <> show page <> "/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+            let
+              validTracks = mapMaybe lastfmTrackToListen tracks
+              allExist = hitCount == length validTracks && not (null validTracks)
+            if allExist || null tracks then pure (acc + added)
+            else paginateLastfmUntilDone (page + 1) totalPages mTo (acc + added)
 
   performLastfmBackfill = do
     mOldest <- getOldestTs conn
     for_ mOldest \oldestTs -> do
       Log.info $ "Checking for Last.fm history before " <> show oldestTs <> "..."
-      { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1 (Just (oldestTs - 1))
-      if null tracks then
-        Log.info "No older Last.fm history found."
-      else do
-        Log.info $ "Backfilling " <> show totalPages <> " pages of Last.fm history before " <> show oldestTs
-        Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
-        Log.info $ "Last.fm backfill page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
-        total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
-        Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
+      res <- try $ fetchLastfmPage apiKey lfmUser 1 (Just (oldestTs - 1))
+      case res of
+        Left err ->
+          Log.error $ "Last.fm backfill fetch error: " <> Exception.message err
+        Right { tracks, totalPages } ->
+          if null tracks then
+            Log.info "No older Last.fm history found."
+          else do
+            Log.info $ "Backfilling " <> show totalPages <> " pages of Last.fm history before " <> show oldestTs
+            Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
+            Log.info $ "Last.fm backfill page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+            total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
+            Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
 
   processLastfmTracks tracks = do
     s <- foldM step { added: 0, hitCount: 0 } (mapMaybe lastfmTrackToListen tracks)
