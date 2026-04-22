@@ -350,7 +350,7 @@ main = do
           let netServer = Server.toNetServer server
 
           netServer # on_ listeningH do
-            Log.info $ "Server is running on port " <> show appConfig.port
+            Log.info $ "Server is running on " <> appConfig.host <> ":" <> show appConfig.port
 
-          listenTcp netServer { host: "127.0.0.1", port: appConfig.port, backlog: 128 }
+          listenTcp netServer { host: appConfig.host, port: appConfig.port, backlog: 128 }
 
