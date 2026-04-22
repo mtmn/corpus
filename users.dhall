@@ -6,7 +6,6 @@ let UserConfig =
       , coverCacheEnabled : Bool
       , backupEnabled : Bool
       , backupIntervalHours : Natural
-      , initialSync : Bool
       }
 
 let defaults
@@ -18,7 +17,6 @@ let defaults
       , coverCacheEnabled = True
       , backupEnabled = False
       , backupIntervalHours = 24
-      , initialSync = False
       }
 
 in  { users =
@@ -37,7 +35,6 @@ in  { users =
             with lastfmUser = Some "mtmnn"
             with databaseFile = "corpus-lastfm-mtmnn.db"
             with backupEnabled = True
-            with initialSync = True
         }
       ]
     }

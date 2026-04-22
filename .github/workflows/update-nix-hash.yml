@@ -1,0 +1,29 @@
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  update-nix-hash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
+
+      - name: Recompute npmDepsHash
+        run: |
+          hash=$(nix run nixpkgs#prefetch-npm-deps -- package-lock.json)
+          sed -i "s|npmDepsHash = \"sha256-[^\"]*\"|npmDepsHash = \"$hash\"|" flake.nix
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add flake.nix
+          git diff --staged --quiet || git commit -m "chore: update npmDepsHash"
+          git push

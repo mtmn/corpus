@@ -75,7 +75,6 @@ npx spago run
 | `listenbrainzUser` | — | ListenBrainz username to sync scrobbles from |
 | `lastfmUser` | — | Last.fm username to sync scrobbles from |
 | `databaseFile` | `corpus.db` | Path to the user's DuckDB database file |
-| `initialSync` | `false` | Perform a full historical sync on first run |
 | `coverCacheEnabled` | `true` | Enable cover art caching to S3 |
 | `backupEnabled` | `false` | Enable database backups to S3 |
 | `backupIntervalHours` | `24` | Backup frequency in hours |
