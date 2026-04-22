@@ -44,7 +44,7 @@ import Data.Foldable (for_, foldM, traverse_)
 import Cover (serveCover)
 import Cosine (serveSimilar)
 import Metadata (enrichMetadata)
-import Sync (listenBrainzUrl, lastfmTrackToListen, lbSyncOnce, lbSyncLoop, lfSyncOnce, lfSyncLoop)
+import Sync (lastfmTrackToListen, lbSync, lbSyncLoop, lfSync, lfSyncLoop, listenBrainzUrl)
 import Data.Traversable (traverse)
 import Db (Connection, FilterField(..), backupDb, checkExists, connect, getOldestTs, getScrobbles, getStats, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
@@ -313,10 +313,10 @@ startUser { slug, name, config } = do
   -- start immediately. A separate fiber waits for them to finish before
   -- starting the recurring loops (preserving the original ordering guarantee).
   lbFiber <- case config.listenbrainzUser of
-    Just username -> Just <$> forkAff (lbSyncOnce conn username slug writeLock config.initialSync)
+    Just username -> Just <$> forkAff (lbSync conn username slug writeLock)
     Nothing -> pure Nothing
   lfFiber <- case config.lastfmUser, config.lastfmApiKey of
-    Just lfmUser, Just apiKey -> Just <$> forkAff (lfSyncOnce conn apiKey lfmUser slug writeLock config.initialSync)
+    Just lfmUser, Just apiKey -> Just <$> forkAff (lfSync conn apiKey lfmUser slug writeLock)
     _, _ -> pure Nothing
 
   -- Wait for initial syncs then start recurring loops — all in background.
@@ -324,9 +324,9 @@ startUser { slug, name, config } = do
     for_ lbFiber joinFiber
     for_ lfFiber joinFiber
     for_ config.listenbrainzUser \username ->
-      void $ forkAff $ lbSyncLoop conn username slug writeLock config.initialSync
+      void $ forkAff $ lbSyncLoop conn username slug writeLock
     case config.lastfmUser, config.lastfmApiKey of
-      Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser slug writeLock config.initialSync
+      Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser slug writeLock
       _, _ -> pure unit
 
   -- Background tasks that don't depend on initial sync completion.

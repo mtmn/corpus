@@ -1,9 +1,9 @@
 module Sync
   ( listenBrainzUrl
   , lastfmTrackToListen
-  , lbSyncOnce
+  , lbSync
   , lbSyncLoop
-  , lfSyncOnce
+  , lfSync
   , lfSyncLoop
   ) where
 
@@ -139,38 +139,31 @@ recordSyncSuccess slug source n = do
   when (n > 0) $ liftEffect $ Metrics.incSyncScrobbles slug source n
   liftEffect $ Metrics.setSyncLastSuccess slug source
 
-lbSyncOnce :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
-lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSync
+lbSync :: Connection -> String -> String -> AVar Unit -> Aff Unit
+lbSync conn username slug writeLock = void do
+  Log.info $ "Starting ListenBrainz sync for " <> username
+  result <- try $ fetchListenBrainzUrl (listenBrainzUrl username <> "?count=100")
+  case result of
+    Left err -> do
+      Log.error $ "Sync fetch error: " <> Exception.message err
+      liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
+    Right body ->
+      case parseJson body >>= decodeJson of
+        Left err -> do
+          Log.error $ "Sync parse error: " <> show err
+          liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
+        Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
+          Tuple added (Tuple minTs hitCount) <- withTransaction conn writeLock (processListens listens)
+          Log.info $ "ListenBrainz batch 1: added " <> show added <> ", " <> show hitCount <> " already present."
+          let allExist = hitCount == length listens && not (null listens)
+          if allExist || null listens then do
+            when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
+            recordSyncSuccess slug "listenbrainz" added
+          else do
+            total <- paginateUntilDone 2 minTs added
+            Log.info $ "ListenBrainz sync complete. Added " <> show total <> " new scrobbles."
+            recordSyncSuccess slug "listenbrainz" total
   where
-  performFullSync = do
-    when initialSyncEnabled $ Log.info $ "Starting ListenBrainz sync for " <> username
-    result <- try $ fetchListenBrainzUrl (listenBrainzUrl username <> "?count=100")
-    case result of
-      Right body -> do
-        case parseJson body >>= decodeJson of
-          Left err -> do
-            Log.error $ "Sync parse error: " <> show err
-            liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
-          Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
-            Tuple added (Tuple minTs hitCount) <- withTransaction conn writeLock (processListens listens)
-            when (added > 0 || initialSyncEnabled)
-              $ Log.info
-              $ "ListenBrainz batch: added " <> show added <> ", " <> show hitCount <> " already present."
-            let allExist = hitCount == length listens && not (null listens)
-            if allExist || null listens then do
-              when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
-              recordSuccess added
-            else if initialSyncEnabled then do
-              total <- paginateUntilDone 2 minTs added
-              Log.info $ "ListenBrainz sync complete. Added " <> show total <> " new scrobbles."
-              recordSuccess total
-            else do
-              when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
-              recordSuccess added
-      Left err -> do
-        Log.error $ "Sync fetch error: " <> Exception.message err
-        liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
-
   paginateUntilDone batchNum minTs acc = case minTs of
     Nothing ->
       pure acc
@@ -178,7 +171,10 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
       Log.info $ "Fetching ListenBrainz batch " <> show batchNum <> " (before " <> show ts <> ")..."
       result <- try $ fetchListenBrainzUrl (listenBrainzUrl username <> "?count=100&max_ts=" <> show ts)
       case result of
-        Right body -> do
+        Left err -> do
+          Log.error $ "Sync fetch error: " <> Exception.message err
+          pure acc
+        Right body ->
           case parseJson body >>= decodeJson of
             Left err -> do
               Log.error $ "Sync parse error: " <> show err
@@ -191,11 +187,6 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
                 pure (acc + added)
               else
                 paginateUntilDone (batchNum + 1) newMinTs (acc + added)
-        Left err -> do
-          Log.error $ "Sync fetch error: " <> Exception.message err
-          pure acc
-
-  recordSuccess = recordSyncSuccess slug "listenbrainz"
 
   processListens listens = do
     s <- foldM step { added: 0, minTs: Nothing, hitCount: 0 } listens
@@ -211,41 +202,36 @@ lbSyncOnce conn username slug writeLock initialSyncEnabled = void performFullSyn
       Log.warn "Skipping scrobble without timestamp"
       pure s
 
-lbSyncLoop :: Connection -> String -> String -> AVar Unit -> Boolean -> Aff Unit
-lbSyncLoop conn username slug writeLock initialSyncEnabled = forever do
+lbSyncLoop :: Connection -> String -> String -> AVar Unit -> Aff Unit
+lbSyncLoop conn username slug writeLock = forever do
   delay (Milliseconds 60000.0)
-  lbSyncOnce conn username slug writeLock initialSyncEnabled
+  lbSync conn username slug writeLock
 
-lfSyncOnce :: Connection -> String -> String -> String -> AVar Unit -> Boolean -> Aff Unit
-lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
-  void $ performLastfmSync
-  when initialSyncEnabled $ void $ performLastfmBackfill
+lfSync :: Connection -> String -> String -> String -> AVar Unit -> Aff Unit
+lfSync conn apiKey lfmUser slug writeLock = do
+  void performLastfmSync
+  void performLastfmBackfill
   where
   performLastfmSync = do
-    when initialSyncEnabled $ Log.info $ "Starting Last.fm sync for " <> lfmUser
+    Log.info $ "Starting Last.fm sync for " <> lfmUser
     { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1 Nothing
     Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
-    when (added > 0 || initialSyncEnabled)
-      $ Log.info
-      $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+    Log.info $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
     let
       validTracks = mapMaybe lastfmTrackToListen tracks
       allExist = hitCount == length validTracks && not (null validTracks)
     if allExist || totalPages <= 1 then do
       when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
-      recordSuccess added
-    else if initialSyncEnabled then do
+      recordSyncSuccess slug "lastfm" added
+    else do
       total <- paginateLastfmUntilDone 2 totalPages Nothing added
       Log.info $ "Last.fm sync complete. Added " <> show total <> " new scrobbles."
-      recordSuccess total
-    else do
-      when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
-      recordSuccess added
+      recordSyncSuccess slug "lastfm" total
 
   paginateLastfmUntilDone page totalPages mTo acc
     | page > totalPages = pure acc
     | otherwise = do
-        when initialSyncEnabled $ Log.info $ "Fetching Last.fm page " <> show page <> "/" <> show totalPages <> "..."
+        Log.info $ "Fetching Last.fm page " <> show page <> "/" <> show totalPages <> "..."
         { tracks } <- fetchLastfmPage apiKey lfmUser page mTo
         Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
         Log.info $ "Last.fm page " <> show page <> "/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
@@ -258,18 +244,16 @@ lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
   performLastfmBackfill = do
     mOldest <- getOldestTs conn
     for_ mOldest \oldestTs -> do
-      when initialSyncEnabled $ Log.info $ "Checking for Last.fm history before " <> show oldestTs <> "..."
+      Log.info $ "Checking for Last.fm history before " <> show oldestTs <> "..."
       { tracks, totalPages } <- fetchLastfmPage apiKey lfmUser 1 (Just (oldestTs - 1))
       if null tracks then
-        when initialSyncEnabled $ Log.info "No older Last.fm history found."
+        Log.info "No older Last.fm history found."
       else do
         Log.info $ "Backfilling " <> show totalPages <> " pages of Last.fm history before " <> show oldestTs
         Tuple added hitCount <- withTransaction conn writeLock (processLastfmTracks tracks)
         Log.info $ "Last.fm backfill page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
         total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
         Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
-
-  recordSuccess = recordSyncSuccess slug "lastfm"
 
   processLastfmTracks tracks = do
     s <- foldM step { added: 0, hitCount: 0 } (mapMaybe lastfmTrackToListen tracks)
@@ -283,7 +267,7 @@ lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled = do
         pure s { added = s.added + 1 }
     step s _ = pure s
 
-lfSyncLoop :: Connection -> String -> String -> String -> AVar Unit -> Boolean -> Aff Unit
-lfSyncLoop conn apiKey lfmUser slug writeLock initialSyncEnabled = forever do
+lfSyncLoop :: Connection -> String -> String -> String -> AVar Unit -> Aff Unit
+lfSyncLoop conn apiKey lfmUser slug writeLock = forever do
   delay (Milliseconds 60000.0)
-  lfSyncOnce conn apiKey lfmUser slug writeLock initialSyncEnabled
+  lfSync conn apiKey lfmUser slug writeLock
