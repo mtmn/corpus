@@ -209,12 +209,23 @@ renderListen userSlug currentTime failedCovers coverFallbacks hoveredCover simil
 
         variant =
             case Dict.get baseCoverUrl coverFallbacks |> Maybe.withDefault 0 of
-                1 -> "&variant=front-250"
-                2 -> "&variant=back-500"
-                3 -> "&variant=back-250"
-                _ -> ""
+                0 ->
+                    "front-500"
 
-        coverUrl = baseCoverUrl ++ variant
+                1 ->
+                    "front-250"
+
+                2 ->
+                    "back-500"
+
+                3 ->
+                    "back-250"
+
+                _ ->
+                    ""
+
+        coverUrl =
+            baseCoverUrl ++ "&variant=" ++ variant
 
         isZoomed =
             hoveredCover == Just idx
