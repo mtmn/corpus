@@ -3,60 +3,47 @@ module Main where
 import Prelude
 
 import Config (AppConfig, UserConfig, UserEntry, loadConfig, s3ConfigFromUser)
-import Effect (Effect)
-import Node.EventEmitter (on_, EventHandle(..))
-import Effect.Class (liftEffect)
-import Log as Log
-import Metrics as Metrics
-import Node.HTTP (createServer)
-import Node.HTTPS as HTTPS
-import Node.HTTP.Server as Server
-import Effect.Uncurried (mkEffectFn1)
-import Node.HTTP.ClientRequest as Client
-import Node.HTTP.IncomingMessage as IM
-import Node.HTTP.Types (ServerResponse, IncomingMessage, IMServer)
-import Node.HTTP.ServerResponse (setStatusCode, toOutgoingMessage)
-import Node.HTTP.OutgoingMessage (setHeader, toWriteable)
-import Node.Stream (end, write, writeString)
-import Node.Stream.Aff (readableToStringUtf8)
-import Node.Encoding (Encoding(UTF8))
-import Node.Net.Server (listenTcp, listeningH)
-
-import Data.Either (Either(..))
-
-import Effect.Exception as Exception
-import Effect.Aff (Aff, launchAff_, makeAff, nonCanceler, try, delay, forkAff, joinFiber, killFiber, Fiber)
-import Effect.Aff.AVar (AVar)
-import Effect.Aff.AVar as Avar
-import Unsafe.Coerce (unsafeCoerce)
-import Node.FS.Aff as FSA
-import Fetch (fetch, Method(GET))
-import Fetch.Argonaut.Json (fromJson)
-
-import Data.Maybe (Maybe(..), fromMaybe)
-import JSURI (encodeURIComponent)
-import Foreign.Object as Object
-import Data.Argonaut (decodeJson, encodeJson, parseJson)
-import Data.Argonaut.Core (Json, toObject, toArray, toString, stringify)
-import Data.Array (find, length, mapMaybe, null)
-import Data.Tuple (Tuple(..))
-import Data.Foldable (for_, foldM, traverse_)
+import Control.Monad.Rec.Class (forever)
 import Cover (serveCover)
 import Cosine (serveSimilar)
-import Metadata (enrichMetadata)
-import Sync (lastfmTrackToListen, lbSync, lbSyncLoop, lfSync, lfSyncLoop, listenBrainzUrl)
-import Data.Traversable (traverse)
-import Db (Connection, FilterField(..), backupDb, checkExists, connect, getOldestTs, getScrobbles, getStats, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
-import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
-import Control.Monad.Rec.Class (forever)
-import Data.Time.Duration (Milliseconds(..))
+import Data.Array (find, length)
+import Data.Either (Either(..))
+import Data.Foldable (for_, traverse_)
 import Data.Int (fromString, toNumber)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (Pattern(..), stripPrefix)
-import Node.Process (lookupEnv)
-
 import Data.String.Regex (replace, parseFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
-import Effect.Aff.Retry (RetryStatus(..), exponentialBackoff, limitRetries, recovering)
+import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..))
+import Db (Connection, FilterField(..), backupDb, connect, getScrobbles, getStats, initDb, initReleaseMetadata, ping, withTransaction)
+import Effect (Effect)
+import Effect.Aff (Aff, launchAff_, try, delay, forkAff, joinFiber, killFiber, Fiber)
+import Effect.Aff.AVar (AVar)
+import Effect.Aff.AVar as Avar
+import Effect.Class (liftEffect)
+import Effect.Exception as Exception
+import Log as Log
+import Node.EventEmitter (on_)
+import Metadata (enrichMetadata)
+import Metrics as Metrics
+import Node.Encoding (Encoding(UTF8))
+import Node.FS.Aff as FSA
+import Node.HTTP (createServer)
+import Node.HTTP.IncomingMessage as IM
+import Node.HTTP.OutgoingMessage (setHeader, toWriteable)
+import Node.HTTP.ServerResponse (setStatusCode, toOutgoingMessage)
+import Node.HTTP.Server as Server
+import Node.HTTP.Types (ServerResponse, IncomingMessage, IMServer)
+import Node.Net.Server (listenTcp, listeningH)
+import Node.Process (lookupEnv)
+import Node.Stream (end, write, writeString)
+import Data.Argonaut (encodeJson, stringify)
+import Data.Argonaut.Core (toObject, toArray, toString, Json)
+import Foreign.Object as Object
+import Sync (lbSync, lbSyncLoop, lfSync, lfSyncLoop)
+import Types (Listen(..), ListenBrainzResponse(..), Payload(..), TrackMetadata(..))
+import Unsafe.Coerce (unsafeCoerce)
 import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
@@ -340,23 +327,13 @@ startUser { slug, name, config } = do
 
 cleanupUser :: UserContext -> Aff Unit
 cleanupUser ctx = do
-  Log.info $ "Cleaning up user: " <> if ctx.slug == "" then "(root)" else ctx.slug
-  -- Kill background fibers
-  case ctx.enrichMetadataFiber of
-    Just fiber -> do
-      Log.info "Killing enrich metadata fiber"
-      void $ try $ killFiber (Exception.error "Server shutting down") fiber
-    Nothing -> do
-      pure unit
-  case ctx.backupFiber of
-    Just fiber -> do
-      Log.info "Killing backup fiber"
-      void $ try $ killFiber (Exception.error "Server shutting down") fiber
-    Nothing -> do
-      pure unit
-  -- Close database connection
-  Log.info "Closing database connection"
-  void $ try $ ping ctx.conn
+  let label = if ctx.slug == "" then "(root)" else ctx.slug
+  Log.info $ "Shutting down user: " <> label
+  for_ ctx.enrichMetadataFiber \fiber ->
+    void $ try $ killFiber (Exception.error "Server shutting down") fiber
+  for_ ctx.backupFiber \fiber ->
+    void $ try $ killFiber (Exception.error "Server shutting down") fiber
+  Log.info $ "Closed user: " <> label
 
 foreign import dotenvConfig :: Effect Unit
 
@@ -371,7 +348,7 @@ main = do
         Log.error $ "Failed to load " <> configFile <> ": " <> Exception.message err
         liftEffect $ Exception.throwException err
       Right (appConfig :: AppConfig) -> do
-        Log.info $ "Loaded " <> show (length appConfig.users) <> " user(s) from users.dhall"
+        Log.info $ "Loaded " <> show (length appConfig.users) <> " user(s) from " <> configFile
         contexts <- traverse startUser appConfig.users
         liftEffect $ do
           server <- createServer
@@ -383,8 +360,3 @@ main = do
 
           listenTcp netServer { host: "127.0.0.1", port: appConfig.port, backlog: 128 }
 
-cleanupAll :: Array UserContext -> Aff Unit
-cleanupAll contexts = do
-  Log.info "Starting graceful shutdown of all users"
-  traverse_ cleanupUser contexts
-  Log.info "Graceful shutdown complete"
