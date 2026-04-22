@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.5.0](https://github.com/mtmn/corpus/compare/v2.4.0...v2.5.0) (2026-04-22)
+
+
+### Features
+
+* convert to avif; decouple Client.elm ([55251a3](https://github.com/mtmn/corpus/commit/55251a3df4ae1af79e31e21203ceac62362527c0))
+* decouple large files, convert to avif, housekeeping ([46449c4](https://github.com/mtmn/corpus/commit/46449c4d36488d151974818070168c9b9db2bc7c))
+* doucple Main.purs to modules ([1f46d45](https://github.com/mtmn/corpus/commit/1f46d451909779255f150ecd9ac615b4e994895e))
+* download large front covers from caa ([e1f768d](https://github.com/mtmn/corpus/commit/e1f768d457d9914f48049b036f45caa9a76d7ebd))
+* move scrobbling logic to Sync.purs ([dc3828b](https://github.com/mtmn/corpus/commit/dc3828b48d0509f1e503693ae69329ae690a772a))
+
+
+### Bug Fixes
+
+* cache and convert cover art in the background ([e755708](https://github.com/mtmn/corpus/commit/e755708b80bf93f0520fb940b540f83578ec4aaa))
+* remove initialSync param ([76ca97f](https://github.com/mtmn/corpus/commit/76ca97fd786c3e2e0e64422dcef0121275dcc552))
+* remove unused imports; better logging ([1cf325d](https://github.com/mtmn/corpus/commit/1cf325d0a933e2e2e76d80a27bfed9cd847d8ce6))
+* revert release-please gha ([4675ae2](https://github.com/mtmn/corpus/commit/4675ae2c5eb2344cbbae73ca5eadd00b28d5c781))
+* run npmDepsHash job on each commit ([082bdf5](https://github.com/mtmn/corpus/commit/082bdf58b0974855e063adfe9b46183865018b41))
+
 ## [2.4.0](https://github.com/mtmn/corpus/compare/v2.3.1...v2.4.0) (2026-04-21)
 
 
