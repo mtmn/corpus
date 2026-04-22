@@ -43,6 +43,7 @@ type UserEntry =
 
 type AppConfig =
   { port :: Int
+  , host :: String
   , metricsEnabled :: Boolean
   , users :: Array UserEntry
   }
@@ -80,6 +81,7 @@ loadConfig path = do
     Left msg -> throwError (error msg)
     Right users -> pure users
   portStr <- liftEffect $ lookupEnv "PORT"
+  hostStr <- liftEffect $ lookupEnv "HOST"
   lastfmApiKey <- liftEffect $ lookupEnv "LASTFM_API_KEY"
   discogsToken <- liftEffect $ lookupEnv "DISCOGS_TOKEN"
   cosineApiKey <- liftEffect $ lookupEnv "COSINE_API_KEY"
@@ -110,8 +112,9 @@ loadConfig path = do
       }
   let
     port = fromMaybe 8000 (portStr >>= Data.Int.fromString)
+    host = fromMaybe "127.0.0.1" hostStr
     metricsEnabled = metricsEnabledStr == Just "true"
-    fullConfig = { port, metricsEnabled, users: map (\u -> u { config = fillCreds u.config }) rawUsers }
+    fullConfig = { port, host, metricsEnabled, users: map (\u -> u { config = fillCreds u.config }) rawUsers }
   case validateConfig fullConfig of
     Left msg -> throwError (error msg)
     Right cfg -> pure cfg
