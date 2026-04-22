@@ -743,12 +743,7 @@ indexHtml userSlug allUsers =
       <>
         """;
         var app = Elm.Client.init({
-            node: document.getElementById('app'),
-            flags: { search: window.location.search, userSlug: userSlug, allUsers: allUsers }
-        });
-        app.ports.pushUrl.subscribe(function(url) {
-            var prefix = userSlug ? '/u/' + userSlug : '';
-            history.pushState({}, '', prefix + url);
+            flags: { userSlug: userSlug, allUsers: allUsers }
         });
     </script>
 </body>

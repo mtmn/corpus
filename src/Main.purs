@@ -30,8 +30,10 @@ import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as Avar
 import Unsafe.Coerce (unsafeCoerce)
 import Node.FS.Aff as FSA
-import Fetch (fetch, Method(GET), lookup)
+import Fetch (fetch, Method(GET))
 import Fetch.Argonaut.Json (fromJson)
+import Data.Map as Map
+import Data.String.CaseInsensitive (CaseInsensitiveString(..))
 import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import JSURI (encodeURIComponent)
 import Foreign.Object as Object
@@ -57,6 +59,7 @@ import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
 import Templates (indexHtml)
+import Image (convertToAvif)
 
 -- Types
 type Request = IncomingMessage IMServer
@@ -513,19 +516,19 @@ coverSources mbid artist release cfg =
     safeRelease = sanitizeKey release
   in
     [ { name: "caa"
-      , s3Key: "covers/caa/" <> sanitizeKey mbid <> ".jpg"
+      , s3Key: "covers/caa/" <> sanitizeKey mbid <> ".avif"
       , findUrl:
           if mbid == "" then pure Nothing
           else pure $ Just $ "https://coverartarchive.org/release/" <> mbid <> "/front-250"
       }
     , { name: "lastfm"
-      , s3Key: "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+      , s3Key: "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".avif"
       , findUrl:
           if artist == "" || release == "" then pure Nothing
           else fetchLastfmCoverUrl cfg artist release
       }
     , { name: "discogs"
-      , s3Key: "covers/discogs/" <> safeArtist <> "-" <> safeRelease <> ".jpg"
+      , s3Key: "covers/discogs/" <> safeArtist <> "-" <> safeRelease <> ".avif"
       , findUrl:
           if artist == "" || release == "" then pure Nothing
           else fetchDiscogsCoverUrl cfg artist release
@@ -581,19 +584,24 @@ serveCover cfg slug url res = launchAff_ do
     fetchResult <- try $ fetch urlStr { method: GET }
     case fetchResult of
       Right fr | fr.status == 200 -> do
-        Log.info $ "Proxying and caching image: " <> urlStr
-        let contentType = fromMaybe "image/jpeg" $ lookup "content-type" fr.headers
+        let
+          isAvif = case Map.lookup (CaseInsensitiveString "content-type") fr.headers of
+            Just ct | ct == "image/avif" -> true
+            _ -> false
+
+        Log.info $ "caching image (" <> (if isAvif then "already avif" else "needs conversion") <> "): " <> urlStr
         buf <- fr.arrayBuffer
+        avifBuf <- if isAvif then pure buf else convertToAvif buf
         liftEffect $ do
           setStatusCode fr.status response
-          setHeader "Content-Type" contentType (toOutgoingMessage response)
+          setHeader "Content-Type" "image/avif" (toOutgoingMessage response)
           setHeader "Cache-Control" "public, max-age=86400" (toOutgoingMessage response)
           let writer = toWriteable (toOutgoingMessage response)
-          nativeBuf <- fromArrayBuffer buf
+          nativeBuf <- fromArrayBuffer avifBuf
           void $ write writer nativeBuf
           end writer
         when cfg.coverCacheEnabled $ void $ forkAff $ do
-          uploadResult <- try $ uploadToS3 s3cfg s3Key (unsafeCoerce buf) contentType
+          uploadResult <- try $ uploadToS3 s3cfg s3Key (unsafeCoerce avifBuf) "image/avif"
           case uploadResult of
             Right _ -> Log.info $ "Cached to S3: " <> s3Key
             Left err -> Log.error $ "S3 upload failed: " <> Exception.message err
