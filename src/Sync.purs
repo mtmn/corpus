@@ -1,6 +1,8 @@
 module Sync
   ( listenBrainzUrl
   , lastfmTrackToListen
+  , parseLastfmResponse
+  , fetchLastfmPage
   , lbSync
   , lbSyncLoop
   , lfSync
@@ -11,14 +13,15 @@ import Prelude
 
 import Control.Monad.Rec.Class (forever)
 import Data.Argonaut (decodeJson, parseJson)
-import Data.Argonaut.Core (Json, toArray, toObject, toString)
+import Data.Argonaut.Core (Json, toArray, toObject, toString, toNumber, stringify)
 import Data.Array (length, mapMaybe, null)
 import Data.Either (Either(..))
 import Data.Foldable (foldM, for_)
-import Data.Int (fromString)
+import Data.Int (fromNumber, fromString)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (Tuple(..))
+import Control.Alt ((<|>))
 import Db (Connection, checkExists, getOldestTs, upsertScrobble, withTransaction)
 import Effect.Aff (Aff, delay, launchAff_, makeAff, nonCanceler, try)
 import Effect.Aff.AVar (AVar)
@@ -88,20 +91,30 @@ fetchLastfmPage apiKey lfmUser page mTo = withRetry "Last.fm fetch" do
   fr <- fetch url { method: GET }
   if fr.status == 200 then do
     json <- fromJson fr.json
-    let
-      parsed = do
-        obj <- toObject json
-        rt <- Object.lookup "recenttracks" obj >>= toObject
-        tracks <- Object.lookup "track" rt >>= toArray
-        attr <- Object.lookup "@attr" rt >>= toObject
-        totalPagesStr <- Object.lookup "totalPages" attr >>= toString
-        totalPages <- fromString totalPagesStr
-        pure { tracks, totalPages }
-    case parsed of
-      Just result -> pure result
-      Nothing -> liftEffect $ Exception.error "Last.fm: Failed to parse JSON response" # Exception.throwException
+    case parseLastfmResponse json of
+      Just result -> do
+        pure result
+      Nothing -> do
+        Log.error $ "Last.fm: Failed to parse JSON response: " <> stringify json
+        liftEffect $ Exception.error "Last.fm: Failed to parse JSON response" # Exception.throwException
   else do
     liftEffect $ Exception.error ("Last.fm API returned status " <> show fr.status) # Exception.throwException
+
+parseLastfmResponse :: Json -> Maybe { tracks :: Array Json, totalPages :: Int }
+parseLastfmResponse json = do
+  let
+    obj = toObject json
+    rt = obj >>= Object.lookup "recenttracks" >>= toObject
+    mTracks = rt >>= Object.lookup "track"
+    tracks = case mTracks of
+      Just t -> fromMaybe [ t ] (toArray t)
+      Nothing -> []
+    attr = rt >>= Object.lookup "@attr" >>= toObject
+    totalPages = fromMaybe 0 $ attr >>= Object.lookup "totalPages" >>= \tp ->
+      (toString tp >>= fromString) <|> (toNumber tp >>= fromNumber)
+  case rt, attr of
+    Just _, Just _ -> Just { tracks, totalPages }
+    _, _ -> Nothing
 
 lastfmTrackToListen :: Json -> Maybe Listen
 lastfmTrackToListen json = do
