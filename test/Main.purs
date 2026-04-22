@@ -17,7 +17,7 @@ import Data.Argonaut.Core (Json)
 import Foreign.Object as Object
 import Main (parseFilterField)
 import Cover (sanitizeKey)
-import Sync (listenBrainzUrl, lastfmTrackToListen)
+import Sync (listenBrainzUrl, lastfmTrackToListen, parseLastfmResponse)
 import S3 (getS3Url)
 
 main :: Effect Unit
@@ -432,6 +432,72 @@ main = runSpecAndExitProcess [consoleReporter] do
           parseTrack s = case parseJson s of
             Right j -> j
             Left _ -> encodeJson ([] :: Array Int)  -- fallback that will produce Nothing
+
+      describe "parseLastfmResponse" do
+        it "parses standard response with multiple tracks" do
+          let j = parseTrack """
+            {
+              "recenttracks": {
+                "track": [
+                  { "name": "Track 1" },
+                  { "name": "Track 2" }
+                ],
+                "@attr": { "totalPages": "10" }
+              }
+            }
+          """
+          case parseLastfmResponse j of
+            Just { tracks, totalPages } -> do
+              length tracks `shouldEqual` 2
+              totalPages `shouldEqual` 10
+            Nothing -> do
+              fail "Should have parsed"
+
+        it "parses response with a single track (as object)" do
+          let j = parseTrack """
+            {
+              "recenttracks": {
+                "track": { "name": "Single Track" },
+                "@attr": { "totalPages": "1" }
+              }
+            }
+          """
+          case parseLastfmResponse j of
+            Just { tracks, totalPages } -> do
+              length tracks `shouldEqual` 1
+              totalPages `shouldEqual` 1
+            Nothing -> do
+              fail "Should have parsed single track object"
+
+        it "parses response with no tracks" do
+          let j = parseTrack """
+            {
+              "recenttracks": {
+                "@attr": { "totalPages": "0" }
+              }
+            }
+          """
+          case parseLastfmResponse j of
+            Just { tracks, totalPages } -> do
+              length tracks `shouldEqual` 0
+              totalPages `shouldEqual` 0
+            Nothing -> do
+              fail "Should have parsed empty tracks"
+
+        it "parses response where totalPages is a number" do
+          let j = parseTrack """
+            {
+              "recenttracks": {
+                "track": [],
+                "@attr": { "totalPages": 5 }
+              }
+            }
+          """
+          case parseLastfmResponse j of
+            Just { totalPages } -> do
+              totalPages `shouldEqual` 5
+            Nothing -> do
+              fail "Should have parsed numeric totalPages"
 
       describe "lastfmTrackToListen" do
         it "parses a valid track with MBID" do

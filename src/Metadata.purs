@@ -105,7 +105,8 @@ fetchLastfmGenre (Just k) artist release = do
               obj <- toObject json
               album <- Object.lookup "album" obj >>= toObject
               tags <- Object.lookup "tags" album >>= toObject
-              tagArray <- Object.lookup "tag" tags >>= toArray
+              mTag <- Object.lookup "tag" tags
+              let tagArray = fromMaybe [ mTag ] (toArray mTag)
               firstTag <- tagArray !! 0 >>= toObject
               Object.lookup "name" firstTag >>= toString
           pure genre
