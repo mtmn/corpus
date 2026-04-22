@@ -31,11 +31,11 @@ import Image (convertToAvif)
 import JSURI (encodeURIComponent)
 import Log as Log
 import Metrics as Metrics
+import Node.Buffer (fromArrayBuffer)
 import Node.HTTP.OutgoingMessage (setHeader, toWriteable)
 import Node.HTTP.ServerResponse (setStatusCode, toOutgoingMessage)
 import Node.HTTP.Types (ServerResponse)
 import Node.Stream (end)
-import Unsafe.Coerce (unsafeCoerce)
 import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
@@ -95,7 +95,7 @@ fetchDiscogsCoverUrl cfg artist release = case cfg.discogsToken of
         <> (fromMaybe "" $ encodeURIComponent queryStr)
         <> "&type=release&per_page=1"
     Log.info $ "Searching Discogs for: " <> queryStr
-    result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 +https://github.com/mtmn/corpus", "Authorization": "Discogs token=" <> t } }
+    result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)", "Authorization": "Discogs token=" <> t } }
     case result of
       Right fr | fr.status == 200 -> do
         json <- fromJson fr.json
@@ -107,19 +107,23 @@ fetchDiscogsCoverUrl cfg artist release = case cfg.discogsToken of
       _ ->
         pure Nothing
 
-coverSources :: String -> String -> String -> UserConfig -> Array CoverSource
-coverSources mbid artist release cfg =
+coverSources :: String -> String -> String -> Maybe String -> UserConfig -> Array CoverSource
+coverSources mbid artist release mVariant cfg =
   let
     safeArtist = sanitizeKey artist
     safeRelease = sanitizeKey release
+    variant = fromMaybe "front-500" mVariant
+    caaSource =
+      if mbid == "" then []
+      else
+        [ { name: "caa"
+          , s3Key: "covers/caa/" <> sanitizeKey mbid <> (if variant == "front-500" then "" else "-" <> variant) <> ".avif"
+          , findUrl: pure $ Just $ "https://coverartarchive.org/release/" <> mbid <> "/" <> variant
+          }
+        ]
   in
-    [ { name: "caa"
-      , s3Key: "covers/caa/" <> sanitizeKey mbid <> ".avif"
-      , findUrl:
-          if mbid == "" then pure Nothing
-          else pure $ Just $ "https://coverartarchive.org/release/" <> mbid <> "/front-500"
-      }
-    , { name: "lastfm"
+    caaSource <>
+    [ { name: "lastfm"
       , s3Key: "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".avif"
       , findUrl:
           if artist == "" || release == "" then pure Nothing
@@ -139,9 +143,10 @@ serveCover serveNotFound cfg slug url res = do
     mbid = fromMaybe "" (getQueryParam "mbid" url)
     artist = fromMaybe "" (getQueryParam "artist" url)
     release = fromMaybe "" (getQueryParam "release" url)
+    variant = getQueryParam "variant" url
     s3cfg = s3ConfigFromUser cfg
 
-  served <- foldM (trySource s3cfg) false (coverSources mbid artist release cfg)
+  served <- foldM (trySource s3cfg) false (coverSources mbid artist release variant cfg)
   unless served $ liftEffect $ serveNotFound res
 
   where
@@ -185,20 +190,24 @@ serveCover serveNotFound cfg slug url res = do
       setHeader "Cache-Control" "public, max-age=3600" (toOutgoingMessage response)
       end (toWriteable (toOutgoingMessage response))
     when cfg.coverCacheEnabled $ void $ forkAff do
-      fetchResult <- try $ fetch urlStr { method: GET }
+      let headers = { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)" }
+      fetchResult <- try $ fetch urlStr { method: GET, headers }
       case fetchResult of
         Right fr | fr.status == 200 -> do
           let
-            isAvif = case Map.lookup (CaseInsensitiveString "content-type") fr.headers of
+            contentType = Map.lookup (CaseInsensitiveString "content-type") fr.headers
+            isAvif = case contentType of
               Just ct | ct == "image/avif" -> true
               _ -> false
-          Log.info $ "caching image (" <> (if isAvif then "already avif" else "needs conversion") <> "): " <> urlStr
-          buf <- fr.arrayBuffer
-          avifBuf <- if isAvif then pure buf else convertToAvif buf
-          uploadResult <- try $ uploadToS3 s3cfg s3Key (unsafeCoerce avifBuf) "image/avif"
+          Log.info $ "Caching image: " <> urlStr
+          ab <- fr.arrayBuffer
+          avifAb <- if isAvif then pure ab else convertToAvif ab
+          avifBuf <- liftEffect $ fromArrayBuffer avifAb
+          uploadResult <- try $ uploadToS3 s3cfg s3Key avifBuf "image/avif"
           case uploadResult of
             Right _ -> Log.info $ "Cached to S3: " <> s3Key
-            Left err -> Log.error $ "S3 upload failed: " <> Exception.message err
-        _ ->
-          Log.warn $ "Background fetch failed for: " <> urlStr
-
+            Left err -> Log.error $ "S3 upload FAILED for " <> s3Key <> ": " <> Exception.message err
+        Right fr ->
+          Log.warn $ "Background fetch failed for " <> urlStr <> " with status " <> show fr.status
+        Left err ->
+          Log.error $ "Background fetch error for " <> urlStr <> ": " <> Exception.message err

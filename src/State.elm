@@ -29,6 +29,7 @@ init flags url navKey =
       , loading = True
       , currentTime = Nothing
       , failedCovers = Set.empty
+      , coverFallbacks = Dict.empty
       , hoveredCover = Nothing
       , expandedSections = Set.empty
       , loadedSections = Set.empty
@@ -211,7 +212,22 @@ update msg model =
                     )
 
         ImageError url ->
-            ( { model | failedCovers = Set.insert url model.failedCovers }, Cmd.none )
+            let
+                baseUrl =
+                    if String.contains "&variant=" url then
+                        String.split "&variant=" url |> List.head |> Maybe.withDefault url
+
+                    else
+                        url
+
+                currentFallback =
+                    Dict.get baseUrl model.coverFallbacks |> Maybe.withDefault 0
+            in
+            if String.contains "&mbid=" baseUrl && currentFallback < 3 then
+                ( { model | coverFallbacks = Dict.insert baseUrl (currentFallback + 1) model.coverFallbacks }, Cmd.none )
+
+            else
+                ( { model | failedCovers = Set.insert baseUrl model.failedCovers }, Cmd.none )
 
         NextPage ->
             let
