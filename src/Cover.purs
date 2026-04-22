@@ -70,7 +70,8 @@ fetchLastfmCoverUrl cfg artist release = case cfg.lastfmApiKey of
         <> "&format=json&api_key="
         <> k
     Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
-    result <- try $ fetch searchUrl { method: GET }
+    let headers = { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)" }
+     result <- try $ fetch searchUrl { method: GET, headers }
     case result of
       Right fr | fr.status == 200 -> do
         json <- fromJson fr.json
@@ -205,8 +206,8 @@ serveCover serveNotFound cfg slug url res = do
           avifBuf <- liftEffect $ fromArrayBuffer avifAb
           uploadResult <- try $ uploadToS3 s3cfg s3Key avifBuf "image/avif"
           case uploadResult of
-            Right _ -> Log.info $ "Cached to S3: " <> s3Key
-            Left err -> Log.error $ "S3 upload FAILED for " <> s3Key <> ": " <> Exception.message err
+            Right _ -> Log.info $ "Uploaded " <> s3Key
+            Left err -> Log.error $ "Failed to upload " <> s3Key <> ": " <> Exception.message err
         Right fr ->
           Log.warn $ "Background fetch failed for " <> urlStr <> " with status " <> show fr.status
         Left err ->
