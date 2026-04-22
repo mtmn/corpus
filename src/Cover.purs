@@ -9,9 +9,10 @@ module Cover
 
 import Prelude
 
+import Control.Alt ((<|>))
 import Config (UserConfig, s3ConfigFromUser)
 import S3 (existsInS3, getS3Url, uploadToS3)
-import Data.Array ((!!))
+import Data.Array ((!!), find)
 import Data.Either (Either(..))
 import Data.Foldable (foldM)
 import Data.Map as Map
@@ -26,7 +27,7 @@ import Effect.Exception as Exception
 import Fetch (fetch, Method(GET))
 import Fetch.Argonaut.Json (fromJson)
 import Foreign.Object as Object
-import Data.Argonaut.Core (toArray, toObject, toString)
+import Data.Argonaut.Core (toArray, toObject, toString, toBoolean)
 import Image (convertToAvif)
 import JSURI (encodeURIComponent)
 import Log as Log
@@ -56,6 +57,31 @@ sanitizeKey = replace re1 "_" >>> replace re2 "_"
 
 getQueryParam :: String -> URL -> Maybe String
 getQueryParam key url = URLSearchParams.get key (URL.searchParams url)
+
+fetchCaaCoverUrl :: String -> Aff (Maybe String)
+fetchCaaCoverUrl mbid = do
+  let url = "https://coverartarchive.org/release/" <> mbid
+  let headers = { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)" }
+  result <- try $ fetch url { method: GET, headers }
+  case result of
+    Right fr | fr.status == 200 -> do
+      json <- fromJson fr.json
+      pure $ do
+        obj <- toObject json
+        images <- Object.lookup "images" obj >>= toArray
+        let
+          isFront img = fromMaybe false $ toObject img >>= Object.lookup "front" >>= toBoolean
+          isBack img = fromMaybe false $ toObject img >>= Object.lookup "back" >>= toBoolean
+          getThumb key img = do
+            thumbs <- toObject img >>= Object.lookup "thumbnails" >>= toObject
+            Object.lookup key thumbs >>= toString
+          pickFromImage img =
+            getThumb "500" img <|> getThumb "large" img <|> getThumb "250" img <|> getThumb "small" img
+        (find isFront images >>= pickFromImage)
+          <|> (find isBack images >>= pickFromImage)
+          <|> (images !! 0 >>= pickFromImage)
+    _ ->
+      pure Nothing
 
 fetchLastfmCoverUrl :: UserConfig -> String -> String -> Aff (Maybe String)
 fetchLastfmCoverUrl cfg artist release = case cfg.lastfmApiKey of
@@ -108,17 +134,17 @@ fetchDiscogsCoverUrl cfg artist release = case cfg.discogsToken of
       _ ->
         pure Nothing
 
-coverSources :: String -> String -> String -> String -> UserConfig -> Array CoverSource
-coverSources mbid artist release variant cfg =
+coverSources :: String -> String -> String -> UserConfig -> Array CoverSource
+coverSources mbid artist release cfg =
   let
     safeArtist = sanitizeKey artist
     safeRelease = sanitizeKey release
     caaSource =
-      if mbid == "" || variant == "" then []
+      if mbid == "" then []
       else
         [ { name: "caa"
-          , s3Key: "covers/caa/" <> sanitizeKey mbid <> "-" <> variant <> ".avif"
-          , findUrl: pure $ Just $ "https://coverartarchive.org/release/" <> mbid <> "/" <> variant
+          , s3Key: "covers/caa/" <> sanitizeKey mbid <> ".avif"
+          , findUrl: fetchCaaCoverUrl mbid
           }
         ]
   in
@@ -143,10 +169,9 @@ serveCover serveNotFound cfg slug url res = do
     mbid = fromMaybe "" (getQueryParam "mbid" url)
     artist = fromMaybe "" (getQueryParam "artist" url)
     release = fromMaybe "" (getQueryParam "release" url)
-    variant = fromMaybe "" (getQueryParam "variant" url)
     s3cfg = s3ConfigFromUser cfg
 
-  served <- foldM (trySource s3cfg) false (coverSources mbid artist release variant cfg)
+  served <- foldM (trySource s3cfg) false (coverSources mbid artist release cfg)
   unless served $ liftEffect $ serveNotFound res
 
   where

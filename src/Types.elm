@@ -96,7 +96,6 @@ type alias Model =
     , loading : Bool
     , currentTime : Maybe Time.Posix
     , failedCovers : Set String
-    , coverFallbacks : Dict String Int
     , hoveredCover : Maybe Int
     , expandedSections : Set String
     , loadedSections : Set String
