@@ -162,11 +162,9 @@ serveCover serveNotFound cfg slug url res = do
         Nothing ->
           pure false
         Just urlStr -> do
-          success <- tryProxyAndCache s3cfg urlStr s3Key res
-          liftEffect $
-            if success then Metrics.incCoverRequest slug name "fetch"
-            else Metrics.incCoverRequest slug name "miss"
-          pure success
+          redirectAndCache s3cfg urlStr s3Key res
+          liftEffect $ Metrics.incCoverRequest slug name "fetch"
+          pure true
 
   checkS3 s3cfg s3Key
     | not cfg.coverCacheEnabled = pure false
@@ -181,30 +179,29 @@ serveCover serveNotFound cfg slug url res = do
     setHeader "Location" (getS3Url s3cfg s3Key) (toOutgoingMessage response)
     end (toWriteable (toOutgoingMessage response))
 
-  tryProxyAndCache s3cfg urlStr s3Key response = do
-    fetchResult <- try $ fetch urlStr { method: GET }
-    case fetchResult of
-      Right fr | fr.status == 200 -> do
-        let
-          isAvif = case Map.lookup (CaseInsensitiveString "content-type") fr.headers of
-            Just ct | ct == "image/avif" -> true
-            _ -> false
-        Log.info $ "caching image (" <> (if isAvif then "already avif" else "needs conversion") <> "): " <> urlStr
-        buf <- fr.arrayBuffer
-        avifBuf <- if isAvif then pure buf else convertToAvif buf
-        liftEffect $ do
-          setStatusCode fr.status response
-          setHeader "Content-Type" "image/avif" (toOutgoingMessage response)
-          setHeader "Cache-Control" "public, max-age=86400" (toOutgoingMessage response)
-          let writer = toWriteable (toOutgoingMessage response)
-          nativeBuf <- fromArrayBuffer avifBuf
-          void $ write writer nativeBuf
-          end writer
-        when cfg.coverCacheEnabled $ void $ forkAff $ do
+  -- Redirect the client immediately to the upstream URL, then fetch+convert+cache in background.
+  -- This avoids blocking the response on AVIF conversion (which can take hundreds of ms).
+  redirectAndCache s3cfg urlStr s3Key response = do
+    liftEffect $ do
+      setStatusCode 302 response
+      setHeader "Location" urlStr (toOutgoingMessage response)
+      setHeader "Cache-Control" "public, max-age=3600" (toOutgoingMessage response)
+      end (toWriteable (toOutgoingMessage response))
+    when cfg.coverCacheEnabled $ void $ forkAff do
+      fetchResult <- try $ fetch urlStr { method: GET }
+      case fetchResult of
+        Right fr | fr.status == 200 -> do
+          let
+            isAvif = case Map.lookup (CaseInsensitiveString "content-type") fr.headers of
+              Just ct | ct == "image/avif" -> true
+              _ -> false
+          Log.info $ "caching image (" <> (if isAvif then "already avif" else "needs conversion") <> "): " <> urlStr
+          buf <- fr.arrayBuffer
+          avifBuf <- if isAvif then pure buf else convertToAvif buf
           uploadResult <- try $ uploadToS3 s3cfg s3Key (unsafeCoerce avifBuf) "image/avif"
           case uploadResult of
             Right _ -> Log.info $ "Cached to S3: " <> s3Key
             Left err -> Log.error $ "S3 upload failed: " <> Exception.message err
-        pure true
-      _ ->
-        pure false
+        _ ->
+          Log.warn $ "Background fetch failed for: " <> urlStr
+
