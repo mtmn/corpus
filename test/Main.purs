@@ -2,6 +2,7 @@ module Test.Main where
 
 import Prelude
 
+import Unsafe.Coerce (unsafeCoerce)
 import Data.Argonaut (decodeJson, encodeJson, parseJson)
 import Data.Array (length)
 import Data.Either (Either(..))
@@ -11,11 +12,11 @@ import Test.Spec (describe, it)
 import Test.Spec.Assertions (shouldEqual, fail)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
-import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..))
-import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt)
+import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..), ListenBrainzSubmitPayload(..), ListenBrainzSubmitListen(..), ListenBrainzSubmitTrackMetadata(..), ListenBrainzAdditionalInfo(..))
+import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt, getOrCreateToken, getTokenUser)
 import Data.Argonaut.Core (Json)
 import Foreign.Object as Object
-import Main (parseFilterField)
+import Main (parseFilterField, submitListenToListen, findUserByToken)
 import Cover (sanitizeKey)
 import Sync (listenBrainzUrl, lastfmTrackToListen, parseLastfmResponse)
 import S3 (getS3Url)
@@ -42,6 +43,144 @@ main = runSpecAndExitProcess [consoleReporter] do
         it "returns Nothing for unknown or empty input" do
           parseFilterField "unknown" `shouldEqual` Nothing
           parseFilterField "" `shouldEqual` Nothing
+
+    describe "ListenBrainz Submission" do
+      it "should decode a ListenBrainz submission payload" do
+        let jsonStr = """
+        {
+          "listen_type": "single",
+          "payload": [
+            {
+              "listened_at": 123456789,
+              "track_metadata": {
+                "track_name": "Song Name",
+                "artist_name": "Artist Name",
+                "release_name": "Album Name",
+                "additional_info": {
+                  "release_mbid": "rel-mbid",
+                  "artist_mbids": ["art-mbid"],
+                  "recording_mbid": "rec-mbid"
+                }
+              }
+            }
+          ]
+        }
+        """
+        let result = parseJson jsonStr >>= decodeJson
+        case result of
+          Right (ListenBrainzSubmitPayload { listenType, payload }) -> do
+            listenType `shouldEqual` "single"
+            length payload `shouldEqual` 1
+            case payload of
+              [ListenBrainzSubmitListen { listenedAt, trackMetadata: ListenBrainzSubmitTrackMetadata m }] -> do
+                listenedAt `shouldEqual` Just 123456789
+                m.trackName `shouldEqual` "Song Name"
+                m.artistName `shouldEqual` "Artist Name"
+                m.releaseName `shouldEqual` Just "Album Name"
+                case m.additionalInfo of
+                  Just (ListenBrainzAdditionalInfo info) -> do
+                    info.releaseMbid `shouldEqual` Just "rel-mbid"
+                  Nothing -> do
+                    fail "Expected additional_info"
+              _ -> do
+                fail "Expected 1 listen"
+          Left err -> do
+            fail $ "Decoding failed: " <> show err
+
+      it "should convert ListenBrainzSubmitListen to Listen correctly" do
+        let submission = ListenBrainzSubmitListen
+              { listenedAt: Just 123456789
+              , trackMetadata: ListenBrainzSubmitTrackMetadata
+                  { trackName: "Song Name"
+                  , artistName: "Artist Name"
+                  , releaseName: Just "Album Name"
+                  , additionalInfo: Just (ListenBrainzAdditionalInfo
+                      { releaseMbid: Just "rel-mbid"
+                      , artistMbids: Just ["art-mbid"]
+                      , recordingMbid: Just "rec-mbid"
+                      })
+                  }
+              }
+        case submitListenToListen "single" submission of
+          Just (Listen { listenedAt, trackMetadata: TrackMetadata m }) -> do
+            listenedAt `shouldEqual` Just 123456789
+            m.trackName `shouldEqual` Just "Song Name"
+            m.artistName `shouldEqual` Just "Artist Name"
+            m.releaseName `shouldEqual` Just "Album Name"
+            m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Just "rel-mbid", caaReleaseMbid: Just "rel-mbid" })
+          Nothing -> do
+            fail "Conversion failed"
+
+      it "should ignore playing_now listens" do
+        let submission = ListenBrainzSubmitListen
+              { listenedAt: Nothing
+              , trackMetadata: ListenBrainzSubmitTrackMetadata
+                  { trackName: "Song Name"
+                  , artistName: "Artist Name"
+                  , releaseName: Nothing
+                  , additionalInfo: Nothing
+                  }
+              }
+        submitListenToListen "playing_now" submission `shouldEqual` Nothing
+
+    describe "Token Authentication" do
+      it "should create and verify tokens" do
+        conn <- connect ":memory:"
+        initDb conn
+        mToken <- getOrCreateToken conn "user1"
+        case mToken of
+          Nothing -> do
+            fail "Failed to create token"
+          Just token -> do
+            mSlug <- getTokenUser conn token
+            mSlug `shouldEqual` Just "user1"
+
+            mSlugWrong <- getTokenUser conn "wrong-token"
+            mSlugWrong `shouldEqual` Nothing
+
+      it "should find user by token across multiple contexts" do
+        conn1 <- connect ":memory:"
+        initDb conn1
+        conn2 <- connect ":memory:"
+        initDb conn2
+
+        mToken1 <- getOrCreateToken conn1 "user1"
+        mToken2 <- getOrCreateToken conn2 "user2"
+
+        case mToken1, mToken2 of
+          Just token1, Just token2 -> do
+            let
+              dummyConfig =
+                { listenbrainzUser: Nothing
+                , lastfmUser: Nothing
+                , lastfmApiKey: Nothing
+                , discogsToken: Nothing
+                , cosineApiKey: Nothing
+                , databaseFile: ""
+                , s3Bucket: Nothing
+                , s3Region: ""
+                , awsAccessKeyId: Nothing
+                , awsSecretAccessKey: Nothing
+                , awsEndpointUrl: Nothing
+                , awsS3AddressingStyle: Nothing
+                , coverCacheEnabled: false
+                , backupEnabled: false
+                , backupIntervalHours: 0
+                }
+              ctx1 = { conn: conn1, writeLock: unsafeCoerce unit, config: dummyConfig, slug: "user1", displayName: "User 1", enrichMetadataFiber: Nothing, backupFiber: Nothing }
+              ctx2 = { conn: conn2, writeLock: unsafeCoerce unit, config: dummyConfig, slug: "user2", displayName: "User 2", enrichMetadataFiber: Nothing, backupFiber: Nothing }
+              contexts = [ ctx1, ctx2 ]
+
+            res1 <- findUserByToken contexts token1
+            map _.slug res1 `shouldEqual` Just "user1"
+
+            res2 <- findUserByToken contexts token2
+            map _.slug res2 `shouldEqual` Just "user2"
+
+            resNone <- findUserByToken contexts "invalid"
+            map _.slug resNone `shouldEqual` Nothing
+          _, _ -> do
+            fail "Failed to create tokens"
 
     describe "Corpus Types" do
       describe "MbidMapping Codecs" do
