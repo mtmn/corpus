@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.7.0](https://github.com/mtmn/corpus/compare/v2.6.0...v2.7.0) (2026-04-23)
+
+
+### Features
+
+* add docs for submission endpoint ([964e6d2](https://github.com/mtmn/corpus/commit/964e6d21f7da17f059fe6d5b2ce6df659b4e4d31))
+* add listenbrainz-like endpoint ([395689f](https://github.com/mtmn/corpus/commit/395689fd0a8f7bf63f58de5c15dc0ea5d0cda9a6))
+* add tests for endpoint ([c723437](https://github.com/mtmn/corpus/commit/c723437e40f5c28e67f0ed191fd649fdf1d481fb))
+* hash user token ([f42e52d](https://github.com/mtmn/corpus/commit/f42e52df18f6fd41d7b3645d0670f25e753f8425))
+* lookup release json from caa before fetch ([91ac2f3](https://github.com/mtmn/corpus/commit/91ac2f3586e5fcb0cc58103b3e5f795a6ae7e255))
+* simplify cover sources logic ([ad44c76](https://github.com/mtmn/corpus/commit/ad44c76150c0ca4b4d19036ee17f73d28d9ba06e))
+
+
+### Bug Fixes
+
+* add user-agent headers to fetchers ([2a8707f](https://github.com/mtmn/corpus/commit/2a8707f73f63011c034735ecba018ce753eb4550))
+* wording in about ([d0e46ab](https://github.com/mtmn/corpus/commit/d0e46abeea9e0c61e31892bf8aaddff881e3bf43))
+
 ## [2.6.0](https://github.com/mtmn/corpus/compare/v2.5.1...v2.6.0) (2026-04-22)
 
 
