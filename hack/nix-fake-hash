@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+PLACEHOLDER="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+# Update npmDepsHash
+sed -i "s|npmDepsHash = \"sha256-[^\"]*\"|npmDepsHash = \"$PLACEHOLDER\"|" flake.nix
+
+# Update elmDeps outputHash
+sed -i "/elmDeps = pkgs.stdenv.mkDerivation/,/outputHash =/ s|outputHash = \"sha256-[^\"]*\"|outputHash = \"$PLACEHOLDER\"|" flake.nix
+
+# Update spagoDeps outputHash
+sed -i "/spagoDeps = pkgs.stdenv.mkDerivation/,/outputHash =/ s|outputHash = \"sha256-[^\"]*\"|outputHash = \"$PLACEHOLDER\"|" flake.nix
+
+echo "done"
