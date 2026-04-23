@@ -8,6 +8,80 @@ import Data.Maybe (Maybe)
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
 
+newtype ListenBrainzSubmitPayload = ListenBrainzSubmitPayload
+  { listenType :: String
+  , payload :: Array ListenBrainzSubmitListen
+  }
+
+derive instance eqListenBrainzSubmitPayload :: Eq ListenBrainzSubmitPayload
+derive instance genericListenBrainzSubmitPayload :: Generic ListenBrainzSubmitPayload _
+instance showListenBrainzSubmitPayload :: Show ListenBrainzSubmitPayload where
+  show = genericShow
+
+instance DecodeJson ListenBrainzSubmitPayload where
+  decodeJson json = do
+    obj <- decodeJson json
+    listenType <- obj .: "listen_type"
+    payload <- obj .: "payload"
+    pure $ ListenBrainzSubmitPayload { listenType, payload }
+
+newtype ListenBrainzSubmitListen = ListenBrainzSubmitListen
+  { listenedAt :: Maybe Int
+  , trackMetadata :: ListenBrainzSubmitTrackMetadata
+  }
+
+derive instance eqListenBrainzSubmitListen :: Eq ListenBrainzSubmitListen
+derive instance genericListenBrainzSubmitListen :: Generic ListenBrainzSubmitListen _
+instance showListenBrainzSubmitListen :: Show ListenBrainzSubmitListen where
+  show = genericShow
+
+instance DecodeJson ListenBrainzSubmitListen where
+  decodeJson json = do
+    obj <- decodeJson json
+    listenedAt <- obj .:? "listened_at"
+    trackMetadata <- obj .: "track_metadata"
+    pure $ ListenBrainzSubmitListen { listenedAt, trackMetadata }
+
+newtype ListenBrainzSubmitTrackMetadata = ListenBrainzSubmitTrackMetadata
+  { trackName :: String
+  , artistName :: String
+  , releaseName :: Maybe String
+  , additionalInfo :: Maybe ListenBrainzAdditionalInfo
+  }
+
+derive instance eqListenBrainzSubmitTrackMetadata :: Eq ListenBrainzSubmitTrackMetadata
+derive instance genericListenBrainzSubmitTrackMetadata :: Generic ListenBrainzSubmitTrackMetadata _
+instance showListenBrainzSubmitTrackMetadata :: Show ListenBrainzSubmitTrackMetadata where
+  show = genericShow
+
+instance DecodeJson ListenBrainzSubmitTrackMetadata where
+  decodeJson json = do
+    obj <- decodeJson json
+    trackName <- obj .: "track_name"
+    artistName <- obj .: "artist_name"
+    releaseName <- obj .:? "release_name"
+    additionalInfo <- obj .:? "additional_info"
+    pure $ ListenBrainzSubmitTrackMetadata { trackName, artistName, releaseName, additionalInfo }
+
+newtype ListenBrainzAdditionalInfo = ListenBrainzAdditionalInfo
+  { releaseMbid :: Maybe String
+  , artistMbids :: Maybe (Array String)
+  , recordingMbid :: Maybe String
+  }
+
+derive instance eqListenBrainzAdditionalInfo :: Eq ListenBrainzAdditionalInfo
+derive instance genericListenBrainzAdditionalInfo :: Generic ListenBrainzAdditionalInfo _
+instance showListenBrainzAdditionalInfo :: Show ListenBrainzAdditionalInfo where
+  show = genericShow
+
+instance DecodeJson ListenBrainzAdditionalInfo where
+  decodeJson json = do
+    obj <- decodeJson json
+    releaseMbid <- obj .:? "release_mbid"
+    artistMbids <- obj .:? "artist_mbids"
+    recordingMbid <- obj .:? "recording_mbid"
+    pure $ ListenBrainzAdditionalInfo { releaseMbid, artistMbids, recordingMbid }
+
 newtype ListenBrainzResponse = ListenBrainzResponse
   { payload :: Payload
   }

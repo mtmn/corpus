@@ -35,9 +35,11 @@
             "node-url",
             "now",
             "prelude",
+            "random",
             "strings",
             "tailrec",
             "unsafe-coerce",
+            "uuid",
             "web-url"
           ]
         },
@@ -2122,6 +2124,16 @@
       "version": "6.0.0",
       "integrity": "sha256-0L1QsaY20OILjfU5TV72d3U/tSjhmL9hJ32WMp857Lk=",
       "dependencies": []
+    },
+    "uuid": {
+      "type": "registry",
+      "version": "9.0.0",
+      "integrity": "sha256-aM/9+7xlHs5UDdtRfoEQosPpYOruwowa3sezIodJ3vk=",
+      "dependencies": [
+        "effect",
+        "maybe",
+        "prelude"
+      ]
     },
     "web-events": {
       "type": "registry",
