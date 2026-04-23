@@ -31,9 +31,11 @@ package:
     - node-url
     - now
     - prelude
+    - random
     - strings
     - tailrec
     - unsafe-coerce
+    - uuid
     - web-url
   test:
     main: Test.Main

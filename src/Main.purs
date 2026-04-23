@@ -5,16 +5,18 @@ import Prelude
 import Config (AppConfig, UserConfig, UserEntry, loadConfig, s3ConfigFromUser)
 import Cover (serveCover)
 import Cosine (serveSimilar)
+import Data.Argonaut (decodeJson, encodeJson, parseJson, stringify)
 import Data.Array (find, length)
+import Data.Array as Data.Array
 import Data.Either (Either(..))
-import Data.Foldable (for_)
+import Data.Foldable (for_, traverse_)
 import Data.Int (fromString, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (Pattern(..), stripPrefix)
 import Data.String.Regex (replace, parseFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (traverse)
-import Db (Connection, FilterField(..), backupDb, connect, getScrobbles, getStats, initDb, initReleaseMetadata, ping)
+import Db (Connection, FilterField(..), backupDb, connect, getOrCreateToken, getScrobbles, getStats, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, forkAff, joinFiber, killFiber, launchAff_, try)
 import Effect.Aff.AVar (AVar)
@@ -36,12 +38,14 @@ import Node.HTTP.Types (ServerResponse, IncomingMessage, IMServer)
 import Node.Net.Server (listenTcp, listeningH)
 import Node.Process (lookupEnv)
 import Node.Stream (end, write, writeString)
-import Data.Argonaut (encodeJson, stringify)
+import Node.Stream.Aff (readableToStringUtf8)
 import Sync (lbSync, lbSyncLoop, lfSync, lfSyncLoop)
 import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
 import Templates (indexHtml)
+import Types (Listen(..), ListenBrainzAdditionalInfo(..), ListenBrainzSubmitListen(..), ListenBrainzSubmitPayload(..), ListenBrainzSubmitTrackMetadata(..), MbidMapping(..), TrackMetadata(..))
+import Foreign.Object as Object
 
 -- Types
 type Request = IncomingMessage IMServer
@@ -53,6 +57,7 @@ type UserContext =
   , writeLock :: AVar Unit
   , config :: UserConfig
   , slug :: String
+  , token :: String
   , displayName :: String
   , enrichMetadataFiber :: Maybe (Fiber Unit)
   , backupFiber :: Maybe (Fiber Unit)
@@ -78,7 +83,7 @@ handleRequest metricsEnabled contexts req res = do
       let path = URL.pathname url
       Metrics.wrapRequest method (normalizePath path) Log.info req res do
         launchAff_ $ do
-          result <- try $ routeRequest metricsEnabled contexts url path allUsers res
+          result <- try $ routeRequest metricsEnabled contexts req url path allUsers res
           case result of
             Left err -> do
               Log.error $ "Internal server error: " <> Exception.message err
@@ -86,8 +91,8 @@ handleRequest metricsEnabled contexts req res = do
             Right _ ->
               pure unit
 
-routeRequest :: Boolean -> Array UserContext -> URL -> String -> Array { slug :: String, name :: String } -> Response -> Aff Unit
-routeRequest metricsEnabled contexts url path allUsers res = liftEffect $ case path of
+routeRequest :: Boolean -> Array UserContext -> Request -> URL -> String -> Array { slug :: String, name :: String } -> Response -> Aff Unit
+routeRequest metricsEnabled contexts req url path allUsers res = liftEffect $ case path of
   "/client.js" ->
     serveClientJs res
   "/favicon.png" ->
@@ -109,6 +114,12 @@ routeRequest metricsEnabled contexts url path allUsers res = liftEffect $ case p
     withUser url \ctx -> serveSimilar serveBadRequest serveError ctx.slug ctx.config url res
   "/healthz" ->
     withUser url \ctx -> serveHealthz ctx.conn res
+  "/1/submit-listens" ->
+    if IM.method req == "POST" then
+      withUserFromToken contexts req res \ctx ->
+        launchAff_ $ serveSubmitListens ctx.conn ctx.writeLock req res
+    else
+      serveBadRequest res "Method not allowed"
   _ ->
     case stripPrefix (Pattern "/u/") path of
       Just slug ->
@@ -127,6 +138,24 @@ routeRequest metricsEnabled contexts url path allUsers res = liftEffect $ case p
           serveNotFound res
         Just ctx ->
           f ctx
+
+  withUserFromToken contextsParam reqParam resParam f =
+    let
+      headers = IM.headers reqParam
+      mAuth = Object.lookup "authorization" headers
+      mToken = mAuth >>= stripPrefix (Pattern "Token ")
+    in
+      case mToken of
+        Nothing -> do
+          Log.warn "Missing or invalid Authorization header"
+          serveUnauthorized resParam
+        Just tokenValue ->
+          case find (\c -> c.token == tokenValue) contextsParam of
+            Nothing -> do
+              Log.warn $ "Unknown API token provided"
+              serveUnauthorized resParam
+            Just ctx ->
+              f ctx
 
 serveIndex :: Array { slug :: String, name :: String } -> String -> Response -> Effect Unit
 serveIndex allUsers slug res = do
@@ -246,12 +275,67 @@ serveHealthz db res = do
           void $ writeString w UTF8 $ """{"status":"error","message":""" <> show (Exception.message err) <> "}"
       end w
 
+serveSubmitListens :: Connection -> AVar Unit -> Request -> Response -> Aff Unit
+serveSubmitListens db lock req res = do
+  body <- readableToStringUtf8 (IM.toReadable req)
+  case parseJson body >>= decodeJson of
+    Left err ->
+      liftEffect $ serveBadRequest res $ "Invalid JSON: " <> show err
+    Right (ListenBrainzSubmitPayload { listenType, payload }) -> do
+      let listens = Data.Array.mapMaybe (submitListenToListen listenType) payload
+      withTransaction db lock $ traverse_ (upsertScrobble db) listens
+      liftEffect $ do
+        setHeader "Content-Type" "application/json" (toOutgoingMessage res)
+        setStatusCode 200 res
+        let w = toWriteable (toOutgoingMessage res)
+        void $ writeString w UTF8 """{"status":"ok"}"""
+        end w
+
+submitListenToListen :: String -> ListenBrainzSubmitListen -> Maybe Listen
+submitListenToListen "single" (ListenBrainzSubmitListen { listenedAt, trackMetadata }) =
+  Just $ Listen
+    { listenedAt
+    , trackMetadata: submitTrackMetadataToTrackMetadata trackMetadata
+    }
+submitListenToListen "import" (ListenBrainzSubmitListen { listenedAt, trackMetadata }) =
+  Just $ Listen
+    { listenedAt
+    , trackMetadata: submitTrackMetadataToTrackMetadata trackMetadata
+    }
+submitListenToListen "playing_now" _ = Nothing
+submitListenToListen _ _ = Nothing
+
+submitTrackMetadataToTrackMetadata :: ListenBrainzSubmitTrackMetadata -> TrackMetadata
+submitTrackMetadataToTrackMetadata (ListenBrainzSubmitTrackMetadata { trackName, artistName, releaseName, additionalInfo }) =
+  TrackMetadata
+    { trackName: Just trackName
+    , artistName: Just artistName
+    , releaseName
+    , genre: Nothing
+    , label: Nothing
+    , mbidMapping: do
+        info <- additionalInfo
+        let ListenBrainzAdditionalInfo i = info
+        pure $ MbidMapping
+          { releaseMbid: i.releaseMbid
+          , caaReleaseMbid: i.releaseMbid
+          }
+    }
+
 serveNotFound :: Response -> Effect Unit
 serveNotFound res = do
   setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
   setStatusCode 404 res
   let w = toWriteable (toOutgoingMessage res)
   void $ writeString w UTF8 "Not Found"
+  end w
+
+serveUnauthorized :: Response -> Effect Unit
+serveUnauthorized res = do
+  setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
+  setStatusCode 401 res
+  let w = toWriteable (toOutgoingMessage res)
+  void $ writeString w UTF8 "Unauthorized"
   end w
 
 serveInternalError :: Response -> Effect Unit
@@ -286,13 +370,13 @@ startUser { slug, name, config } = do
   initReleaseMetadata conn
   writeLock <- Avar.new unit
 
+  token <- getOrCreateToken conn slug
+  Log.info $ "User '" <> slug <> "' API token: " <> token
+
   case config.lastfmUser, config.lastfmApiKey of
-    Just _, Nothing -> Log.warn $ "lastfmUser set for user '" <> slug <> "' but lastfmApiKey is missing — Last.fm sync disabled"
+    Just _, Nothing -> Log.warn $ "User '" <> slug <> "': Last.fm sync disabled (missing API key)"
     _, _ -> pure unit
 
-  -- Fork initial syncs; they run in the background so the HTTP server can
-  -- start immediately. A separate fiber waits for them to finish before
-  -- starting the recurring loops (preserving the original ordering guarantee).
   lbFiber <- case config.listenbrainzUser of
     Just username -> Just <$> forkAff (lbSync conn username slug writeLock)
     Nothing -> pure Nothing
@@ -300,7 +384,6 @@ startUser { slug, name, config } = do
     Just lfmUser, Just apiKey -> Just <$> forkAff (lfSync conn apiKey lfmUser slug writeLock)
     _, _ -> pure Nothing
 
-  -- Wait for initial syncs then start recurring loops — all in background.
   void $ forkAff do
     for_ lbFiber joinFiber
     for_ lfFiber joinFiber
@@ -310,14 +393,13 @@ startUser { slug, name, config } = do
       Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser slug writeLock
       _, _ -> pure unit
 
-  -- Background tasks that don't depend on initial sync completion.
   enrichMetadataFiber <- forkAff $ enrichMetadata conn config slug
   backupFiber <-
     if config.backupEnabled then Just <$> forkAff (backupDb conn config.databaseFile (s3ConfigFromUser config) (toNumber config.backupIntervalHours * 3600000.0) slug)
     else pure Nothing
 
   let displayName = fromMaybe (if slug == "" then "root" else slug) name
-  pure { conn, writeLock, config, slug, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber }
+  pure { conn, writeLock, config, slug, token, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber }
 
 cleanupUser :: UserContext -> Aff Unit
 cleanupUser ctx = do
@@ -353,4 +435,3 @@ main = do
             Log.info $ "Server is running on " <> appConfig.host <> ":" <> show appConfig.port
 
           listenTcp netServer { host: appConfig.host, port: appConfig.port, backlog: 128 }
-
