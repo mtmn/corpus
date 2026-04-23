@@ -1,4 +1,9 @@
 import duckdb from "duckdb";
+import { createHash } from "crypto";
+
+export const sha256 = (str) => {
+	return createHash("sha256").update(str).digest("hex");
+};
 
 export const connectImpl = (path, cb) => () => {
 	const db = new duckdb.Database(path, (err) => {
