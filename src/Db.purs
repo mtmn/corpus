@@ -53,6 +53,7 @@ foreign import connectImpl :: Fn2 String (Nullable Error -> Nullable Connection 
 foreign import runImpl :: Fn4 Connection String (Array Foreign) (Nullable Error -> Effect Unit) (Effect Unit)
 foreign import allImpl :: Fn4 Connection String (Array Foreign) (Nullable Error -> Nullable (Array Json) -> Effect Unit) (Effect Unit)
 foreign import checkpointImpl :: Fn2 Connection (Nullable Error -> Effect Unit) (Effect Unit)
+foreign import sha256 :: String -> String
 
 connect :: String -> Aff Connection
 connect path = makeAff \cb -> do
@@ -147,18 +148,19 @@ queryAll conn sql params = makeAff \cb -> do
 initDb :: Connection -> Aff Unit
 initDb conn = do
   run conn "CREATE TABLE IF NOT EXISTS scrobbles (listened_at BIGINT PRIMARY KEY, track_name VARCHAR, artist_name VARCHAR, release_name VARCHAR, release_mbid VARCHAR, caa_release_mbid VARCHAR)" []
-  run conn "CREATE TABLE IF NOT EXISTS api_tokens (slug VARCHAR PRIMARY KEY, token VARCHAR UNIQUE)" []
+  run conn "CREATE TABLE IF NOT EXISTS api_tokens (slug VARCHAR PRIMARY KEY, hashed_token VARCHAR UNIQUE)" []
 
-getOrCreateToken :: Connection -> String -> Aff String
+getOrCreateToken :: Connection -> String -> Aff (Maybe String)
 getOrCreateToken conn slug = do
-  rows <- queryAll conn "SELECT token FROM api_tokens WHERE slug = ?" [ unsafeCoerce slug ]
-  case rows !! 0 >>= toObject >>= Object.lookup "token" >>= toString of
-    Just token ->
-      pure token
+  rows <- queryAll conn "SELECT hashed_token FROM api_tokens WHERE slug = ?" [ unsafeCoerce slug ]
+  case rows !! 0 >>= toObject >>= Object.lookup "hashed_token" >>= toString of
+    Just _ ->
+      pure Nothing
     Nothing -> do
       token <- liftEffect $ map UUID.toString UUID.genUUID
-      run conn "INSERT INTO api_tokens (slug, token) VALUES (?, ?)" [ unsafeCoerce slug, unsafeCoerce token ]
-      pure token
+      let hashedToken = sha256 token
+      run conn "INSERT INTO api_tokens (slug, hashed_token) VALUES (?, ?)" [ unsafeCoerce slug, unsafeCoerce hashedToken ]
+      pure $ Just token
 
 checkExists :: Connection -> Int -> Aff Boolean
 checkExists conn ts = do
@@ -387,5 +389,6 @@ rowToListen json = do
 
 getTokenUser :: Connection -> String -> Aff (Maybe String)
 getTokenUser conn token = do
-  rows <- queryAll conn "SELECT slug FROM api_tokens WHERE token = ?" [ unsafeCoerce token ]
+  let hashedToken = sha256 token
+  rows <- queryAll conn "SELECT slug FROM api_tokens WHERE hashed_token = ?" [ unsafeCoerce hashedToken ]
   pure $ rows !! 0 >>= toObject >>= Object.lookup "slug" >>= toString

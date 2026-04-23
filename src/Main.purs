@@ -16,7 +16,7 @@ import Data.String (Pattern(..), stripPrefix)
 import Data.String.Regex (replace, parseFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (traverse)
-import Db (Connection, FilterField(..), backupDb, connect, getOrCreateToken, getScrobbles, getStats, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
+import Db (Connection, FilterField(..), backupDb, connect, getOrCreateToken, getTokenUser, getScrobbles, getStats, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, forkAff, joinFiber, killFiber, launchAff_, try)
 import Effect.Aff.AVar (AVar)
@@ -57,7 +57,6 @@ type UserContext =
   , writeLock :: AVar Unit
   , config :: UserConfig
   , slug :: String
-  , token :: String
   , displayName :: String
   , enrichMetadataFiber :: Maybe (Fiber Unit)
   , backupFiber :: Maybe (Fiber Unit)
@@ -116,10 +115,10 @@ routeRequest metricsEnabled contexts req url path allUsers res = liftEffect $ ca
     withUser url \ctx -> serveHealthz ctx.conn res
   "/1/submit-listens" ->
     if IM.method req == "POST" then
-      withUserFromToken contexts req res \ctx ->
-        launchAff_ $ serveSubmitListens ctx.conn ctx.writeLock req res
+      launchAff_ $ withUserFromToken contexts req res \ctx ->
+        serveSubmitListens ctx.conn ctx.writeLock req res
     else
-      serveBadRequest res "Method not allowed"
+      liftEffect $ serveBadRequest res "Method not allowed"
   _ ->
     case stripPrefix (Pattern "/u/") path of
       Just slug ->
@@ -139,23 +138,40 @@ routeRequest metricsEnabled contexts req url path allUsers res = liftEffect $ ca
         Just ctx ->
           f ctx
 
-  withUserFromToken contextsParam reqParam resParam f =
-    let
-      headers = IM.headers reqParam
-      mAuth = Object.lookup "authorization" headers
-      mToken = mAuth >>= stripPrefix (Pattern "Token ")
-    in
-      case mToken of
-        Nothing -> do
-          Log.warn "Missing or invalid Authorization header"
+withUserFromToken :: Array UserContext -> Request -> Response -> (UserContext -> Aff Unit) -> Aff Unit
+withUserFromToken contextsParam reqParam resParam f = do
+  let
+    headers = IM.headers reqParam
+    mAuth = Object.lookup "authorization" headers
+    mToken = mAuth >>= stripPrefix (Pattern "Token ")
+  case mToken of
+    Nothing -> liftEffect $ do
+      Log.warn "Missing or invalid Authorization header"
+      serveUnauthorized resParam
+    Just tokenValue -> do
+      -- We need to check which connection to use to verify the token.
+      -- Since initDb creates the table in every user's database, but usually tokens are user-specific.
+      -- The current structure assumes each user has their own DB.
+      -- We'll try to find the user by checking each context's DB for the token.
+      mCtx <- findUserByToken contextsParam tokenValue
+      case mCtx of
+        Nothing -> liftEffect $ do
+          Log.warn $ "Unknown API token provided"
           serveUnauthorized resParam
-        Just tokenValue ->
-          case find (\c -> c.token == tokenValue) contextsParam of
-            Nothing -> do
-              Log.warn $ "Unknown API token provided"
-              serveUnauthorized resParam
-            Just ctx ->
-              f ctx
+        Just ctx ->
+          f ctx
+
+findUserByToken :: Array UserContext -> String -> Aff (Maybe UserContext)
+findUserByToken contexts tokenValue = case Data.Array.uncons contexts of
+  Nothing ->
+    pure Nothing
+  Just { head: ctx, tail: rest } -> do
+    mSlug <- getTokenUser ctx.conn tokenValue
+    case mSlug of
+      Just slug | slug == ctx.slug ->
+        pure (Just ctx)
+      _ ->
+        findUserByToken rest tokenValue
 
 serveIndex :: Array { slug :: String, name :: String } -> String -> Response -> Effect Unit
 serveIndex allUsers slug res = do
@@ -370,8 +386,9 @@ startUser { slug, name, config } = do
   initReleaseMetadata conn
   writeLock <- Avar.new unit
 
-  token <- getOrCreateToken conn slug
-  Log.info $ "User '" <> slug <> "' API token: " <> token
+  mToken <- getOrCreateToken conn slug
+  for_ mToken \token ->
+    Log.info $ "User '" <> slug <> "' token: " <> token
 
   case config.lastfmUser, config.lastfmApiKey of
     Just _, Nothing -> Log.warn $ "User '" <> slug <> "': Last.fm sync disabled (missing API key)"
@@ -399,7 +416,7 @@ startUser { slug, name, config } = do
     else pure Nothing
 
   let displayName = fromMaybe (if slug == "" then "root" else slug) name
-  pure { conn, writeLock, config, slug, token, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber }
+  pure { conn, writeLock, config, slug, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber }
 
 cleanupUser :: UserContext -> Aff Unit
 cleanupUser ctx = do
