@@ -47,6 +47,31 @@ npm run release
 npx spago run
 ```
 
+### Scrobbling API
+
+Corpus provides a [ListenBrainz-compatible](https://listenbrainz.readthedocs.io/en/latest/users/api-resources.html#post--1-submit-listens) endpoint for submitting scrobbles directly. This allows you to use any scrobbler that supports custom ListenBrainz endpoints (like [Pano Scrobbler](https://github.com/kawaiiDoge/PanoScrobbler) or [Simple Scrobbler](https://github.com/waicool20/Simple-Scrobbler)).
+
+#### Endpoint
+
+`POST /1/submit-listens`
+
+#### Authentication
+
+The API uses token-based authentication. A unique API token is automatically generated for each user when they first start the application. You can find your token in the server logs on startup:
+
+```text
+[INFO] User 'mtmn' token: 550e8400-e29b-41d4-a716-446655440000
+```
+
+Include the token in the `Authorization` header of your requests:
+
+```text
+Authorization: Token <your-token>
+```
+
+#### Payload Format
+
+The endpoint accepts standard ListenBrainz JSON payloads. See the [ListenBrainz API documentation](https://listenbrainz.readthedocs.io/en/latest/users/api-resources.html#post--1-submit-listens) for details.
 
 ### Environment variables
 

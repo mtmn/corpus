@@ -6,7 +6,7 @@ Corpus is a self-hosted music listening history dashboard and analytics service.
 
 ### Web Server
 The server is built with PureScript running on Node.js. It handles several core responsibilities:
-- **HTTP API**: Serves the frontend, scrobble data (with filtering/pagination), statistics, and similar tracks (via [cosine.club](https://cosine.club)).
+- **HTTP API**: Serves the frontend, scrobble data (with filtering/pagination), statistics, and similar tracks (via [cosine.club](https://cosine.club)). It also provides a **ListenBrainz-compatible scrobble submission endpoint**.
 - **ListenBrainz Sync**: A background process that polls the ListenBrainz API every 60 seconds to fetch new scrobbles.
 - **Last.fm Sync**: A background process that polls the Last.fm API every 60 seconds to fetch new scrobbles. Both syncs write to the same `scrobbles` table; duplicate timestamps are silently ignored.
 - **Metadata Enrichment**: A background process that identifies scrobbles with missing metadata (genres, labels, release years) and fetches information from MusicBrainz, Last.fm, and Discogs.
@@ -27,6 +27,7 @@ Corpus uses **DuckDB** for its primary data storage. Each user has their own dat
 - **Schema**:
     - `scrobbles`: Stores the core listening history (timestamp, track, artist, album, MBIDs). The `listened_at` Unix timestamp is the primary key — scrobbles from ListenBrainz and Last.fm deduplicate naturally.
     - `release_metadata`: Stores enriched metadata indexed by MusicBrainz Release ID (MBID), including genre, label, and release year.
+    - `api_tokens`: Stores hashed user API tokens for scrobble submission. Tokens are hashed with SHA-256 before storage.
 - **Performance**: DuckDB's columnar storage allows for extremely fast analytical queries across large listening histories.
 
 ### Storage
@@ -41,6 +42,7 @@ Corpus runs as a single server process serving multiple users. User configuratio
 - `/` and `/u/<slug>` — serve the Elm SPA for the root user and named users respectively
 - `/proxy?user=<slug>`, `/stats?user=<slug>`, `/cover?user=<slug>` — shared API endpoints, user selected via query parameter
 - `/healthz?user=<slug>` — liveness check; pings the user's DuckDB connection
+- `/1/submit-listens` — ListenBrainz-compatible scrobble submission endpoint (requires `Authorization: Token <token>` header)
 - `/metrics` — Prometheus metrics (no user parameter; covers all users; only available when `METRICS_ENABLED=true`)
 
 ### Configuration
