@@ -15,8 +15,8 @@ sed -i "/elmDeps = pkgs.stdenv.mkDerivation/,/outputHash =/ s|outputHash = \"sha
 # Update spagoDeps outputHash
 sed -i "/spagoDeps = pkgs.stdenv.mkDerivation/,/outputHash =/ s|outputHash = \"sha256-[^\"]*\"|outputHash = \"$PLACEHOLDER\"|" flake.nix
 
-nix build .#default --no-link 2>&1 | grep "got:" | sed 's/got: */npmDepsHash: /' || true
 nix build .#elmDeps --no-link 2>&1 | grep "got:" | sed 's/got: */elmDeps: /' || true
+nix build .#default --no-link 2>&1 | grep "got:" | sed 's/got: */npmDepsHash: /' || true
 nix build .#spagoDeps --no-link 2>&1 | grep "got:" | sed 's/got: */spagoDeps: /' || true
 
 echo "done"
