@@ -179,7 +179,7 @@ serveCover serveNotFound cfg slug url res = do
   trySource s3cfg false { name, s3Key, findUrl } = do
     cached <- checkS3 s3cfg s3Key
     if cached then do
-      Log.info $ "Serving " <> name <> " cover from S3: " <> s3Key
+      Log.info $ "Serving " <> name <> " cover from cache: " <> s3Key
       liftEffect $ Metrics.incCoverRequest slug name "s3_hit"
       liftEffect $ serveS3Redirect s3cfg s3Key res
       pure true
