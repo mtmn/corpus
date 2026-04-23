@@ -29,6 +29,14 @@ Stores enriched metadata fetched from MusicBrainz, Last.fm, and Discogs.
 | `release_year` | INTEGER | Year of release |
 | `genre_checked_at` | INTEGER | Timestamp of last enrichment attempt |
 
+### `api_tokens`
+Stores hashed user API tokens for scrobble submission.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `slug` | VARCHAR | User slug (Primary Key) |
+| `hashed_token` | VARCHAR | SHA-256 hash of the API token (Unique) |
+
 ## Application Usage
 
 The application interacts with DuckDB via a PureScript FFI layer (`src/Db.js` and `src/Db.purs`).
