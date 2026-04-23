@@ -41,14 +41,14 @@
             filter = name: _type: let
               baseName = baseNameOf (toString name);
             in
-              pkgs.lib.elem baseName ["elm.json" "src" "Client.elm"];
+              pkgs.lib.elem baseName ["elm.json" "src" "Client.elm" "Api.elm" "State.elm" "Types.elm" "View.elm"];
           };
 
           nativeBuildInputs = with pkgs; [elmPackages.elm cacert];
 
           outputHashAlgo = "sha256";
           outputHashMode = "recursive";
-          outputHash = "sha256-j4espZzGihuzirUfutYjg+YjGY+8A5QCrZbu99wjNnY=";
+          outputHash = "sha256-K+JndK6ySWQvUEa0+KGGP9+bGMXdZ6LkXj2X/16Ce+I=";
 
           buildPhase = ''
             export HOME=$TMPDIR
@@ -79,7 +79,7 @@
 
           outputHashAlgo = "sha256";
           outputHashMode = "recursive";
-          outputHash = "sha256-hUJb0OehrpmhnyQHJf1S9K96q+LoOLinDd8HlgHV+/E=";
+          outputHash = "sha256-dBorhgF/CIngAe+6fvvGHnGkQsk070SDZbgF5xTGx9c=";
 
           buildPhase = ''
             export HOME=$TMPDIR
@@ -131,7 +131,7 @@
           inherit ((builtins.fromJSON (builtins.readFile ./package.json))) version;
           inherit src;
 
-          npmDepsHash = "sha256-Fo2A9zFBIcFVQmqtTniSr2nQNKtVjiP0654R9tnyrBM=";
+          npmDepsHash = "sha256-pGAmk0KScByOUj0+9jnqtfC8gMgoyD54HyA68jnac4E=";
           npmRebuildFlags = ["--ignore-scripts"];
 
           nativeBuildInputs = with pkgs; [
@@ -187,30 +187,32 @@
           '';
         };
       in {
-        packages.default = corpus;
-
-        packages.container = pkgs.dockerTools.buildLayeredImage {
-          name = "corpus";
-          tag = "latest";
-          contents = [pkgs.nodejs pkgs.cacert];
-          config = {
-            Cmd = ["${corpus}/bin/corpus-server"];
-            WorkingDir = "/app";
-            ExposedPorts = {
-              "8321/tcp" = {};
+        packages = {
+          default = corpus;
+          inherit elmDeps spagoDeps;
+          container = pkgs.dockerTools.buildLayeredImage {
+            name = "corpus";
+            tag = "latest";
+            contents = [pkgs.nodejs pkgs.cacert];
+            config = {
+              Cmd = ["${corpus}/bin/corpus-server"];
+              WorkingDir = "/app";
+              ExposedPorts = {
+                "8321/tcp" = {};
+              };
+              User = "1000:1000";
+              Env = [
+                "PORT=8321"
+                "NODE_ENV=production"
+              ];
             };
-            User = "1000:1000";
-            Env = [
-              "PORT=8321"
-              "NODE_ENV=production"
-            ];
+            fakeRootCommands = ''
+              mkdir -p /app/data
+              chown -R 1000:1000 /app
+              chmod 700 /app/data
+            '';
+            enableFakechroot = true;
           };
-          fakeRootCommands = ''
-            mkdir -p /app/data
-            chown -R 1000:1000 /app
-            chmod 700 /app/data
-          '';
-          enableFakechroot = true;
         };
 
         devShells.default = pkgs.mkShell {
