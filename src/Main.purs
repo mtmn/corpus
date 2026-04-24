@@ -36,13 +36,14 @@ import Node.HTTP.ServerResponse (setStatusCode, toOutgoingMessage)
 import Node.HTTP.Server as Server
 import Node.HTTP.Types (ServerResponse, IncomingMessage, IMServer)
 import Node.Net.Server (listenTcp, listeningH)
-import Node.Process (lookupEnv)
+import Node.Process (argv, lookupEnv)
 import Node.Stream (end, write, writeString)
 import Node.Stream.Aff (readableToStringUtf8)
 import Sync (lbSync, lbSyncLoop, lfSync, lfSyncLoop)
 import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
+import Command as Command
 import Templates (indexHtml)
 import Types (Listen(..), ListenBrainzAdditionalInfo(..), ListenBrainzSubmitListen(..), ListenBrainzSubmitPayload(..), ListenBrainzSubmitTrackMetadata(..), MbidMapping(..), TrackMetadata(..))
 import Foreign.Object as Object
@@ -436,20 +437,25 @@ main = do
   dotenvConfig
   launchAff_ do
     configFile <- liftEffect $ map (fromMaybe "users.json") $ lookupEnv "CORPUS_USERS_FILE"
-    result <- try $ loadConfig configFile
-    case result of
-      Left err -> do
-        Log.error $ "Failed to load " <> configFile <> ": " <> Exception.message err
-        liftEffect $ Exception.throwException err
-      Right (appConfig :: AppConfig) -> do
-        Log.info $ "Loaded " <> show (length appConfig.users) <> " user(s) from " <> configFile
-        contexts <- traverse startUser appConfig.users
-        liftEffect $ do
-          server <- createServer
-          server # on_ Server.requestH (handleRequest appConfig.metricsEnabled contexts)
-          let netServer = Server.toNetServer server
+    args <- liftEffect argv
+    let commandArgs = Data.Array.drop 2 args
+    case Data.Array.uncons commandArgs of
+      Just _ -> Command.run configFile commandArgs
+      Nothing -> do
+        result <- try $ loadConfig configFile
+        case result of
+          Left err -> do
+            Log.error $ "Failed to load " <> configFile <> ": " <> Exception.message err
+            liftEffect $ Exception.throwException err
+          Right (appConfig :: AppConfig) -> do
+            Log.info $ "Loaded " <> show (length appConfig.users) <> " user(s) from " <> configFile
+            contexts <- traverse startUser appConfig.users
+            liftEffect $ do
+              server <- createServer
+              server # on_ Server.requestH (handleRequest appConfig.metricsEnabled contexts)
+              let netServer = Server.toNetServer server
 
-          netServer # on_ listeningH do
-            Log.info $ "Server is running on " <> appConfig.host <> ":" <> show appConfig.port
+              netServer # on_ listeningH do
+                Log.info $ "Server is running on " <> appConfig.host <> ":" <> show appConfig.port
 
-          listenTcp netServer { host: appConfig.host, port: appConfig.port, backlog: 128 }
+              listenTcp netServer { host: appConfig.host, port: appConfig.port, backlog: 128 }

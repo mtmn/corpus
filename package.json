@@ -14,6 +14,7 @@
 		"elm": "^0.19.1",
 		"esbuild": "^0.28.0",
 		"purescript": "^0.15.16",
+		"purescript-language-server": "^0.18.5",
 		"purescript-psa": "^0.9.0",
 		"purs-backend-es": "^1.4.3",
 		"purs-tidy": "^0.11.1",
