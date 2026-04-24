@@ -2,8 +2,9 @@ help:
     @just --list
 
 
-# Convert users.dhall to users.json
+# DEPRECATED: users.dhall is no longer the source of truth. Use `just add-user` instead.
 generate-users-json:
+    @echo "Warning: users.dhall is deprecated. Manage users with: just add-user / just list-users / just reset-token"
     dhall-to-json --file users.dhall > users.json
 
 # Setup npm and spago
