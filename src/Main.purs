@@ -440,7 +440,8 @@ main = do
     args <- liftEffect argv
     let commandArgs = Data.Array.drop 2 args
     case Data.Array.uncons commandArgs of
-      Just _ -> Command.run configFile commandArgs
+      Just _ ->
+        Command.run configFile commandArgs
       Nothing -> do
         result <- try $ loadConfig configFile
         case result of
