@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.8.0](https://github.com/mtmn/corpus/compare/v2.7.1...v2.8.0) (2026-04-24)
+
+
+### Features
+
+* add user mgmt commands ([d9c00d3](https://github.com/mtmn/corpus/commit/d9c00d357e271da9a447bdf0a4286bc15daf8109))
+* deprecate .dhall users file, fmt ([60781e3](https://github.com/mtmn/corpus/commit/60781e32e4c3f284560aa788ffcf882f48b72da8))
+
 ## [2.7.1](https://github.com/mtmn/corpus/compare/v2.7.0...v2.7.1) (2026-04-24)
 
 
