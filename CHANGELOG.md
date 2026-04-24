@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.7.1](https://github.com/mtmn/corpus/compare/v2.7.0...v2.7.1) (2026-04-24)
+
+
+### Bug Fixes
+
+* change cover cache order to caa=&gt;discogs=&gt;lastfm ([bd91c19](https://github.com/mtmn/corpus/commit/bd91c191491057e8b7870b0ceec744dba7aafb2c))
+* count api in scrobbles metric ([ecd0ef6](https://github.com/mtmn/corpus/commit/ecd0ef63b24fcb59388bf5171bbcfbc5def26661))
+
 ## [2.7.0](https://github.com/mtmn/corpus/compare/v2.6.0...v2.7.0) (2026-04-23)
 
 
