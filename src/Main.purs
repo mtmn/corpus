@@ -116,7 +116,7 @@ routeRequest metricsEnabled contexts req url path allUsers res = liftEffect $ ca
   "/1/submit-listens" ->
     if IM.method req == "POST" then
       launchAff_ $ withUserFromToken contexts req res \ctx ->
-        serveSubmitListens ctx.conn ctx.writeLock req res
+        serveSubmitListens ctx.slug ctx.conn ctx.writeLock req res
     else
       liftEffect $ serveBadRequest res "Method not allowed"
   _ ->
@@ -291,8 +291,8 @@ serveHealthz db res = do
           void $ writeString w UTF8 $ """{"status":"error","message":""" <> show (Exception.message err) <> "}"
       end w
 
-serveSubmitListens :: Connection -> AVar Unit -> Request -> Response -> Aff Unit
-serveSubmitListens db lock req res = do
+serveSubmitListens :: String -> Connection -> AVar Unit -> Request -> Response -> Aff Unit
+serveSubmitListens slug db lock req res = do
   body <- readableToStringUtf8 (IM.toReadable req)
   case parseJson body >>= decodeJson of
     Left err ->
@@ -301,6 +301,7 @@ serveSubmitListens db lock req res = do
       let listens = Data.Array.mapMaybe (submitListenToListen listenType) payload
       withTransaction db lock $ traverse_ (upsertScrobble db) listens
       liftEffect $ do
+        Metrics.incSyncScrobbles slug "api" (length listens)
         setHeader "Content-Type" "application/json" (toOutgoingMessage res)
         setStatusCode 200 res
         let w = toWriteable (toOutgoingMessage res)
