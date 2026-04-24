@@ -2,38 +2,38 @@ module Db where
 
 import Prelude
 
+import Config (S3Config)
+import Control.Monad.Error.Class (throwError)
+import Control.Monad.Rec.Class (forever)
 import Data.Argonaut.Core (Json, toObject, toNumber, toString)
+import Data.Array (mapMaybe, (!!), last, length, null, replicate)
 import Data.Either (Either(..))
+import Data.Foldable (for_)
+import Data.Formatter.DateTime (formatDateTime)
+import Data.Function.Uncurried (Fn2, Fn4, runFn2, runFn4)
+import Data.Int (fromString, round)
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Nullable (Nullable, toMaybe, toNullable)
+import Data.String (Pattern(..), split, stripSuffix)
+import Data.String.Common (joinWith)
 import Data.Time.Duration (Milliseconds(..))
+import Data.Tuple (Tuple(..))
+import Data.UUID (genUUID, toString) as UUID
 import Effect (Effect)
 import Effect.Aff (Aff, delay, makeAff, nonCanceler, try)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
 import Effect.Exception (Error, error, message)
-import Control.Monad.Error.Class (throwError)
 import Effect.Now (nowDateTime)
-import Data.Formatter.DateTime (formatDateTime)
-import Data.Function.Uncurried (Fn2, Fn4, runFn2, runFn4)
 import Foreign (Foreign)
-import Unsafe.Coerce (unsafeCoerce)
-import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEntry(..))
 import Foreign.Object as Object
-import Data.Nullable (Nullable, toMaybe, toNullable)
-import Data.Array (mapMaybe, (!!), last, length, null, replicate)
-import Data.Foldable (for_)
-import Data.String.Common (joinWith)
-import Data.Tuple (Tuple(..))
-import Data.Int (fromString, round)
-import Data.String (Pattern(..), split, stripSuffix)
-import Control.Monad.Rec.Class (forever)
-import Node.FS.Aff as FSA
-import Config (S3Config)
-import S3 as S3
 import Log as Log
 import Metrics as Metrics
-import Data.UUID (genUUID, toString) as UUID
+import Node.FS.Aff as FSA
+import S3 as S3
+import Types (Listen(..), TrackMetadata(..), MbidMapping(..), Stats(..), StatsEntry(..))
+import Unsafe.Coerce (unsafeCoerce)
 
 foreign import data Connection :: Type
 
