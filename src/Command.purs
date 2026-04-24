@@ -9,7 +9,7 @@ import Data.Array (catMaybes, find, snoc)
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Tuple (Tuple(..))
 import Db as Db
 import Effect.Aff (Aff)
@@ -19,17 +19,16 @@ import Effect.Exception (error)
 import Foreign.Object as Object
 import Node.Encoding (Encoding(UTF8))
 import Node.FS.Aff as FSA
-import Node.Process (cwd, exit, lookupEnv)
+import Node.Process (cwd, exit', lookupEnv)
 import Unsafe.Coerce (unsafeCoerce)
 
 foreign import prettyStringify :: Json -> String
 
 getFlag :: String -> Array String -> Maybe String
-getFlag flag args = case Array.uncons args of
-  Nothing -> Nothing
-  Just { head: k, tail: rest } ->
-    if k == flag then map _.head (Array.uncons rest)
-    else getFlag flag rest
+getFlag flag args = do
+  { head: k, tail: rest } <- Array.uncons args
+  if k == flag then map _.head (Array.uncons rest)
+  else getFlag flag rest
 
 resolvePath :: String -> Maybe String -> String -> String
 resolvePath defaultDir mDbPath file = case mDbPath of
@@ -69,65 +68,58 @@ writeUsersJson configFile users =
     $ fromObject
     $ Object.fromFoldable [ Tuple "users" (fromArray users) ]
 
+printUsage :: Aff Unit
+printUsage = liftEffect do
+  log "Usage:"
+  log "  add-user --slug <slug> --db <file> [--name <name>] [--listenbrainz-user <user>] [--lastfm-user <user>]"
+  log "  reset-token --slug <slug>"
+  log "  list-users"
+  exit' 1
+
 run :: String -> Array String -> Aff Unit
 run configFile args = case Array.uncons args of
   Just { head: "add-user", tail: rest } -> addUser configFile rest
   Just { head: "reset-token", tail: rest } -> resetToken configFile rest
   Just { head: "list-users" } -> listUsers configFile
-  _ -> liftEffect do
-    log "Usage:"
-    log "  add-user --slug <slug> --db <file> [--name <name>] [--listenbrainz-user <user>] [--lastfm-user <user>]"
-    log "  reset-token --slug <slug>"
-    log "  list-users"
-    exit 1
+  _ -> printUsage
 
 addUser :: String -> Array String -> Aff Unit
 addUser configFile args = do
   let
-    mSlug = getFlag "--slug" args
-    mDb = getFlag "--db" args
     mName = getFlag "--name" args
     mLbUser = getFlag "--listenbrainz-user" args
     mLfUser = getFlag "--lastfm-user" args
-  case mSlug, mDb of
-    Nothing, _ -> liftEffect $ log "Error: --slug is required" *> exit 1
-    _, Nothing -> liftEffect $ log "Error: --db is required" *> exit 1
-    Just slug, Just dbFile -> do
-      users <- readUsersJson configFile
-      case find (\u -> (toObject u >>= Object.lookup "slug" >>= toString) == Just slug) users of
-        Just _ -> liftEffect $ log ("Error: user '" <> slug <> "' already exists") *> exit 1
-        Nothing -> do
-          let newEntry = encodeUserEntry { slug, name: mName, dbFile, lbUser: mLbUser, lfUser: mLfUser }
-          writeUsersJson configFile (snoc users newEntry)
-          conn <- Db.connect dbFile
-          Db.initDb conn
-          Db.initReleaseMetadata conn
-          mToken <- Db.getOrCreateToken conn slug
-          liftEffect $ for_ mToken \token ->
-            log $ "Created user '" <> slug <> "'. API token: " <> token
+  slug <- maybe (liftEffect $ log "Error: --slug is required" *> exit' 1) pure (getFlag "--slug" args)
+  dbFile <- maybe (liftEffect $ log "Error: --db is required" *> exit' 1) pure (getFlag "--db" args)
+  users <- readUsersJson configFile
+  when (isJust $ find (\u -> (toObject u >>= Object.lookup "slug" >>= toString) == Just slug) users)
+    $ liftEffect
+    $ log ("Error: user '" <> slug <> "' already exists") *> exit' 1
+  let newEntry = encodeUserEntry { slug, name: mName, dbFile, lbUser: mLbUser, lfUser: mLfUser }
+  writeUsersJson configFile (snoc users newEntry)
+  conn <- Db.connect dbFile
+  Db.initDb conn
+  Db.initReleaseMetadata conn
+  mToken <- Db.getOrCreateToken conn slug
+  liftEffect $ for_ mToken \token ->
+    log $ "Created user '" <> slug <> "'. API token: " <> token
 
 resetToken :: String -> Array String -> Aff Unit
 resetToken configFile args = do
-  let mSlug = getFlag "--slug" args
-  case mSlug of
-    Nothing -> liftEffect $ log "Error: --slug is required" *> exit 1
-    Just slug -> do
-      users <- readUsersJson configFile
-      case find (\u -> (toObject u >>= Object.lookup "slug" >>= toString) == Just slug) users of
-        Nothing -> liftEffect $ log ("Error: user '" <> slug <> "' not found") *> exit 1
-        Just userJson -> do
-          let mDbFile = toObject userJson >>= Object.lookup "config" >>= toObject >>= Object.lookup "databaseFile" >>= toString
-          case mDbFile of
-            Nothing -> throwError (error $ "Cannot read databaseFile for user '" <> slug <> "'")
-            Just dbFile -> do
-              defaultDir <- liftEffect cwd
-              mDbPath <- liftEffect $ lookupEnv "DATABASE_PATH"
-              let fullPath = resolvePath defaultDir mDbPath dbFile
-              conn <- Db.connect fullPath
-              Db.run conn "DELETE FROM api_tokens WHERE slug = ?" [ unsafeCoerce slug ]
-              mToken <- Db.getOrCreateToken conn slug
-              liftEffect $ for_ mToken \token ->
-                log $ "New token for '" <> slug <> "': " <> token
+  slug <- maybe (liftEffect $ log "Error: --slug is required" *> exit' 1) pure (getFlag "--slug" args)
+  users <- readUsersJson configFile
+  userJson <- maybe (liftEffect $ log ("Error: user '" <> slug <> "' not found") *> exit' 1) pure
+    $ find (\u -> (toObject u >>= Object.lookup "slug" >>= toString) == Just slug) users
+  dbFile <- maybe (throwError $ error $ "Cannot read databaseFile for user '" <> slug <> "'") pure
+    $ toObject userJson >>= Object.lookup "config" >>= toObject >>= Object.lookup "databaseFile" >>= toString
+  defaultDir <- liftEffect cwd
+  mDbPath <- liftEffect $ lookupEnv "DATABASE_PATH"
+  let fullPath = resolvePath defaultDir mDbPath dbFile
+  conn <- Db.connect fullPath
+  Db.run conn "DELETE FROM api_tokens WHERE slug = ?" [ unsafeCoerce slug ]
+  mToken <- Db.getOrCreateToken conn slug
+  liftEffect $ for_ mToken \token ->
+    log $ "New token for '" <> slug <> "': " <> token
 
 listUsers :: String -> Aff Unit
 listUsers configFile = do

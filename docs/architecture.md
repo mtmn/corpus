@@ -36,7 +36,7 @@ Uses an S3-compatible bucket to cache cover art images.
 
 ## Multi-User Support
 
-Corpus runs as a single server process serving multiple users. User configuration is defined in `users.dhall`, compiled to `users.json` at build time.
+Corpus runs as a single server process serving multiple users. User configuration is defined in `users.json`, managed via the built-in CLI commands.
 
 ### Routing
 - `/` and `/u/<slug>` — serve the Elm SPA for the root user and named users respectively
@@ -45,10 +45,31 @@ Corpus runs as a single server process serving multiple users. User configuratio
 - `/1/submit-listens` — ListenBrainz-compatible scrobble submission endpoint (requires `Authorization: Token <token>` header)
 - `/metrics` — Prometheus metrics (no user parameter; covers all users; only available when `METRICS_ENABLED=true`)
 
+### User Management
+
+Users are managed via built-in CLI commands. The server must not be running when modifying `users.json`.
+
+```sh
+# Add a new user (creates the DB, prints the API token once)
+node server.js add-user --slug filip --name "Filip" --db filip.db
+
+# Optional: link a ListenBrainz or Last.fm account at creation time
+node server.js add-user --slug filip --name "Filip" --db filip.db \
+  --listenbrainz-user filip --lastfm-user filiplfm
+
+# List all users
+node server.js list-users
+
+# Regenerate the API token for a user
+node server.js reset-token --slug filip
+```
+
+The API token is only printed once on creation or reset — store it securely. It is used for the `/1/submit-listens` endpoint via `Authorization: Token <token>`.
+
 ### Configuration
 User configuration is split into two layers:
 
-1. **`users.dhall`** (build-time, non-sensitive): defines user slugs, source usernames, database filenames, and feature flags. Compiled to `users.json` at build time via `dhall-to-json`. The server reads this file at startup from the path in `CORPUS_USERS_FILE` (defaults to `users.json`).
+1. **`users.json`** (non-sensitive): defines user slugs, source usernames, database filenames, and feature flags. Managed via CLI (`add-user`, `reset-token`, `list-users`). The server reads this file at startup from the path in `CORPUS_USERS_FILE` (defaults to `users.json`).
 
 2. **Environment variables** (runtime, sensitive): shared API keys and S3 credentials are read from the environment at startup and applied to all users.
 
@@ -84,7 +105,7 @@ This prevents data corruption and ensures that any in-progress operations are co
 | `PORT` | `8000` | HTTP listen port |
 | `METRICS_ENABLED` | `false` | Set to `true` to enable the Prometheus `/metrics` endpoint |
 
-### users.dhall Fields
+### users.json Fields
 
 | Field | Type | Purpose |
 |---|---|---|
@@ -156,7 +177,7 @@ Node.js default metrics (GC, event loop, memory) are also collected via `prom-cl
 - **Language**: [PureScript](https://purescript.org) (server), [Elm](https://elm-lang.org) (frontend)
 - **Runtime**: [Node.js](https://nodejs.org)
 - **Database**: [DuckDB](https://duckdb.org) (one file per user)
-- **Config**: [Dhall](https://dhall-lang.org) → JSON (compiled at build time)
+- **Config**: JSON (`users.json`, managed via CLI)
 - **Bundling**: [spago](https://github.com/purescript/spago) + [esbuild](https://esbuild.github.io/) (server), [elm make](https://guide.elm-lang.org/install/elm.html) (frontend)
 - **Environment**: [Nix](https://nixos.org) for reproducible development shells and container builds
 

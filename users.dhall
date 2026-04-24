@@ -1,3 +1,9 @@
+-- DEPRECATED: users.dhall is no longer the source of truth.
+-- Manage users directly in users.json using the CLI:
+--   node server.js add-user --slug <slug> --db <file> [--name <name>]
+--   node server.js list-users
+--   node server.js reset-token --slug <slug>
+
 let UserConfig =
       { name : Optional Text
       , listenbrainzUser : Optional Text
