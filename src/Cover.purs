@@ -149,17 +149,17 @@ coverSources mbid artist release cfg =
         ]
   in
     caaSource <>
-      [ { name: "lastfm"
-        , s3Key: "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".avif"
-        , findUrl:
-            if artist == "" || release == "" then pure Nothing
-            else fetchLastfmCoverUrl cfg artist release
-        }
-      , { name: "discogs"
+      [ { name: "discogs"
         , s3Key: "covers/discogs/" <> safeArtist <> "-" <> safeRelease <> ".avif"
         , findUrl:
             if artist == "" || release == "" then pure Nothing
             else fetchDiscogsCoverUrl cfg artist release
+        }
+      , { name: "lastfm"
+        , s3Key: "covers/lastfm/" <> safeArtist <> "-" <> safeRelease <> ".avif"
+        , findUrl:
+            if artist == "" || release == "" then pure Nothing
+            else fetchLastfmCoverUrl cfg artist release
         }
       ]
 
