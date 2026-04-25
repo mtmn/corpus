@@ -77,11 +77,13 @@ printUsage = liftEffect do
   exit' 1
 
 run :: String -> Array String -> Aff Unit
-run configFile args = case Array.uncons args of
-  Just { head: "add-user", tail: rest } -> addUser configFile rest
-  Just { head: "reset-token", tail: rest } -> resetToken configFile rest
-  Just { head: "list-users" } -> listUsers configFile
-  _ -> printUsage
+run configFile args = do
+  case Array.uncons args of
+    Just { head: "add-user", tail: rest } -> addUser configFile rest
+    Just { head: "reset-token", tail: rest } -> resetToken configFile rest
+    Just { head: "list-users" } -> listUsers configFile
+    _ -> printUsage
+  liftEffect $ exit' 0
 
 addUser :: String -> Array String -> Aff Unit
 addUser configFile args = do
