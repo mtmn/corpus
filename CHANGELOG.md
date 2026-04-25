@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.1](https://github.com/mtmn/corpus/compare/v2.8.0...v2.8.1) (2026-04-25)
+
+
+### Bug Fixes
+
+* add corsOrigin config option ([3b8af96](https://github.com/mtmn/corpus/commit/3b8af96a105bafb36a7e27dbbc7d140438cce8e9))
+
 ## [2.8.0](https://github.com/mtmn/corpus/compare/v2.7.1...v2.8.0) (2026-04-24)
 
 
