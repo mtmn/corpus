@@ -3,7 +3,7 @@ A self-hosted [ListenBrainz](https://listenbrainz.org) and [Last.fm](https://las
 
 It includes storing scrobbles, metadata enrichment, and an interactive [PureScript](https://purescript.org) frontend for exploration of your listening habits.
 
-You can see it for yourself - [scrobbler.mtmn.name](https://scrobbler.mtmn.name)
+[scrobbler.mtmn.name](https://scrobbler.mtmn.name)
 
 ## Documentation
 
@@ -49,7 +49,7 @@ npx spago run
 
 ### Scrobbling API
 
-Corpus provides a [ListenBrainz-compatible](https://listenbrainz.readthedocs.io/en/latest/users/api-resources.html#post--1-submit-listens) endpoint for submitting scrobbles directly. This allows you to use any scrobbler that supports custom ListenBrainz endpoints (like [Pano Scrobbler](https://github.com/kawaiiDoge/PanoScrobbler) or [Simple Scrobbler](https://github.com/waicool20/Simple-Scrobbler)).
+Corpus provides a [ListenBrainz-compatible](https://listenbrainz.readthedocs.io/en/latest/) endpoint for submitting scrobbles directly. This allows you to use any scrobbler that supports custom ListenBrainz endpoints.
 
 #### Endpoint
 
@@ -71,7 +71,7 @@ Authorization: Token <your-token>
 
 #### Payload Format
 
-The endpoint accepts standard ListenBrainz JSON payloads. See the [ListenBrainz API documentation](https://listenbrainz.readthedocs.io/en/latest/users/api-resources.html#post--1-submit-listens) for details.
+The endpoint accepts standard ListenBrainz JSON payloads. See the [ListenBrainz API documentation](https://listenbrainz.readthedocs.io/en/latest/users/api/core.html#post--1-submit-listens) for details.
 
 ### Environment variables
 
