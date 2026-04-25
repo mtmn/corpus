@@ -71,8 +71,8 @@ normalizePath path = case stripPrefix (Pattern "/u/") path of
 -- Request handler
 -- API endpoints (/proxy, /stats, /cover, /healthz) select the user via ?user=<slug>.
 -- Index pages are served at / (root user) and /u/<slug> (named users).
-handleRequest :: Boolean -> Array UserContext -> Request -> Response -> Effect Unit
-handleRequest metricsEnabled contexts req res = do
+handleRequest :: Boolean -> String -> Array UserContext -> Request -> Response -> Effect Unit
+handleRequest metricsEnabled corsOrigin contexts req res = do
   let method = IM.method req
   let rawUrl = IM.url req
   let allUsers = map (\ctx -> { slug: ctx.slug, name: ctx.displayName }) contexts
@@ -83,7 +83,7 @@ handleRequest metricsEnabled contexts req res = do
       let path = URL.pathname url
       Metrics.wrapRequest method (normalizePath path) Log.info req res do
         launchAff_ $ do
-          result <- try $ routeRequest metricsEnabled contexts req url path allUsers res
+          result <- try $ routeRequest metricsEnabled corsOrigin contexts req url path allUsers res
           case result of
             Left err -> do
               Log.error $ "Internal server error: " <> Exception.message err
@@ -91,8 +91,8 @@ handleRequest metricsEnabled contexts req res = do
             Right _ ->
               pure unit
 
-routeRequest :: Boolean -> Array UserContext -> Request -> URL -> String -> Array { slug :: String, name :: String } -> Response -> Aff Unit
-routeRequest metricsEnabled contexts req url path allUsers res = liftEffect $ case path of
+routeRequest :: Boolean -> String -> Array UserContext -> Request -> URL -> String -> Array { slug :: String, name :: String } -> Response -> Aff Unit
+routeRequest metricsEnabled corsOrigin contexts req url path allUsers res = liftEffect $ case path of
   "/client.js" ->
     serveClientJs res
   "/favicon.png" ->
@@ -105,7 +105,7 @@ routeRequest metricsEnabled contexts req url path allUsers res = liftEffect $ ca
       Log.warn "Path not found: /metrics"
       serveNotFound res
   "/proxy" ->
-    withUser url \ctx -> serveProxy ctx.conn url res
+    withUser url \ctx -> serveProxy corsOrigin ctx.conn url res
   "/stats" ->
     withUser url \ctx -> serveStats ctx.conn url res
   "/cover" ->
@@ -221,9 +221,10 @@ parseFilterField "genre" = Just FilterGenre
 parseFilterField "track" = Just FilterTrack
 parseFilterField _ = Nothing
 
-serveProxy :: Connection -> URL -> Response -> Effect Unit
-serveProxy db url res = do
+serveProxy :: String -> Connection -> URL -> Response -> Effect Unit
+serveProxy corsOrigin db url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
+  setHeader "Access-Control-Allow-Origin" corsOrigin (toOutgoingMessage res)
 
   launchAff_ do
     let limit = fromMaybe 25 (getQueryParam "limit" url >>= fromString)
@@ -453,7 +454,7 @@ main = do
             contexts <- traverse startUser appConfig.users
             liftEffect $ do
               server <- createServer
-              server # on_ Server.requestH (handleRequest appConfig.metricsEnabled contexts)
+              server # on_ Server.requestH (handleRequest appConfig.metricsEnabled appConfig.corsOrigin contexts)
               let netServer = Server.toNetServer server
 
               netServer # on_ listeningH do

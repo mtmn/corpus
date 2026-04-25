@@ -45,6 +45,7 @@ type AppConfig =
   { port :: Int
   , host :: String
   , metricsEnabled :: Boolean
+  , corsOrigin :: String
   , users :: Array UserEntry
   }
 
@@ -93,6 +94,7 @@ loadConfig path = do
   awsS3AddressingStyle <- liftEffect $ lookupEnv "AWS_S3_ADDRESSING_STYLE"
   databasePath <- liftEffect $ lookupEnv "DATABASE_PATH"
   metricsEnabledStr <- liftEffect $ lookupEnv "METRICS_ENABLED"
+  corsOriginStr <- liftEffect $ lookupEnv "CORS_ORIGIN"
   defaultPath <- liftEffect cwd
   let
     resolvePath file = case databasePath of
@@ -114,7 +116,8 @@ loadConfig path = do
     port = fromMaybe 8000 (portStr >>= Data.Int.fromString)
     host = fromMaybe "127.0.0.1" hostStr
     metricsEnabled = metricsEnabledStr == Just "true"
-    fullConfig = { port, host, metricsEnabled, users: map (\u -> u { config = fillCreds u.config }) rawUsers }
+    corsOrigin = fromMaybe "*" corsOriginStr
+    fullConfig = { port, host, metricsEnabled, corsOrigin, users: map (\u -> u { config = fillCreds u.config }) rawUsers }
   case validateConfig fullConfig of
     Left msg -> throwError (error msg)
     Right cfg -> pure cfg

@@ -90,6 +90,7 @@ The endpoint accepts standard ListenBrainz JSON payloads. See the [ListenBrainz 
 | `AWS_S3_ADDRESSING_STYLE` | — | Set to `path` for path-style S3 URLs |
 | `COSINE_API_KEY` | — | [cosine.club](https://cosine.club) API key for similar tracks |
 | `METRICS_ENABLED` | `false` | Set to `true` to expose Prometheus metrics at `/metrics` |
+| `CORS_ORIGIN` | `*` | Value for the `Access-Control-Allow-Origin` header on `/proxy` responses (e.g. `https://mtmn.name`) |
 
 ### Per-user configuration
 
