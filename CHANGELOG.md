@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.3](https://github.com/mtmn/corpus/compare/v2.8.2...v2.8.3) (2026-04-25)
+
+
+### Bug Fixes
+
+* correct release-please after history rewrite ([9449944](https://github.com/mtmn/corpus/commit/944994467a8c3198aeb7818a7d220fe88d9fd6f2))
+* deprecate dhall-to-json ([b0cf508](https://github.com/mtmn/corpus/commit/b0cf508390fe81605b7c1944a14a135742c92217))
+* please relase ([2e6c34a](https://github.com/mtmn/corpus/commit/2e6c34a0a22a76bdd6c910f52ab9936af6379cfb))
+* remove corpus component from release-please config ([006dcb1](https://github.com/mtmn/corpus/commit/006dcb1739dbd7bd538733ae91a8d7d84e08e71d))
+* retrigger release-please ([5c25025](https://github.com/mtmn/corpus/commit/5c2502594c69e06ee1abc0118ed6f45fe01e1324))
+* unbork release-please, please ([a2e6545](https://github.com/mtmn/corpus/commit/a2e6545961e7f141ed4aa9519e84e1562f6447f0))
+
 ## [2.8.2](https://github.com/mtmn/corpus/compare/v2.8.1...v2.8.2) (2026-04-25)
 
 
