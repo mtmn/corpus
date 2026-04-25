@@ -50,6 +50,18 @@ nix command:
         exit 1; \
     fi
 
+# Add a new user (--slug and --db required; --name, --listenbrainz-user, --lastfm-user optional)
+add-user *args:
+    node server.js add-user {{args}}
+
+# Reset the API token for a user (--slug required)
+reset-token *args:
+    node server.js reset-token {{args}}
+
+# List all users
+list-users:
+    node server.js list-users
+
 # Run quality and security checks
 check:
     npx whine
