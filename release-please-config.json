@@ -1,8 +1,7 @@
 {
   "packages": {
     ".": {
-      "release-type": "node",
-      "component": "corpus"
+      "release-type": "node"
     }
   }
 }
