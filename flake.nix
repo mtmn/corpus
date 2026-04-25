@@ -140,7 +140,6 @@
             git
             purescript
             elmPackages.elm
-            dhall-json
           ];
 
           buildPhase = ''
@@ -166,7 +165,6 @@
             cp -r ${elmDeps}/packages $HOME/.elm/0.19.1/
             chmod -R u+w $HOME/.elm
 
-            dhall-to-json --file users.dhall > users.json
             npm run release
           '';
 
@@ -223,7 +221,6 @@
             awscli2
             duckdb
             esbuild
-            dhall-json
           ];
         };
       }
