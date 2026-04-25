@@ -1,6 +1,6 @@
 {
 	"name": "corpus",
-	"version": "2.8.1",
+	"version": "2.8.2",
 	"description": "ListenBrainz and Last.fm frontend",
 	"main": "index.js",
 	"type": "module",

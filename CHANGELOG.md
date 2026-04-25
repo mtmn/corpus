@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.2](https://github.com/mtmn/corpus/compare/v2.8.1...v2.8.2) (2026-04-25)
+
+
+### Bug Fixes
+
+* add user management recipes, exit properly ([fbed715](https://github.com/mtmn/corpus/commit/fbed7152571303bae3dcfa2316a23abf9ba89049))
+
 ## [2.8.1](https://github.com/mtmn/corpus/compare/v2.8.0...v2.8.1) (2026-04-25)
 
 
