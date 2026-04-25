@@ -15,7 +15,7 @@ This project uses [just](https://github.com/casey/just) and [Nix](https://nixos.
 ### Development
 
 ```bash
-# Enter the development shell (includes PureScript, DuckDB, etc.)
+# Enter the development shell
 just shell
 
 # Build
