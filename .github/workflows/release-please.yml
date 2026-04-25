@@ -18,7 +18,6 @@ jobs:
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: node
 
   update-nix-hash:
     runs-on: ubuntu-latest
