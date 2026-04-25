@@ -3,8 +3,6 @@ A self-hosted [ListenBrainz](https://listenbrainz.org) and [Last.fm](https://las
 
 It includes storing scrobbles, metadata enrichment, and an interactive [PureScript](https://purescript.org) frontend for exploration of your listening habits.
 
-[scrobbler.mtmn.name](https://scrobbler.mtmn.name)
-
 ## Documentation
 
 - [Architecture](docs/architecture.md) — Deep dive into the system components, data flow, and FFI usage.
@@ -49,7 +47,7 @@ npx spago run
 
 ### Scrobbling API
 
-Corpus provides a [ListenBrainz-compatible](https://listenbrainz.readthedocs.io/en/latest/) endpoint for submitting scrobbles directly. This allows you to use any scrobbler that supports custom ListenBrainz endpoints.
+Corpus provides a [ListenBrainz-compatible](https://listenbrainz.readthedocs.io/en/latest) endpoint for submitting scrobbles directly. This allows you to use any scrobbler that supports custom ListenBrainz endpoints.
 
 #### Endpoint
 
