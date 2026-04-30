@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.0](https://github.com/mtmn/corpus/compare/v2.8.3...v2.9.0) (2026-04-30)
+
+
+### Features
+
+* ensure that the builds are deterministic ([7863ebb](https://github.com/mtmn/corpus/commit/7863ebb170481342f0c267c89717944eb02fce87))
+
 ## [2.8.3](https://github.com/mtmn/corpus/compare/v2.8.2...v2.8.3) (2026-04-25)
 
 
