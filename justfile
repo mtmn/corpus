@@ -3,16 +3,16 @@ help:
 
 
 # Setup npm and spago
-setup: generate-users-json
+setup:
     npm install
     npx spago install
 
 # Build the project locally
-build: generate-users-json
+build:
     npm run build
 
 # Build a release
-release: generate-users-json
+release:
     npm run release
 
 # Run the project locally
