@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.1](https://github.com/mtmn/corpus/compare/v2.9.0...v2.9.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* still need that hash workflow, whoops ([3d4ee88](https://github.com/mtmn/corpus/commit/3d4ee887ba923537e7ffea5fbaf6b4daa983ed4d))
+
 ## [2.9.0](https://github.com/mtmn/corpus/compare/v2.8.3...v2.9.0) (2026-04-30)
 
 
