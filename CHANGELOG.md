@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.10.0](https://github.com/mtmn/corpus/compare/v2.9.1...v2.10.0) (2026-05-01)
+
+
+### Features
+
+* **nix:** integrate elm2nix ([ea29c4d](https://github.com/mtmn/corpus/commit/ea29c4d0f0037d49b5534d2ec0782d1c156687be))
+
+
+### Bug Fixes
+
+* **ci:** run tests from release-please pipeline ([a715068](https://github.com/mtmn/corpus/commit/a7150680598509a1cc510a9da51924e5b36d09e8))
+* **ci:** run tests on automated PRs ([2c48d72](https://github.com/mtmn/corpus/commit/2c48d724085260f3b684850691ddd9ff330c4272))
+* **nix:** rewrite build assets filtering ([27aa762](https://github.com/mtmn/corpus/commit/27aa762e67154fa5937330d931fd70a914ea53fd))
+
 ## [2.9.1](https://github.com/mtmn/corpus/compare/v2.9.0...v2.9.1) (2026-04-30)
 
 
