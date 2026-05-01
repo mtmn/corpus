@@ -94,18 +94,23 @@
 
         src = pkgs.lib.cleanSourceWith {
           src = self;
-          filter = name: type: let
-            baseName = baseNameOf (toString name);
+          filter = name: _type: let
+            relPath = pkgs.lib.removePrefix (toString self + "/") (toString name);
+            topDir = builtins.head (pkgs.lib.splitString "/" relPath);
           in
-            !((type == "directory" && (baseName == "docs" || baseName == ".git"))
-              || (type
-                == "regular"
-                && (
-                  pkgs.lib.hasSuffix ".md" baseName
-                  || baseName == "justfile"
-                  || baseName == "flake.nix"
-                  || baseName == "flake.lock"
-                )));
+            pkgs.lib.elem topDir [
+              ".env.example"
+              "package.json"
+              "package-lock.json"
+              "elm.json"
+              "spago.yaml"
+              "spago.lock"
+              "server.js"
+              "client.js"
+              "assets"
+              "users.json"
+              "src"
+            ];
         };
 
         corpus = pkgs.buildNpmPackage {
@@ -172,10 +177,7 @@
           ];
         };
 
-        packages = {
-          default = corpus;
-          inherit spagoDeps;
-        };
+        packages.default = corpus;
       }
     );
 }
