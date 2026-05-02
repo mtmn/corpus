@@ -11,6 +11,7 @@
 - Add permissions to release-please ([`357b8e7`](https://git.sr.ht/~mtmn/corpus/commit/357b8e7bb6378f2f1b9359148316997cdab06bea))
 - Manual bump version ([`165aed2`](https://git.sr.ht/~mtmn/corpus/commit/165aed2c24d76472a2a9a6396df397ec5cc19f4e))
 - Typo in just recipe ([`8ea50bc`](https://git.sr.ht/~mtmn/corpus/commit/8ea50bc75e18ca297cceae47bf66a1c8a955f96b))
+- Release script ([`8817d31`](https://git.sr.ht/~mtmn/corpus/commit/8817d31c8c53fe9c70f47f383d52670f8dcc94ff))
 
 ### Features
 
@@ -172,3 +173,5 @@
 - Add tests for endpoint ([`999c811`](https://git.sr.ht/~mtmn/corpus/commit/999c811e963a498ef34c4b4b0840ed17a3b8db87))
 - Add user mgmt commands ([`a19c9b4`](https://git.sr.ht/~mtmn/corpus/commit/a19c9b4436674bec22a1b55d9b83fed150072e84))
 - Deprecate .dhall users file, fmt ([`9eadd11`](https://git.sr.ht/~mtmn/corpus/commit/9eadd119054a9e65b0ce6053fc2e386f5fdb2f9b))
+
+
