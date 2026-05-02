@@ -1,0 +1,51 @@
+[changelog]
+header = "# Changelog\n\n"
+body = """
+{% if version -%}
+## [{{ version | trim_start_matches(pat="v") }}]{% if previous.version %} - {{ timestamp | date(format="%Y-%m-%d") }}{% endif %}
+
+{% if previous.version -%}
+[compare](https://git.sr.ht/~mtmn/corpus/log/{{ previous.version }}..{{ version }})
+
+{% endif -%}
+{% else -%}
+## [Unreleased]
+
+{% endif -%}
+{% for group, commits in commits | group_by(attribute="group") -%}
+### {{ group }}
+
+{% for commit in commits -%}
+- {% if commit.breaking %}**breaking:** {% endif -%}
+{% if commit.scope %}**{{ commit.scope }}:** {% endif -%}
+{{ commit.message | upper_first }} \
+([`{{ commit.id | truncate(length=7, end="") }}`](https://git.sr.ht/~mtmn/corpus/commit/{{ commit.id }}))
+{% endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+commit_parsers = [
+  { message = "^feat",             group = "Features" },
+  { message = "^fix",              group = "Bug Fixes" },
+  { message = "^perf",             group = "Performance" },
+  { message = "^refactor",         group = "Refactor" },
+  { message = "^revert",           group = "Reverts" },
+  { message = "^doc",              group = "Documentation" },
+  { message = "^test",             group = "Testing" },
+  { message = "^chore\\(deps\\)",  group = "Dependencies" },
+  { message = "^chore",            skip = true },
+  { message = "^ci",               skip = true },
+  { message = "^style",            skip = true },
+  { message = "^build",            skip = true },
+]
+protect_breaking_commits = true
+filter_commits = true
+tag_pattern = "v[0-9].*"
+topo_order = false
+sort_commits = "oldest"

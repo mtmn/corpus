@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+require() { command -v "$1" &>/dev/null || {
+	echo "error: $1 not found"
+	exit 1
+}; }
+require git
+require git-cliff
+require jq
+
+# --- pre-flight ---
+
+if [ -n "$(git status --porcelain)" ]; then
+	echo "error: working tree is dirty"
+	exit 1
+fi
+
+current=$(jq -r .version package.json)
+next=$(git-cliff --bumped-version 2>/dev/null | sed 's/^v//')
+
+if [ "$current" = "$next" ]; then
+	echo "no releasable commits since v$current"
+	exit 0
+fi
+
+echo "releasing $current -> $next"
+
+# --- update files ---
+
+jq --arg v "$next" '.version = $v' package.json >package.json.tmp
+mv package.json.tmp package.json
+
+git-cliff --tag "v$next" --output CHANGELOG.md
+
+# update npmDepsHash if nix and prefetch-npm-deps are available
+if command -v nix &>/dev/null; then
+	hash=$(nix run nixpkgs#prefetch-npm-deps -- package-lock.json 2>/dev/null)
+	sed -i "s|npmDepsHash = \"sha256-[^\"]*\"|npmDepsHash = \"$hash\"|" flake.nix
+fi
+
+# --- commit, tag, push ---
+
+git add package.json CHANGELOG.md flake.nix
+git commit -m "chore: release v$next"
+git tag -a "v$next" -m "release v$next"
+git push
+git push --tags
+
+echo "released v$next"

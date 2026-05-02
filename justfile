@@ -1,6 +1,10 @@
 help:
     @just --list
 
+# Bump version, update CHANGELOG, tag, and push (requires git-cliff)
+bump:
+    @hack/release
+
 
 # Setup npm and spago
 setup:
