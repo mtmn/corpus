@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.13.0] - 2026-05-02
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.12.0..v2.13.0)
+
+### Bug Fixes
+
+- Cleanup components ([`27b63ac`](https://git.sr.ht/~mtmn/corpus/commit/27b63acb8451c70fcf9084ac5bc0cc1e79945672))
+- Remove build ([`8fb6618`](https://git.sr.ht/~mtmn/corpus/commit/8fb661891ab4fd4a669d0af97ab150ab333050db))
+
+### Features
+
+- Change ua links to sourcehut ([`f57780c`](https://git.sr.ht/~mtmn/corpus/commit/f57780c0c47216a82c5940b267eb166b9cd4e060))
+
 ## [2.12.0] - 2026-05-02
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.11.0..v2.12.0)
