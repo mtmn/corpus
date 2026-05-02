@@ -1,0 +1,7 @@
+image: nixos/unstable
+sources:
+  - https://git.sr.ht/~mtmn/corpus
+tasks:
+  - build: |
+      cd corpus
+      nix build --print-build-logs
