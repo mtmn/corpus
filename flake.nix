@@ -26,15 +26,15 @@
     spagoRegistry = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry";
-      rev = "19f237b9f13c7b286ce2e7129d25d575db787bee";
-      hash = "sha256-xC8+jSfKM/MmdmAqRQ44ccRFTAvpwAnnAVs4IRoDhL4=";
+      rev = "b9925cf7976520730a4e0050c382cce25a8aed3f";
+      hash = "sha256-Qca07pap6AzgGZk0843OHB2WckrStj3JUjUV8T3WaSM=";
     };
 
     spagoRegistryIndex = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry-index";
-      rev = "77163eff5ea12e25d7391cf52fe5b9178145d843";
-      hash = "sha256-ez73ecGmzf5d7EkamNZ9KT8u7e4yR7jSvdiGu4bGAHs=";
+      rev = "47649cc1a35322fed50afbf8146b99e9cd73aaa9";
+      hash = "sha256-4mxAS92iYLHrU6c7SWh5wKYrci1ZLKImgMFe7xc+8wY=";
     };
 
     registryDat = generateRegistryDat {elmLock = ./elm.lock;};
@@ -65,7 +65,7 @@
 
       outputHashAlgo = "sha256";
       outputHashMode = "recursive";
-      outputHash = "sha256-dBorhgF/CIngAe+6fvvGHnGkQsk070SDZbgF5xTGx9c=";
+      outputHash = "sha256-LvWlpMyA7HJGSBzWOjjwAgO2ocOq+EdT2DvMizeNEZQ=";
 
       buildPhase = ''
         export HOME=$TMPDIR
@@ -115,7 +115,7 @@
       inherit ((builtins.fromJSON (builtins.readFile ./package.json))) version;
       inherit src;
 
-      npmDepsHash = "sha256-u5FdgYmwoWByoicl8PrXUaq+Cpq61uN5cjGEgBSsLlc=";
+      npmDepsHash = "sha256-koy7fLMDV+W2gdHe2ha08HRsY2nViaWes2MDP+LEyho=";
       npmRebuildFlags = ["--ignore-scripts"];
 
       nativeBuildInputs = with pkgs; [
