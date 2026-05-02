@@ -43,7 +43,7 @@ type GenreSource =
 fetchMusicBrainzRelease :: String -> Aff (Maybe MbData)
 fetchMusicBrainzRelease mbid = do
   let url = "https://musicbrainz.org/ws/2/release/" <> mbid <> "?inc=genres+labels+release-groups&fmt=json"
-  result <- try $ fetch url { method: GET, headers: { "User-Agent": "corpus/1.0 +https://github.com/mtmn/corpus" } }
+  result <- try $ fetch url { method: GET, headers: { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus" } }
   case result of
     Left err -> do
       Log.error $ "MusicBrainz fetch error for " <> mbid <> ": " <> Exception.message err
@@ -122,7 +122,7 @@ fetchDiscogsGenre (Just t) artist release = do
   let queryStr = artist <> " " <> release
   let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1"
   Log.info $ "Fetching Discogs genre for: " <> queryStr
-  result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 +https://github.com/mtmn/corpus", "Authorization": "Discogs token=" <> t } }
+  result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus", "Authorization": "Discogs token=" <> t } }
   case result of
     Right fetchRes | fetchRes.status == 200 -> do
       jsonResult <- try $ fromJson fetchRes.json

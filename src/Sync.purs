@@ -88,7 +88,7 @@ fetchLastfmPage apiKey lfmUser page mTo = withRetry "Last.fm fetch" do
       <> show page
       <> toParam
     url = baseUrl <> "&api_key=" <> apiKey
-  let headers = { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)" }
+  let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
   fr <- fetch url { method: GET, headers }
   if fr.status == 200 then do
     json <- fromJson fr.json

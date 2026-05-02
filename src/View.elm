@@ -684,7 +684,7 @@ renderAboutView currentSlug allUsers =
             [ h2 [] [ text "links" ]
             , p [ class "about-meta" ]
                 [ div [] [ extLink "https://instagram.com/counterpoint303" "counterpoint" ]
-                , div [] [ extLink "https://github.com/mtmn/corpus" "github repo" ]
+                , div [] [ extLink "https://sr.ht/~mtmn/corpus" "sourcehut" ]
                 , div [] [ extLink "https://mtmn.name" "mtmn.name" ]
                 ]
             ]

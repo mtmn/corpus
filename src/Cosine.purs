@@ -43,7 +43,7 @@ fetchCosineSimilar slug cfg query = do
     liftEffect $ Metrics.incCosineRequest slug "not_configured"
     pure "{\"data\":{\"similar_tracks\":[]},\"success\":true}"
   else do
-    let headers = { "User-Agent": "corpus/1.0 +https://github.com/mtmn/corpus", "Authorization": "Bearer " <> apiKey }
+    let headers = { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus", "Authorization": "Bearer " <> apiKey }
     let searchUrl = "https://cosine.club/api/v1/search?q=" <> (fromMaybe "" $ encodeURIComponent query) <> "&limit=1"
     Log.info $ "Cosine Club: searching for: " <> query
     searchResult <- try $ fetch searchUrl { method: GET, headers: headers }

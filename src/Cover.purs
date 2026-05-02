@@ -61,7 +61,7 @@ getQueryParam key url = URLSearchParams.get key (URL.searchParams url)
 fetchCaaCoverUrl :: String -> Aff (Maybe String)
 fetchCaaCoverUrl mbid = do
   let url = "https://coverartarchive.org/release/" <> mbid
-  let headers = { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)" }
+  let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
   result <- try $ fetch url { method: GET, headers }
   case result of
     Right fr | fr.status == 200 -> do
@@ -96,7 +96,7 @@ fetchLastfmCoverUrl cfg artist release = case cfg.lastfmApiKey of
         <> "&format=json&api_key="
         <> k
     Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
-    let headers = { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)" }
+    let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
     result <- try $ fetch searchUrl { method: GET, headers }
     case result of
       Right fr | fr.status == 200 -> do
@@ -122,7 +122,7 @@ fetchDiscogsCoverUrl cfg artist release = case cfg.discogsToken of
         <> (fromMaybe "" $ encodeURIComponent queryStr)
         <> "&type=release&per_page=1"
     Log.info $ "Searching Discogs for: " <> queryStr
-    result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)", "Authorization": "Discogs token=" <> t } }
+    result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)", "Authorization": "Discogs token=" <> t } }
     case result of
       Right fr | fr.status == 200 -> do
         json <- fromJson fr.json
@@ -215,7 +215,7 @@ serveCover serveNotFound cfg slug url res = do
       setHeader "Cache-Control" "public, max-age=3600" (toOutgoingMessage response)
       end (toWriteable (toOutgoingMessage response))
     when cfg.coverCacheEnabled $ void $ forkAff do
-      let headers = { "User-Agent": "corpus/1.0 (+https://github.com/mtmn/corpus)" }
+      let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
       fetchResult <- try $ fetch urlStr { method: GET, headers }
       case fetchResult of
         Right fr | fr.status == 200 -> do
