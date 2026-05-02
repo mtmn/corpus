@@ -16,15 +16,14 @@ if [ -n "$(git status --porcelain)" ]; then
 	exit 1
 fi
 
-current=$(jq -r .version package.json)
 next=$(git-cliff --bumped-version 2>/dev/null | sed 's/^v//')
 
-if [ "$current" = "$next" ]; then
-	echo "no releasable commits since v$current"
+if git tag | grep -qx "v$next"; then
+	echo "no releasable commits since v$next"
 	exit 0
 fi
 
-echo "releasing $current -> $next"
+echo "releasing -> v$next"
 
 # --- update files ---
 
