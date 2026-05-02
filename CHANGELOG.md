@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.0](https://github.com/mtmn/corpus/compare/v2.10.0...v2.11.0) (2026-05-02)
+
+
+### Features
+
+* **ci:** update workflows ([0cccee3](https://github.com/mtmn/corpus/commit/0cccee309076e29470f370e2268750f6c0e092df))
+
 ## [2.10.0](https://github.com/mtmn/corpus/compare/v2.9.1...v2.10.0) (2026-05-01)
 
 
