@@ -3,7 +3,7 @@ help:
 
 # Bump version, update CHANGELOG, tag, and push (requires git-cliff)
 bump:
-    @hack/release
+    @hack/git-release
 
 
 # Setup npm and spago
