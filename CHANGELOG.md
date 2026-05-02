@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.12.0] - 2026-05-02
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.11.0..v2.12.0)
+
+### Features
+
+- **ci:** Add build job ([`7963a79`](https://git.sr.ht/~mtmn/corpus/commit/7963a795a8cb0eb5ad63e3540fa0d39d47e53816))
+
 ## [2.11.0] - 2026-05-02
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.10.0..v2.11.0)
