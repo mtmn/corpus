@@ -1,7 +1,7 @@
 # corpus
 A self-hosted [ListenBrainz](https://listenbrainz.org) and [Last.fm](https://last.fm) frontend that stores metadata and cover images.
 
-It includes storing scrobbles, metadata enrichment, and an interactive [PureScript](https://purescript.org) frontend for exploration of your listening habits.
+It stores scrobbles, enriches track metadata and provides an interactive [Elm](https://elm-lang.org) interface.
 
 ## Documentation
 
