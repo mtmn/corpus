@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.13.1] - 2026-05-07
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.13.0..v2.13.1)
+
+### Housekeeping
+
+- Update readme ([`0434e69`](https://git.sr.ht/~mtmn/corpus/commit/0434e6940eb9914d8c8ce1c3aacdc285822e2860))
+- Migrate prek cfg to prek.toml ([`b9dac58`](https://git.sr.ht/~mtmn/corpus/commit/b9dac5800c75279dd289a6c524de73ac851de4cf))
+- **deps:** Bump versions ([`efa7176`](https://git.sr.ht/~mtmn/corpus/commit/efa71760da7427fec0560fa12a23d9883cf5f46c))
+- Update git-cliff config ([`440bd8a`](https://git.sr.ht/~mtmn/corpus/commit/440bd8aa2a6f247549a056285486bd0bd286edd0))
+- Rename git-release to release ([`a2fae24`](https://git.sr.ht/~mtmn/corpus/commit/a2fae2409be5a6b6121eb88d7a1bf219f3c1fc24))
+- Add nix to changelog, remove trailing lines ([`63ca30f`](https://git.sr.ht/~mtmn/corpus/commit/63ca30f8b2904d17cc55cfa145fe4ab3e8e7c0d3))
+- Skip pre-commit hooks when releasing ([`a29d830`](https://git.sr.ht/~mtmn/corpus/commit/a29d83001a963453a9c6c9839c1858487b91a393))
+- Update purescript-registry ([`3929bd6`](https://git.sr.ht/~mtmn/corpus/commit/3929bd63460d3d6e736a37edd12b56674bd1ec71))
+
 ## [2.13.0] - 2026-05-02
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.12.0..v2.13.0)
@@ -13,6 +28,10 @@
 
 - Change ua links to sourcehut ([`f57780c`](https://git.sr.ht/~mtmn/corpus/commit/f57780c0c47216a82c5940b267eb166b9cd4e060))
 
+### Housekeeping
+
+- Release v2.13.0 ([`93b4067`](https://git.sr.ht/~mtmn/corpus/commit/93b4067be293354834c6f253115d00d52ace22b6))
+
 ## [2.12.0] - 2026-05-02
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.11.0..v2.12.0)
@@ -20,6 +39,10 @@
 ### Features
 
 - **ci:** Add build job ([`7963a79`](https://git.sr.ht/~mtmn/corpus/commit/7963a795a8cb0eb5ad63e3540fa0d39d47e53816))
+
+### Housekeeping
+
+- Release v2.12.0 ([`01085bf`](https://git.sr.ht/~mtmn/corpus/commit/01085bfda2462360a0846cb18d4f78621a1f755f))
 
 ## [2.11.0] - 2026-05-02
 
@@ -40,6 +63,16 @@
 - Update deps, add `avar` ([`0f42152`](https://git.sr.ht/~mtmn/corpus/commit/0f42152c83db4bcea1968ca11d44839526fdc0cd))
 - **ci:** Add git-cliff ([`78575bf`](https://git.sr.ht/~mtmn/corpus/commit/78575bf44d136638156eb188890834543c237c38))
 
+### Housekeeping
+
+- **ci:** Run yamlfmt on workflows ([`5bb8bf1`](https://git.sr.ht/~mtmn/corpus/commit/5bb8bf128cbc9765fdd2a840b0d33bf5849013d3))
+- Remove `flake-utils` dependency ([`48ed620`](https://git.sr.ht/~mtmn/corpus/commit/48ed620d52f0b827c3b9f437858475c00e181d88))
+- **master:** Release 2.11.0 ([`c35cf06`](https://git.sr.ht/~mtmn/corpus/commit/c35cf0646989aee0dda0c3f96d8f715310ee17a0))
+- Update npmDepsHash ([`8e432d1`](https://git.sr.ht/~mtmn/corpus/commit/8e432d1bdab8fc7f171e46d8183f0d242237cda3))
+- Remove github workflows ([`52d0dca`](https://git.sr.ht/~mtmn/corpus/commit/52d0dcafc79b03d9034d54f555d4e7f7bf2a1907))
+- Update changelog ([`9143b3c`](https://git.sr.ht/~mtmn/corpus/commit/9143b3c9bcccab1a49fbfd0cd7118a621914d84c))
+- Release v2.11.0 ([`3b2a13f`](https://git.sr.ht/~mtmn/corpus/commit/3b2a13f13ac1d64a040c575899f23f3a6e4e8629))
+
 ## [2.10.0] - 2026-05-01
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.9.1..v2.10.0)
@@ -54,6 +87,11 @@
 
 - **nix:** Integrate elm2nix ([`ea29c4d`](https://git.sr.ht/~mtmn/corpus/commit/ea29c4d0f0037d49b5534d2ec0782d1c156687be))
 
+### Housekeeping
+
+- **master:** Release 2.10.0 ([`2513efb`](https://git.sr.ht/~mtmn/corpus/commit/2513efb27e98ccae5b1c581f4fee7b143882a877))
+- Update npmDepsHash ([`1d056ce`](https://git.sr.ht/~mtmn/corpus/commit/1d056cedb4dba8c87a97eb1045d025466565a3b6))
+
 ## [2.9.1] - 2026-04-30
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.9.0..v2.9.1)
@@ -62,6 +100,11 @@
 
 - Still need that hash workflow, whoops ([`3d4ee88`](https://git.sr.ht/~mtmn/corpus/commit/3d4ee887ba923537e7ffea5fbaf6b4daa983ed4d))
 
+### Housekeeping
+
+- **master:** Release 2.9.1 ([`28ecf5e`](https://git.sr.ht/~mtmn/corpus/commit/28ecf5e80cb9eae4660e46c509f461b27a7ce35a))
+- Update npmDepsHash ([`5e68052`](https://git.sr.ht/~mtmn/corpus/commit/5e68052886ac5e560bca13200d28dc39b247ae53))
+
 ## [2.9.0] - 2026-04-30
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.8.3..v2.9.0)
@@ -69,6 +112,12 @@
 ### Features
 
 - Ensure that the builds are deterministic ([`7863ebb`](https://git.sr.ht/~mtmn/corpus/commit/7863ebb170481342f0c267c89717944eb02fce87))
+
+### Housekeeping
+
+- Stop tripping over nix hash changes ([`2b85aa2`](https://git.sr.ht/~mtmn/corpus/commit/2b85aa227b2a8f68fec29103923634c62a0ea079))
+- Add license ([`c80b111`](https://git.sr.ht/~mtmn/corpus/commit/c80b111cffd5edfeb6a26db5bfad06d948d5be84))
+- **master:** Release 2.9.0 ([`977520e`](https://git.sr.ht/~mtmn/corpus/commit/977520edb95c776ec1f5cf1900e3e202dd5fff8d))
 
 ## [2.8.3] - 2026-04-25
 
@@ -82,6 +131,13 @@
 - Remove corpus component from release-please config ([`006dcb1`](https://git.sr.ht/~mtmn/corpus/commit/006dcb1739dbd7bd538733ae91a8d7d84e08e71d))
 - Retrigger release-please ([`5c25025`](https://git.sr.ht/~mtmn/corpus/commit/5c2502594c69e06ee1abc0118ed6f45fe01e1324))
 - Please relase ([`2e6c34a`](https://git.sr.ht/~mtmn/corpus/commit/2e6c34a0a22a76bdd6c910f52ab9936af6379cfb))
+
+### Housekeeping
+
+- Update npmDepsHash ([`cf11301`](https://git.sr.ht/~mtmn/corpus/commit/cf113016fa06d8165400a09e8b20e81efac5d2c8))
+- Bump flake outputHash ([`8ad2d0e`](https://git.sr.ht/~mtmn/corpus/commit/8ad2d0ef8000b3b0888ba61ff0df00e69ee9d00f))
+- **master:** Release 2.8.3 ([`11b0e80`](https://git.sr.ht/~mtmn/corpus/commit/11b0e809d4564fa97c4d8278be49e64cb9e90dcb))
+- Update npmDepsHash ([`542dc35`](https://git.sr.ht/~mtmn/corpus/commit/542dc35c4332134acd55d7ad45fb2bd0a0296b48))
 
 ## [2.8.2] - 2026-04-25
 
@@ -195,4 +251,113 @@
 - Add user mgmt commands ([`a19c9b4`](https://git.sr.ht/~mtmn/corpus/commit/a19c9b4436674bec22a1b55d9b83fed150072e84))
 - Deprecate .dhall users file, fmt ([`9eadd11`](https://git.sr.ht/~mtmn/corpus/commit/9eadd119054a9e65b0ce6053fc2e386f5fdb2f9b))
 
+### Housekeeping
 
+- Add gitignore ([`db67d60`](https://git.sr.ht/~mtmn/corpus/commit/db67d60f9d5278957dde85a2cb078dc7c573eb36))
+- Fiddling with builds, naming ([`31c8243`](https://git.sr.ht/~mtmn/corpus/commit/31c8243c27a5c3093a8fb1192b50b3ae011a740d))
+- Remove node-sqlite3 dependency ([`9dfaa89`](https://git.sr.ht/~mtmn/corpus/commit/9dfaa892efce32fd26b4da883cb602b05d547dad))
+- Fiddling with builds, naming ([`40b1bdf`](https://git.sr.ht/~mtmn/corpus/commit/40b1bdf011002dfbd91b13e88adfb97c28efa513))
+- Fix nix, logging, fmt ([`047be2f`](https://git.sr.ht/~mtmn/corpus/commit/047be2f0eb8b5160dc8984f1b9492074a859d3bb))
+- Cleanup, builds ([`f1dfd5b`](https://git.sr.ht/~mtmn/corpus/commit/f1dfd5bfb4ff9ad745980ee11232dbeb54ba3633))
+- Add favicon ([`512443c`](https://git.sr.ht/~mtmn/corpus/commit/512443c84e5ccd144230a3144052bd93d09f5afe))
+- Add binary cache ([`58cec8b`](https://git.sr.ht/~mtmn/corpus/commit/58cec8be9943c35f2a33e50d1d2fdb23ba1875d0))
+- Making builds work ([`cdfe276`](https://git.sr.ht/~mtmn/corpus/commit/cdfe2766168c3942aa8abbf906dbdf4f989badb7))
+- Typo ([`28b040e`](https://git.sr.ht/~mtmn/corpus/commit/28b040e16e8438368723dd6a8aeac5457317aee9))
+- Add /healthz endpoint ([`c47e7de`](https://git.sr.ht/~mtmn/corpus/commit/c47e7de4582aaed2442c40ff7a6c05e655fcde7e))
+- Add footer, update readme, tidy ([`978298d`](https://git.sr.ht/~mtmn/corpus/commit/978298d616a5c72ef42e0ca57522ca83a23aab7c))
+- Update example dotenv, add to nix env ([`738a007`](https://git.sr.ht/~mtmn/corpus/commit/738a007143d436437d108e93b2aa1d6b5623917d))
+- Update docs and justfile ([`fbf0143`](https://git.sr.ht/~mtmn/corpus/commit/fbf0143888d418d809dc034a502eb71e744d60df))
+- Fix nix build, remove dangling deps ([`aa1906e`](https://git.sr.ht/~mtmn/corpus/commit/aa1906e73cdfeae6177d54f357ad9a7a34dd1e97))
+- Fix nix builds ([`17ef69c`](https://git.sr.ht/~mtmn/corpus/commit/17ef69c19d08d6737d492833ec49b99ddb6b7cd4))
+- Add favicon ([`d2a0549`](https://git.sr.ht/~mtmn/corpus/commit/d2a0549aa298bc4366264e6ba2e5bf6b11d37c23))
+- Add devenv and cachix ([`8a2ffb5`](https://git.sr.ht/~mtmn/corpus/commit/8a2ffb58b5cd338c373c626d7fde0def8501ba77))
+- Install pre-commit hooks ([`c3ca613`](https://git.sr.ht/~mtmn/corpus/commit/c3ca613d0131185e4a661a388323cf5ce045e050))
+- Run biome on src/ and test/ ([`b719cd5`](https://git.sr.ht/~mtmn/corpus/commit/b719cd5c618c34c5081095831f3f2a75e81d4098))
+- System flow fixes ([`0573219`](https://git.sr.ht/~mtmn/corpus/commit/05732197d5a128b088863b4d7a6d57195278dc30))
+- Update custom binary cache ([`5e8ea1b`](https://git.sr.ht/~mtmn/corpus/commit/5e8ea1b40bf52fb2d43a8b651454d1f9795c38ff))
+- Rename to corpus ([`db138cf`](https://git.sr.ht/~mtmn/corpus/commit/db138cf32d94d0f814bb755e004484ee90f06174))
+- Rename to corpus ([`709e797`](https://git.sr.ht/~mtmn/corpus/commit/709e79732448b73df60384f3cc765cb8d3d65a64))
+- Remove custom binary cache ([`d9bf40b`](https://git.sr.ht/~mtmn/corpus/commit/d9bf40b8520765507c4c60d32717b22315c5f75a))
+- Cleanup ([`14fa6fe`](https://git.sr.ht/~mtmn/corpus/commit/14fa6fef846e74b2eb12a3a5ba2a3e98c2f85f6a))
+- Remove containerfile ([`bf90a88`](https://git.sr.ht/~mtmn/corpus/commit/bf90a88810bdfd34f90bf86ebd55823f8ffa1fa3))
+- Remove containerfile ([`738ec19`](https://git.sr.ht/~mtmn/corpus/commit/738ec194665b4cb0a9ae6e30d5ed16f2a5cd4275))
+- Update docs ([`63d4460`](https://git.sr.ht/~mtmn/corpus/commit/63d4460d28f3fc063102a38d575b282a45a6b1f9))
+- Update readme ([`4c106be`](https://git.sr.ht/~mtmn/corpus/commit/4c106be4c248eb210665588b13d958b506cb9f0a))
+- Rename users config environment variable ([`92ffec1`](https://git.sr.ht/~mtmn/corpus/commit/92ffec13f93b0f4ac52fd89b3c474b005b7c29c3))
+- Remove update timestamp from footer ([`0666d4f`](https://git.sr.ht/~mtmn/corpus/commit/0666d4fb772b2e4d1fee48fa786a74db605e735e))
+- Add dev just recipe, cleanup users.dhall ([`5ee993e`](https://git.sr.ht/~mtmn/corpus/commit/5ee993e1b5a2e6bc343d30d88b47022361d00b68))
+- Update flake hash ([`057c57a`](https://git.sr.ht/~mtmn/corpus/commit/057c57a2248f06e2de041fe028701318e616a271))
+- Add purs-backend-es lib ([`c004ec3`](https://git.sr.ht/~mtmn/corpus/commit/c004ec32133da069ac9da7ab78da7bf88ea2b2e7))
+- Add access logs ([`95053ec`](https://git.sr.ht/~mtmn/corpus/commit/95053ec72011d16c922192e687ae5445e80260a1))
+- Bump npm deps hash ([`bf29101`](https://git.sr.ht/~mtmn/corpus/commit/bf2910189341ad9d4e35b94ea400d530ece5d115))
+- Add missing env vars to readme ([`69b5c0c`](https://git.sr.ht/~mtmn/corpus/commit/69b5c0cabb9dd07c86d3d700cfbb7c824a630b31))
+- Update readme ([`e05206f`](https://git.sr.ht/~mtmn/corpus/commit/e05206f4d552869ae52b1e98cff8affc8b7a2426))
+- Bump version ([`0217d14`](https://git.sr.ht/~mtmn/corpus/commit/0217d144f4eedc7886dd6c2248eddc81170fd44e))
+- Bump version ([`5650456`](https://git.sr.ht/~mtmn/corpus/commit/5650456a2446e68023eef7cef50aace64c4f4df3))
+- Add release-please pipeline ([`9e974d4`](https://git.sr.ht/~mtmn/corpus/commit/9e974d4ffcef08794c6cd9066114b37dd9bf9bf6))
+- **master:** Release 1.1.1 ([`03b5b27`](https://git.sr.ht/~mtmn/corpus/commit/03b5b27f31aaab33980ed75ad8e0e2945b2dafad))
+- Update npmDepsHash ([`00639ce`](https://git.sr.ht/~mtmn/corpus/commit/00639ce3e32f428229513fa5da0666862c4987ba))
+- Update docs ([`a348e61`](https://git.sr.ht/~mtmn/corpus/commit/a348e61601bda61181ab34c5a07142b593f25173))
+- **master:** Release 1.2.0 ([`afdf230`](https://git.sr.ht/~mtmn/corpus/commit/afdf230e546cb0241476da42514f426a44618767))
+- Update npmDepsHash ([`bdacf8e`](https://git.sr.ht/~mtmn/corpus/commit/bdacf8effe9b69cd333a10e8a5a59b883ea15198))
+- Add whine (linter) ([`e0b2708`](https://git.sr.ht/~mtmn/corpus/commit/e0b2708337cc3ef8f418dc3f2098ee13fd133ba1))
+- Linter fixes ([`ac54052`](https://git.sr.ht/~mtmn/corpus/commit/ac540524df7d2b50eac6ba64abd1943ebff6ed3c))
+- Add tests ([`60f391f`](https://git.sr.ht/~mtmn/corpus/commit/60f391feab7ec65bb942b0d13edcd7c8a7a38d19))
+- Pin versions; init pinact ([`69bd019`](https://git.sr.ht/~mtmn/corpus/commit/69bd019f0f97968e31b470a4634fb9ac4459352a))
+- **master:** Release 1.3.0 ([`4065e4b`](https://git.sr.ht/~mtmn/corpus/commit/4065e4be6622aaf7c6fb7b54a7d87c8837b340f7))
+- Update npmDepsHash ([`afb05b0`](https://git.sr.ht/~mtmn/corpus/commit/afb05b059aaf926828c9b27cc7d334ae71999e6d))
+- **master:** Release 1.3.1 ([`f3f26ab`](https://git.sr.ht/~mtmn/corpus/commit/f3f26ab458f1ee147a407a7f1f36f1619bd89be6))
+- Update npmDepsHash ([`c39d3f1`](https://git.sr.ht/~mtmn/corpus/commit/c39d3f1aac6c535cd445e99ca78a43cbbdef85ee))
+- **master:** Release 1.4.0 ([`d39639f`](https://git.sr.ht/~mtmn/corpus/commit/d39639f72d8e4f42da9fcc1b0149cda8ee7c6476))
+- Update npmDepsHash ([`604aec6`](https://git.sr.ht/~mtmn/corpus/commit/604aec6349fab29290e157b08dd675671fec5468))
+- **master:** Release 2.0.0 ([`cd2a354`](https://git.sr.ht/~mtmn/corpus/commit/cd2a354a19c54a75071273baf40bb3f9f4112070))
+- Update npmDepsHash ([`83db397`](https://git.sr.ht/~mtmn/corpus/commit/83db39782470bc822bde217ab5f4e8687943b342))
+- **master:** Release 2.1.0 ([`9c02d52`](https://git.sr.ht/~mtmn/corpus/commit/9c02d5293871223da90dece5cdc28b5a965fb439))
+- Update npmDepsHash ([`9f54422`](https://git.sr.ht/~mtmn/corpus/commit/9f54422364a7e9ef100c22946a98089f059c0504))
+- Update readme ([`61538d6`](https://git.sr.ht/~mtmn/corpus/commit/61538d62c27818f50242e854d72135ae67cf5e6c))
+- Add cosine.club to docs ([`f6b3917`](https://git.sr.ht/~mtmn/corpus/commit/f6b391770ecbd9f8b3ef3608df6f14f8708f485a))
+- **master:** Release 2.1.1 ([`7d364aa`](https://git.sr.ht/~mtmn/corpus/commit/7d364aa04872c66b780b86facc771b0a23561da7))
+- Update npmDepsHash ([`efcc94f`](https://git.sr.ht/~mtmn/corpus/commit/efcc94f92296803b08e5f85a92746a047d5c82fb))
+- Add dhall to json recipe ([`b979cc5`](https://git.sr.ht/~mtmn/corpus/commit/b979cc51ba34921de5e169edd453ea5bcd7f825b))
+- Update links ([`be7ddb4`](https://git.sr.ht/~mtmn/corpus/commit/be7ddb4f3b074eecd1107cfca3c6adfcbb7b6c1f))
+- Add elm-analyse to check recipe ([`5b39e9c`](https://git.sr.ht/~mtmn/corpus/commit/5b39e9c30e9cbc3618aed559857190b3531c3ef7))
+- Add whine to check recipe ([`c456c17`](https://git.sr.ht/~mtmn/corpus/commit/c456c17f2b09f765c4f9b6085f2593d56e209d7d))
+- **master:** Release 2.2.0 ([`1ba702e`](https://git.sr.ht/~mtmn/corpus/commit/1ba702e7096b30787147734d376b128b31fa6ca9))
+- Update npmDepsHash ([`1d6fdcd`](https://git.sr.ht/~mtmn/corpus/commit/1d6fdcd3b19171ea2c3f79014920e09b2829adf0))
+- **nix:** Incorrect npm hash ([`0f90580`](https://git.sr.ht/~mtmn/corpus/commit/0f9058098329f7cb3106cfe00e15dbf0aa54ead3))
+- Update users.dhall ([`bf79784`](https://git.sr.ht/~mtmn/corpus/commit/bf79784a0508c459077701c5d4e860cf7fe12828))
+- **elm:** Wording in about section ([`d4a0fee`](https://git.sr.ht/~mtmn/corpus/commit/d4a0feea18c1a5a0fa860a88e5544b0c968ed84a))
+- Increase backup frequency to 24h ([`b0fe62f`](https://git.sr.ht/~mtmn/corpus/commit/b0fe62f13b4b19b7ada111b68521cb0bf262ff98))
+- Use Fn/runFn for multi-argument FFIs ([`90ac1a2`](https://git.sr.ht/~mtmn/corpus/commit/90ac1a2fba7a2fe507056ae58e919f74737df402))
+- **master:** Release 2.3.0 ([`19a440f`](https://git.sr.ht/~mtmn/corpus/commit/19a440f16b8952eed135aaecbdfc9927a419359a))
+- Update npmDepsHash ([`81e9c52`](https://git.sr.ht/~mtmn/corpus/commit/81e9c52d8863c6fa45247f8368ccab5c16e8ee5f))
+- **master:** Release 2.3.1 ([`52c4b51`](https://git.sr.ht/~mtmn/corpus/commit/52c4b5131c71f0ff4be8f3d6a68c919fe83ff67a))
+- Update npmDepsHash ([`61f5d9d`](https://git.sr.ht/~mtmn/corpus/commit/61f5d9dd067623408a9ba7e5a0445b92847c23be))
+- **master:** Release 2.4.0 ([`98958c6`](https://git.sr.ht/~mtmn/corpus/commit/98958c67fd5e3c7aa2c56a16b0cccd06b69eda66))
+- Update npmDepsHash ([`8838b51`](https://git.sr.ht/~mtmn/corpus/commit/8838b510a6f027519bbc488d72a87963f23bdf36))
+- Update npm hash ([`3ab2cc8`](https://git.sr.ht/~mtmn/corpus/commit/3ab2cc87e80dbabb273e984b071a9f31e84a9314))
+- Update npmDepsHash ([`d514a81`](https://git.sr.ht/~mtmn/corpus/commit/d514a81e8c53b11ffc2b17d233f17d036cfbf4cd))
+- Fix spago hash ([`67f866d`](https://git.sr.ht/~mtmn/corpus/commit/67f866d1cdfe73d1f2e07e96caacbe7196371709))
+- **master:** Release 2.5.0 ([`0d587ce`](https://git.sr.ht/~mtmn/corpus/commit/0d587ce1a39cfc7b1944b6a709c14c6c921a0c5e))
+- Update npmDepsHash ([`da2a93e`](https://git.sr.ht/~mtmn/corpus/commit/da2a93e793c51247773db048790fa7a66e2850ae))
+- **master:** Release 2.5.1 ([`9a4ab35`](https://git.sr.ht/~mtmn/corpus/commit/9a4ab3521df3f30d97e5839336815b5e54c3c289))
+- Update npmDepsHash ([`7d8d33f`](https://git.sr.ht/~mtmn/corpus/commit/7d8d33f549c0fdf5da7c73e23627c8484f75727c))
+- Add host to app config ([`a9d906a`](https://git.sr.ht/~mtmn/corpus/commit/a9d906a98b1e67de7156a93b6c5e6e9e86e3cda3))
+- **master:** Release 2.6.0 ([`506805b`](https://git.sr.ht/~mtmn/corpus/commit/506805b7858021fc23d7251c2cd782d5577a037c))
+- Update npmDepsHash ([`7f4bfd6`](https://git.sr.ht/~mtmn/corpus/commit/7f4bfd6cbc8c16e20d01c2b5dcedcad27e898c07))
+- Add nix-fake-hash script ([`b7dac46`](https://git.sr.ht/~mtmn/corpus/commit/b7dac46c6dc28ae4ff4d7463c3aad1d63756bc54))
+- Fix hashes ([`7fadcf1`](https://git.sr.ht/~mtmn/corpus/commit/7fadcf16e174044eb37a5c203ad919a8da5b5213))
+- **master:** Release 2.7.0 ([`77de401`](https://git.sr.ht/~mtmn/corpus/commit/77de40145e0d211fc51ff8e00af40722d033199b))
+- Update npmDepsHash ([`b74cb16`](https://git.sr.ht/~mtmn/corpus/commit/b74cb16c44790dd82fd36397d0763a17c6cdac1e))
+- **master:** Release 2.7.1 ([`51d04e7`](https://git.sr.ht/~mtmn/corpus/commit/51d04e7d37823c1b82dbe2878ea7dd7f4a217d1a))
+- Update npmDepsHash ([`3a0abfc`](https://git.sr.ht/~mtmn/corpus/commit/3a0abfcd483f6e70f7e928f19f7ec71384ef7aac))
+- Install purescript-language-server ([`4634293`](https://git.sr.ht/~mtmn/corpus/commit/46342937d0b13c07b83b52da390a90121ea8ccff))
+- **master:** Release 2.8.0 ([`e93288b`](https://git.sr.ht/~mtmn/corpus/commit/e93288b36102a76e6d7f4fbbb060612693f83220))
+- Update npmDepsHash ([`41c1e65`](https://git.sr.ht/~mtmn/corpus/commit/41c1e6504d3747575e1122ecf49c5dc5ea3cfd41))
+- Import reorder from lsp ([`7f228b0`](https://git.sr.ht/~mtmn/corpus/commit/7f228b0a065d9ae29ed5d29eb56ab31def25eff1))
+- Remove korpus.webp ([`767f83a`](https://git.sr.ht/~mtmn/corpus/commit/767f83af87d7a23b67d8a4bb383cc61a5e32f915))
+- **master:** Release 2.8.1 ([`73bbf47`](https://git.sr.ht/~mtmn/corpus/commit/73bbf47ba2789ce990f74ba123cb16e0eaf57319))
+- Update npmDepsHash ([`e3548d1`](https://git.sr.ht/~mtmn/corpus/commit/e3548d12051ae434800bc97cd62baf53212403e7))
+- Fix readme ([`1d03354`](https://git.sr.ht/~mtmn/corpus/commit/1d0335480168f398eab8b0845f176b5c601069d4))
+- Add live instance link to repo ([`49d3f45`](https://git.sr.ht/~mtmn/corpus/commit/49d3f45d5c313c33d89e24ff58412b5348b13e9a))
+- **master:** Release 2.8.2 ([`a5cfde7`](https://git.sr.ht/~mtmn/corpus/commit/a5cfde729872917e49b236b61663b4f53dabd1aa))
