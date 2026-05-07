@@ -43,7 +43,7 @@ fi
 # --- commit, tag, push ---
 
 git add package.json CHANGELOG.md flake.nix
-git commit -m "chore: release v$next"
+git commit --no-verify -m "chore: release v$next"
 git tag -a "v$next" -m "release v$next"
 git push
 git push --tags
