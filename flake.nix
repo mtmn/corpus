@@ -26,15 +26,15 @@
     spagoRegistry = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry";
-      rev = "b9925cf7976520730a4e0050c382cce25a8aed3f";
-      hash = "sha256-Qca07pap6AzgGZk0843OHB2WckrStj3JUjUV8T3WaSM=";
+      rev = "41f6122ddf9b40b7b989c55b53d7305836f81024";
+      hash = "sha256-Umk8zXYOfvsL7GVnSfNRpFzUUjCa/VatM4JeS9tjFIY=";
     };
 
     spagoRegistryIndex = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry-index";
-      rev = "47649cc1a35322fed50afbf8146b99e9cd73aaa9";
-      hash = "sha256-4mxAS92iYLHrU6c7SWh5wKYrci1ZLKImgMFe7xc+8wY=";
+      rev = "4fa6b28e4af93d0e6693606c412b45d334d99f73";
+      hash = "sha256-zEyC6BnI9mtWdwvRaNkJTTRzjDpXwoUn7piSPpXGcPU=";
     };
 
     registryDat = generateRegistryDat {elmLock = ./elm.lock;};
@@ -115,7 +115,7 @@
       inherit ((builtins.fromJSON (builtins.readFile ./package.json))) version;
       inherit src;
 
-      npmDepsHash = "sha256-koy7fLMDV+W2gdHe2ha08HRsY2nViaWes2MDP+LEyho=";
+      npmDepsHash = "sha256-5AFRHBhTKqFHZdCueEQCDiSgNZHQHUx8UQfoq7G9W5M=";
       npmRebuildFlags = ["--ignore-scripts"];
 
       nativeBuildInputs = with pkgs; [
