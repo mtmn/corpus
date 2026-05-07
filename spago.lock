@@ -11,6 +11,7 @@
             "argonaut",
             "argonaut-core",
             "arrays",
+            "avar",
             "console",
             "datetime",
             "effect",
@@ -61,7 +62,7 @@
     },
     "package_set": {
       "address": {
-        "registry": "76.0.0"
+        "registry": "76.2.0"
       },
       "compiler": ">=0.15.15 <0.16.0",
       "content": {
@@ -179,7 +180,7 @@
         "elmish-testing-library": "0.3.2",
         "elmish-time-machine": "0.4.2",
         "email-validate": "7.0.0",
-        "encoding": "0.0.9",
+        "encoding": "0.0.10",
         "enums": "6.0.1",
         "env-names": "0.4.0",
         "environment": "2.0.0",
@@ -284,7 +285,7 @@
         "hylograph-wasm-kernel": "0.1.0",
         "hyrule": "2.3.8",
         "i18next": "0.1.0",
-        "idb": "0.1.0",
+        "idb": "0.2.0",
         "identity": "6.0.0",
         "identy": "4.0.1",
         "indexed-db": "1.0.0",
@@ -538,9 +539,10 @@
         "string-parsers": "8.0.0",
         "strings": "6.0.1",
         "strings-extra": "4.0.0",
-        "stringutils": "0.0.12",
+        "stringutils": "0.0.13",
         "structured-logging": "1.0.0",
         "substitute": "0.2.3",
+        "supabase": "0.1.0",
         "supply": "0.2.0",
         "svg-parser": "3.0.0",
         "systemd-journald": "0.3.0",
