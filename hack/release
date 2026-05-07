@@ -32,6 +32,8 @@ mv package.json.tmp package.json
 
 git-cliff --tag "v$next" --output CHANGELOG.md
 
+sed -i -e :a -e '/^\s*$/{$d;N;ba' -e '}' CHANGELOG.md
+
 # update npmDepsHash if nix and prefetch-npm-deps are available
 if command -v nix &>/dev/null; then
 	hash=$(nix run nixpkgs#prefetch-npm-deps -- package-lock.json 2>/dev/null)

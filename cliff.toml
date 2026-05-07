@@ -38,6 +38,7 @@ commit_parsers = [
   { message = "^test",             group = "Testing" },
   { message = "^chore",            group = "Housekeeping" },
   { message = "^ci",               group = "Housekeeping" },
+  { message = "^nix",              group = "Housekeeping" },
   { message = "^chore\\(deps\\)",  group = "Dependencies" },
 ]
 protect_breaking_commits = true
