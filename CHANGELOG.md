@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.14.0] - 2026-05-08
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.13.1..v2.14.0)
+
+### Features
+
+- Render diagram using graphviz ([`3a6752f`](https://git.sr.ht/~mtmn/corpus/commit/3a6752fda8ba988767efb16bb4da4b8130d2304a))
+
 ## [2.13.1] - 2026-05-07
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.13.0..v2.13.1)
@@ -14,6 +22,7 @@
 - Add nix to changelog, remove trailing lines ([`63ca30f`](https://git.sr.ht/~mtmn/corpus/commit/63ca30f8b2904d17cc55cfa145fe4ab3e8e7c0d3))
 - Skip pre-commit hooks when releasing ([`a29d830`](https://git.sr.ht/~mtmn/corpus/commit/a29d83001a963453a9c6c9839c1858487b91a393))
 - Update purescript-registry ([`3929bd6`](https://git.sr.ht/~mtmn/corpus/commit/3929bd63460d3d6e736a37edd12b56674bd1ec71))
+- Release v2.13.1 ([`4dd8389`](https://git.sr.ht/~mtmn/corpus/commit/4dd83890e47eebd7b85f69d1a70acff71a4d24d2))
 
 ## [2.13.0] - 2026-05-02
 
