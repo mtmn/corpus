@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.14.1] - 2026-05-08
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.14.0..v2.14.1)
+
+### Bug Fixes
+
+- Transparent diagram ([`c41ec83`](https://git.sr.ht/~mtmn/corpus/commit/c41ec8312ac515dfff963b67b971593fcde0ad4a))
+
 ## [2.14.0] - 2026-05-08
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.13.1..v2.14.0)
@@ -7,6 +15,10 @@
 ### Features
 
 - Render diagram using graphviz ([`3a6752f`](https://git.sr.ht/~mtmn/corpus/commit/3a6752fda8ba988767efb16bb4da4b8130d2304a))
+
+### Housekeeping
+
+- Release v2.14.0 ([`9c83cab`](https://git.sr.ht/~mtmn/corpus/commit/9c83cab2b0fff9e5190336215ce7a05094def242))
 
 ## [2.13.1] - 2026-05-07
 
