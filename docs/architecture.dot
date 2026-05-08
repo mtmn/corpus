@@ -5,7 +5,7 @@ digraph corpus {
     concentrate=true
     nodesep=0.7
     ranksep=1.6
-    bgcolor="#111111"
+    bgcolor=transparent
 
     node [fontname="Atkinson Hyperlegible Mono", fontsize=11, shape=box, style="rounded,filled", fontcolor=white]
     edge [fontname="Atkinson Hyperlegible Mono", fontsize=9, color="#aaaaaa", fontcolor="#aaaaaa", arrowhead=vee, arrowsize=0.8, penwidth=1.4]

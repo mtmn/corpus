@@ -8,7 +8,6 @@
  viewBox="0.00 0.00 783.75 615.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 611)">
 <title>corpus</title>
-<polygon fill="#111111" stroke="none" points="-4,4 -4,-611 779.75,-611 779.75,4 -4,4"/>
 <g id="clust1" class="cluster">
 <title>cluster_frontend</title>
 <path fill="#1e1533" stroke="#9b7de8" d="M20,-395C20,-395 129.25,-395 129.25,-395 135.25,-395 141.25,-401 141.25,-407 141.25,-407 141.25,-544 141.25,-544 141.25,-550 135.25,-556 129.25,-556 129.25,-556 20,-556 20,-556 14,-556 8,-550 8,-544 8,-544 8,-407 8,-407 8,-401 14,-395 20,-395"/>
