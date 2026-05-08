@@ -1,0 +1,91 @@
+digraph corpus {
+    rankdir=LR
+    compound=true
+    splines=ortho
+    concentrate=true
+    nodesep=0.7
+    ranksep=1.6
+    bgcolor="#111111"
+
+    node [fontname="Atkinson Hyperlegible Mono", fontsize=11, shape=box, style="rounded,filled", fontcolor=white]
+    edge [fontname="Atkinson Hyperlegible Mono", fontsize=9, color="#aaaaaa", fontcolor="#aaaaaa", arrowhead=vee, arrowsize=0.8, penwidth=1.4]
+
+    subgraph cluster_frontend {
+        label="Frontend"
+        style="rounded,filled"
+        fillcolor="#1e1533"
+        color="#9b7de8"
+        fontcolor=white
+        fontname="Atkinson Hyperlegible Mono"
+        UI     [label="Elm SPA\n?user=slug",             fillcolor="#2d2050"]
+        Client [label="Scrobble Client\n(LB-compatible)", fillcolor="#2d2050"]
+    }
+
+    subgraph cluster_server {
+        label="Corpus Server"
+        style="rounded,filled"
+        fillcolor="#112611"
+        color="#5aaa5a"
+        fontcolor=white
+        fontname="Atkinson Hyperlegible Mono"
+        API    [label="Web API",           fillcolor="#1c3e1c"]
+        Proxy  [label="Cover Proxy",       fillcolor="#1c3e1c"]
+        LBSync [label="ListenBrainz Sync", fillcolor="#1c3e1c"]
+        LFSync [label="Last.fm Sync",      fillcolor="#1c3e1c"]
+        Enrich [label="Enrichment Task",   fillcolor="#1c3e1c"]
+    }
+
+    subgraph cluster_storage {
+        label="Storage"
+        style="rounded,filled"
+        fillcolor="#272000"
+        color="#d4a80c"
+        fontcolor=white
+        fontname="Atkinson Hyperlegible Mono"
+        DB [label="DuckDB",    shape=cylinder, fillcolor="#3d3100"]
+        S3 [label="S3 Bucket", shape=box3d,    fillcolor="#3d3100"]
+    }
+
+    subgraph cluster_external {
+        label="External APIs"
+        style="rounded,filled"
+        fillcolor="#0e1e38"
+        color="#5a8de0"
+        fontcolor=white
+        fontname="Atkinson Hyperlegible Mono"
+        LB  [label="ListenBrainz",      fillcolor="#162d52"]
+        LF  [label="Last.fm",           fillcolor="#162d52"]
+        MB  [label="MusicBrainz",       fillcolor="#162d52"]
+        DC  [label="Discogs",           fillcolor="#162d52"]
+        CAA [label="Cover Art Archive", fillcolor="#162d52"]
+    }
+
+    // Scrobble Sync
+    LB     -> LBSync
+    LF     -> LFSync
+    LBSync -> DB
+    LFSync -> DB
+
+    // Enrichment
+    DB     -> Enrich
+    Enrich -> MB
+    Enrich -> LF
+    Enrich -> DC
+    Enrich -> DB [constraint=false]
+
+    // Scrobble Submission
+    Client -> API [label="POST /1/submit-listens\n(token auth)"]
+    API    -> DB  [constraint=false]
+
+    // Web UI
+    UI  -> API
+    API -> DB
+
+    // Cover Art
+    UI    -> Proxy
+    Proxy -> S3
+    Proxy -> CAA
+    Proxy -> LF
+    Proxy -> DC
+    Proxy -> S3 [constraint=false]
+}

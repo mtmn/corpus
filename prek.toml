@@ -27,3 +27,14 @@ rev = "v1.3.1"
 hooks = [
   { id = "deadnix" }
 ]
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "graphviz",
+    name = "graphviz",
+    language = "system",
+    entry = "hack/graphviz",
+    files = '\.dot$'
+  },
+]

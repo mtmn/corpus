@@ -99,15 +99,23 @@ const makeActiveMetrics = () => {
 			httpRequestsTotal.inc({ method, path, status: String(status) });
 			httpRequestDurationSeconds.observe({ method, path }, durationMs / 1000);
 		},
-		incSyncRuns: (user, source, result) => syncRunsTotal.inc({ user, source, result }),
-		incSyncScrobbles: (user, source, count) => syncScrobblesAddedTotal.inc({ user, source }, count),
-		setSyncLastSuccess: (user, source) => syncLastSuccessSeconds.setToCurrentTime({ user, source }),
-		incEnrichmentFetch: (user, source, result) => enrichmentFetchesTotal.inc({ user, source, result }),
-		setEnrichmentQueueSize: (user, type, size) => enrichmentQueueSize.set({ user, type }, size),
-		incCoverRequest: (user, source, result) => coverRequestsTotal.inc({ user, source, result }),
-		incCosineRequest: (user, result) => cosineRequestsTotal.inc({ user, result }),
+		incSyncRuns: (user, source, result) =>
+			syncRunsTotal.inc({ user, source, result }),
+		incSyncScrobbles: (user, source, count) =>
+			syncScrobblesAddedTotal.inc({ user, source }, count),
+		setSyncLastSuccess: (user, source) =>
+			syncLastSuccessSeconds.setToCurrentTime({ user, source }),
+		incEnrichmentFetch: (user, source, result) =>
+			enrichmentFetchesTotal.inc({ user, source, result }),
+		setEnrichmentQueueSize: (user, type, size) =>
+			enrichmentQueueSize.set({ user, type }, size),
+		incCoverRequest: (user, source, result) =>
+			coverRequestsTotal.inc({ user, source, result }),
+		incCosineRequest: (user, result) =>
+			cosineRequestsTotal.inc({ user, result }),
 		incDbBackupRun: (user, result) => dbBackupRunsTotal.inc({ user, result }),
-		setDbBackupLastSuccess: (user) => dbBackupLastSuccessSeconds.setToCurrentTime({ user }),
+		setDbBackupLastSuccess: (user) =>
+			dbBackupLastSuccessSeconds.setToCurrentTime({ user }),
 	};
 };
 
@@ -129,7 +137,9 @@ const makeNoOpMetrics = () => ({
 });
 
 const activeMetrics =
-	process.env.METRICS_ENABLED === "true" ? makeActiveMetrics() : makeNoOpMetrics();
+	process.env.METRICS_ENABLED === "true"
+		? makeActiveMetrics()
+		: makeNoOpMetrics();
 
 // ---------------------------------------------------------------------------
 // Exports
@@ -146,16 +156,17 @@ export const getContentType = () => activeMetrics.contentType;
 
 // Attaches a 'finish' listener to record metrics and log the request.
 // logFn: String -> Effect Unit — structured logger called on completion.
-export const wrapRequestImpl = (method, path, logFn, _req, res, handler) => () => {
-	const startMs = Date.now();
-	res.once("finish", () => {
-		const durationMs = Date.now() - startMs;
-		const status = res.statusCode || 0;
-		activeMetrics.recordHttpRequest(method, path, status, durationMs);
-		logFn(`${method} ${path} ${status} ${durationMs}ms`)();
-	});
-	handler();
-};
+export const wrapRequestImpl =
+	(method, path, logFn, _req, res, handler) => () => {
+		const startMs = Date.now();
+		res.once("finish", () => {
+			const durationMs = Date.now() - startMs;
+			const status = res.statusCode || 0;
+			activeMetrics.recordHttpRequest(method, path, status, durationMs);
+			logFn(`${method} ${path} ${status} ${durationMs}ms`)();
+		});
+		handler();
+	};
 
 export const incSyncRunsImpl = (user, source, result) => () => {
 	activeMetrics.incSyncRuns(user, source, result);

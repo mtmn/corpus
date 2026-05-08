@@ -1,26 +1,26 @@
 {
-  "users": [
-    {
-      "config": {
-        "backupEnabled": true,
-        "backupIntervalHours": 24,
-        "coverCacheEnabled": true,
-        "databaseFile": "corpus-mtmn.db",
-        "listenbrainzUser": "mtmn"
-      },
-      "name": "mtmn",
-      "slug": ""
-    },
-    {
-      "config": {
-        "backupEnabled": true,
-        "backupIntervalHours": 24,
-        "coverCacheEnabled": true,
-        "databaseFile": "corpus-lastfm-mtmnn.db",
-        "lastfmUser": "mtmnn"
-      },
-      "name": "mtmn (last.fm)",
-      "slug": "mtmnn"
-    }
-  ]
+	"users": [
+		{
+			"config": {
+				"backupEnabled": true,
+				"backupIntervalHours": 24,
+				"coverCacheEnabled": true,
+				"databaseFile": "corpus-mtmn.db",
+				"listenbrainzUser": "mtmn"
+			},
+			"name": "mtmn",
+			"slug": ""
+		},
+		{
+			"config": {
+				"backupEnabled": true,
+				"backupIntervalHours": 24,
+				"coverCacheEnabled": true,
+				"databaseFile": "corpus-lastfm-mtmnn.db",
+				"lastfmUser": "mtmnn"
+			},
+			"name": "mtmn (last.fm)",
+			"slug": "mtmnn"
+		}
+	]
 }

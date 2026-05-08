@@ -193,58 +193,6 @@ Corpus relies on FFI to interact with the Node.js ecosystem where native PureScr
 
 ## System Flow
 
-```mermaid
-graph TD
-    subgraph External APIs
-        LB[ListenBrainz API]
-        LF[Last.fm API]
-        MB[MusicBrainz API]
-        DC[Discogs API]
-        CAA[Cover Art Archive]
-    end
+See [`architecture.dot`](architecture.dot) (render with `just docs`).
 
-    subgraph Corpus Server
-        LBSync[ListenBrainz Sync\nper user]
-        LFSync[Last.fm Sync\nper user]
-        Enrich[Enrichment Task\nper user]
-        Proxy[Cover Proxy]
-        API[Web API]
-    end
-
-    subgraph Storage
-        DB[(DuckDB\nper user)]
-        S3[[S3 Bucket]]
-    end
-
-    subgraph Frontend
-        UI[Elm SPA\n?user=slug]
-    end
-
-    %% Scrobble Sync Flow
-    LB -- "Fetch scrobbles" --> LBSync
-    LBSync -- "Store scrobbles" --> DB
-    LF -- "Fetch scrobbles" --> LFSync
-    LFSync -- "Store scrobbles" --> DB
-
-    %% Enrichment Flow
-    DB -- "Get MBIDs" --> Enrich
-    Enrich -- "Metadata" --> MB
-    Enrich -- "1. Fallback Genre" --> LF
-    Enrich -- "2. Fallback Genre" --> DC
-    Enrich -- "Store Metadata" --> DB
-
-    %% Web UI Flow
-    UI -- "Request Data" --> API
-    API -- "Query" --> DB
-    DB -- "Results" --> API
-    API -- "JSON" --> UI
-
-    %% Cover Art Flow
-    UI -- "Request Cover" --> Proxy
-    Proxy -- "1. Check Cache" --> S3
-    Proxy -- "2. Fallback CAA" --> CAA
-    Proxy -- "3. Fallback Last.fm" --> LF
-    Proxy -- "4. Fallback Discogs" --> DC
-    Proxy -- "Cache Result" --> S3
-    Proxy -- "Serve Image" --> UI
-```
+![System Flow](architecture.svg)

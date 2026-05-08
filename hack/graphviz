@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command -v dot &>/dev/null || {
+	echo "error: graphviz (dot) not found"
+	exit 1
+}
+
+for dot_file in "$@"; do
+	svg_file="${dot_file%.dot}.svg"
+	dot -Tsvg "$dot_file" -o "$svg_file" \
+		2> >(grep -v "do not currently handle edge labels" >&2)
+	git add "$svg_file"
+done

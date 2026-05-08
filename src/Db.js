@@ -36,7 +36,10 @@ export const checkpointImpl = (conn, cb) => () => {
 // Pure transformation: produce new row objects rather than mutating in place.
 const convertBigInts = (row) =>
 	Object.fromEntries(
-		Object.entries(row).map(([k, v]) => [k, typeof v === "bigint" ? Number(v) : v]),
+		Object.entries(row).map(([k, v]) => [
+			k,
+			typeof v === "bigint" ? Number(v) : v,
+		]),
 	);
 
 export const allImpl = (conn, sql, params, cb) => () => {

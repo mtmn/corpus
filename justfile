@@ -61,6 +61,10 @@ reset-token *args:
 list-users:
     node server.js list-users
 
+# Render docs diagrams (requires graphviz)
+docs:
+    hack/graphviz docs/architecture.dot
+
 # Run quality and security checks
 check:
     npx whine
