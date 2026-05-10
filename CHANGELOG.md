@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.14.2] - 2026-05-10
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.14.1..v2.14.2)
+
+### Housekeeping
+
+- **deps:** Bump purescript registry ([`2139557`](https://git.sr.ht/~mtmn/corpus/commit/21395573964bfe20f2f5adcb151213be686e59be))
+
 ## [2.14.1] - 2026-05-08
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.14.0..v2.14.1)
@@ -7,6 +15,10 @@
 ### Bug Fixes
 
 - Transparent diagram ([`c41ec83`](https://git.sr.ht/~mtmn/corpus/commit/c41ec8312ac515dfff963b67b971593fcde0ad4a))
+
+### Housekeeping
+
+- Release v2.14.1 ([`f940cbf`](https://git.sr.ht/~mtmn/corpus/commit/f940cbf10297ce8caacd4b2dce47ba7f1e589560))
 
 ## [2.14.0] - 2026-05-08
 
