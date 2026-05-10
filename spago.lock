@@ -62,7 +62,7 @@
     },
     "package_set": {
       "address": {
-        "registry": "76.2.0"
+        "registry": "76.2.1"
       },
       "compiler": ">=0.15.15 <0.16.0",
       "content": {
@@ -100,7 +100,7 @@
         "assert-multiple": "0.4.0",
         "avar": "5.0.1",
         "axon": "0.0.3",
-        "b64": "0.0.8",
+        "b64": "0.0.9",
         "barbies": "1.0.1",
         "barlow-lens": "0.9.0",
         "benchlib": "0.0.4",
