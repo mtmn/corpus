@@ -30,6 +30,9 @@ echo "releasing -> v$next"
 jq --arg v "$next" '.version = $v' package.json >package.json.tmp
 mv package.json.tmp package.json
 
+# --- update package-lock.json ---
+npm install
+
 git-cliff --tag "v$next" --output CHANGELOG.md
 
 sed -i -e :a -e '/^\s*$/{$d;N;ba' -e '}' CHANGELOG.md
@@ -42,7 +45,7 @@ fi
 
 # --- commit, tag, push ---
 
-git add package.json CHANGELOG.md flake.nix
+git add package.json package-lock.json CHANGELOG.md flake.nix
 git commit --no-verify -m "chore: release v$next"
 git tag -a "v$next" -m "release v$next"
 git push
