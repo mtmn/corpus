@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.14.3] - 2026-05-13
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.14.2..v2.14.3)
+
+### Bug Fixes
+
+- **ci:** Run npm install on release ([`6a7d64a`](https://git.sr.ht/~mtmn/corpus/commit/6a7d64a711c300f1a7436fd5eb413f093316a65c))
+
 ## [2.14.2] - 2026-05-10
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.14.1..v2.14.2)
@@ -7,6 +15,7 @@
 ### Housekeeping
 
 - **deps:** Bump purescript registry ([`2139557`](https://git.sr.ht/~mtmn/corpus/commit/21395573964bfe20f2f5adcb151213be686e59be))
+- Release v2.14.2 ([`62eb871`](https://git.sr.ht/~mtmn/corpus/commit/62eb8719333225ced9b5f1c772b1f5a3235bab2e))
 
 ## [2.14.1] - 2026-05-08
 
