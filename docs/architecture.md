@@ -185,7 +185,7 @@ Node.js default metrics (GC, event loop, memory) are also collected via `prom-cl
 
 Corpus relies on FFI to interact with the Node.js ecosystem where native PureScript wrappers are unavailable. Key FFI integrations:
 
-- **Database (`Db.js`)**: Interface to the native `duckdb` library. Includes BigInt → Number conversion for JSON compatibility.
+- **Database (`Db.js`)**: Interface to the `@duckdb/node-api` library. Includes BigInt → Number conversion for JSON compatibility.
 - **Cloud Storage (`S3.js`)**: AWS SDK (`@aws-sdk/client-s3`) for cover art caching. Takes explicit config structs rather than reading `process.env`.
 - **System Utilities (`Main.js`)**: Bridges PureScript with Node.js — `dotenv` loading and request helpers.
 - **Config (`Config.js`)**: Reads and parses `users.json` from the path given by `CORPUS_USERS_FILE`.

@@ -19,8 +19,8 @@
       ;
 
     duckdbPrebuilt = pkgs.fetchurl {
-      url = "https://npm.duckdb.org/duckdb/duckdb-v1.4.4-node-v137-linux-x64.tar.gz";
-      hash = "sha256-Z91EJB81gRaZoLDjkw5lVVQ+jtGIvMV0tMJeOAY7Q3g=";
+      url = "https://registry.npmjs.org/@duckdb/node-bindings-linux-x64/-/node-bindings-linux-x64-1.5.2-r.1.tgz";
+      hash = "sha256-IMn1URw5Cn5hN801LmHoI/XgGrezlkcF+5ItJNeclvg=";
     };
 
     spagoRegistry = pkgs.fetchFromGitHub {
@@ -115,7 +115,7 @@
       inherit ((builtins.fromJSON (builtins.readFile ./package.json))) version;
       inherit src;
 
-      npmDepsHash = "sha256-XKvbbes6Midu0ylwVOoTh9lcDuy/CI4cCTBHErTw97g=";
+      npmDepsHash = "sha256-lNYw/5plYYJ0tms6WRhGbRHGm7oWXX4wrtxsVnNH+6Y=";
       npmRebuildFlags = ["--ignore-scripts"];
 
       nativeBuildInputs = with pkgs; [
@@ -129,8 +129,8 @@
       buildPhase = ''
         export HOME="$TMPDIR"
 
-        mkdir -p node_modules/duckdb/lib/binding
-        tar -xf ${duckdbPrebuilt} -C node_modules/duckdb/lib/binding --strip-components=1
+        mkdir -p node_modules/@duckdb/node-bindings-linux-x64
+        tar -xf ${duckdbPrebuilt} -C node_modules/@duckdb/node-bindings-linux-x64 --strip-components=1
 
         mkdir -p .spago
         cp -r ${spagoDeps}/packages .spago/p

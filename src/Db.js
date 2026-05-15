@@ -1,4 +1,4 @@
-import duckdb from "duckdb";
+import { DuckDBInstance } from "@duckdb/node-api";
 import { createHash } from "crypto";
 
 export const sha256 = (str) => {
@@ -6,30 +6,24 @@ export const sha256 = (str) => {
 };
 
 export const connectImpl = (path, cb) => () => {
-	const db = new duckdb.Database(path, (err) => {
-		if (err) {
-			cb(err)(null)();
-		} else {
-			try {
-				const conn = db.connect();
-				cb(null)(conn)();
-			} catch (e) {
-				cb(e)(null)();
-			}
-		}
-	});
+	DuckDBInstance.create(path)
+		.then((instance) => instance.connect())
+		.then((conn) => cb(null)(conn)())
+		.catch((e) => cb(e)(null)());
 };
 
 export const runImpl = (conn, sql, params, cb) => () => {
-	conn.run(sql, ...params, (err) => {
-		cb(err)();
-	});
+	conn
+		.run(sql, params)
+		.then(() => cb(null)())
+		.catch((e) => cb(e)());
 };
 
 export const checkpointImpl = (conn, cb) => () => {
-	conn.run("CHECKPOINT", (err) => {
-		cb(err)();
-	});
+	conn
+		.run("CHECKPOINT")
+		.then(() => cb(null)())
+		.catch((e) => cb(e)());
 };
 
 // DuckDB returns BIGINT as BigInt, which JSON.stringify doesn't support.
@@ -43,7 +37,11 @@ const convertBigInts = (row) =>
 	);
 
 export const allImpl = (conn, sql, params, cb) => () => {
-	conn.all(sql, ...params, (err, rows) => {
-		cb(err)(rows ? rows.map(convertBigInts) : rows)();
-	});
+	conn
+		.run(sql, params)
+		.then((result) => result.getRowObjectsJS())
+		.then((rows) => {
+			cb(null)(rows.map(convertBigInts))();
+		})
+		.catch((e) => cb(e)(null)());
 };
