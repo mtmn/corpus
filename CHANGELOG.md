@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.14.4] - 2026-05-15
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.14.3..v2.14.4)
+
+### Bug Fixes
+
+- Remove redundant packages ([`d1a5d5d`](https://git.sr.ht/~mtmn/corpus/commit/d1a5d5d70a8a3e03404953d78b798db64991fc47))
+
 ## [2.14.3] - 2026-05-13
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.14.2..v2.14.3)
@@ -7,6 +15,10 @@
 ### Bug Fixes
 
 - **ci:** Run npm install on release ([`6a7d64a`](https://git.sr.ht/~mtmn/corpus/commit/6a7d64a711c300f1a7436fd5eb413f093316a65c))
+
+### Housekeeping
+
+- Release v2.14.3 ([`8da4314`](https://git.sr.ht/~mtmn/corpus/commit/8da4314651f372e4df6dc795920f923efbe1618a))
 
 ## [2.14.2] - 2026-05-10
 
