@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.15.1] - 2026-05-21
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.15.0..v2.15.1)
+
+### Bug Fixes
+
+- Remove deprecated package ([`ad9f27a`](https://git.sr.ht/~mtmn/corpus/commit/ad9f27adbe022c927aba0c0481065ad10b30dccd))
+
 ## [2.15.0] - 2026-05-15
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.14.4..v2.15.0)
@@ -7,6 +15,10 @@
 ### Features
 
 - Update duckdb to 1.5.2, use node-api package ([`91b154c`](https://git.sr.ht/~mtmn/corpus/commit/91b154c47086059af4a447055925429f2e376210))
+
+### Housekeeping
+
+- Release v2.15.0 ([`5074136`](https://git.sr.ht/~mtmn/corpus/commit/5074136d548b75777f62f4a471f757320b263f96))
 
 ## [2.14.4] - 2026-05-15
 
