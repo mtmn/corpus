@@ -6,7 +6,6 @@ module Log
 
 import Prelude
 
-import Control.Logger (Logger(..), log)
 import Data.DateTime (DateTime)
 import Data.Formatter.DateTime (FormatterCommand(..), format)
 import Data.List (fromFoldable)
@@ -23,11 +22,6 @@ instance showLogLevel :: Show LogLevel where
   show INFO = "INFO"
   show WARN = "WARN"
   show ERROR = "ERROR"
-
-type LogMessage =
-  { level :: LogLevel
-  , message :: String
-  }
 
 formatTimestamp :: DateTime -> String
 formatTimestamp dt =
@@ -50,8 +44,8 @@ formatTimestamp dt =
     )
     dt
 
-logger :: Logger Effect LogMessage
-logger = Logger \{ level, message } -> do
+logMessage :: LogLevel -> String -> Effect Unit
+logMessage level message = do
   now <- nowDateTime
   let ts = formatTimestamp now
   let
@@ -61,10 +55,10 @@ logger = Logger \{ level, message } -> do
   Console.log $ "[" <> ts <> "] [" <> show level <> "] " <> sanitized
 
 info :: forall m. MonadEffect m => String -> m Unit
-info msg = liftEffect $ log logger { level: INFO, message: msg }
+info msg = liftEffect $ logMessage INFO msg
 
 warn :: forall m. MonadEffect m => String -> m Unit
-warn msg = liftEffect $ log logger { level: WARN, message: msg }
+warn msg = liftEffect $ logMessage WARN msg
 
 error :: forall m. MonadEffect m => String -> m Unit
-error msg = liftEffect $ log logger { level: ERROR, message: msg }
+error msg = liftEffect $ logMessage ERROR msg

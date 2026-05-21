@@ -26,15 +26,15 @@
     spagoRegistry = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry";
-      rev = "41f6122ddf9b40b7b989c55b53d7305836f81024";
-      hash = "sha256-Umk8zXYOfvsL7GVnSfNRpFzUUjCa/VatM4JeS9tjFIY=";
+      rev = "8418977aa0ab7d5cb2c1f43aae3cdd46d762101a";
+      hash = "sha256-kGlHQBXRDlFa953AfV9e+k0OThnIgVSkSyplarkA9pk=";
     };
 
     spagoRegistryIndex = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry-index";
-      rev = "4fa6b28e4af93d0e6693606c412b45d334d99f73";
-      hash = "sha256-zEyC6BnI9mtWdwvRaNkJTTRzjDpXwoUn7piSPpXGcPU=";
+      rev = "86250cbb8ec9a344ec10d0a97d76a37d357a260f";
+      hash = "sha256-2tpE9v46od3z4iZqJtXsdgifnrOJD2MxTQ5CvGWsoHg=";
     };
 
     registryDat = generateRegistryDat {elmLock = ./elm.lock;};
@@ -61,11 +61,11 @@
           ];
       };
 
-      nativeBuildInputs = with pkgs; [nodejs git cacert purescript];
+      nativeBuildInputs = with pkgs; [nodejs_24 git cacert purescript];
 
       outputHashAlgo = "sha256";
       outputHashMode = "recursive";
-      outputHash = "sha256-dBorhgF/CIngAe+6fvvGHnGkQsk070SDZbgF5xTGx9c=";
+      outputHash = "sha256-sdor+SLxjw/e+OQeBiEyKyWeBLVaGo2tcAxf06vxth8=";
 
       buildPhase = ''
         export HOME=$TMPDIR
@@ -115,12 +115,12 @@
       inherit ((builtins.fromJSON (builtins.readFile ./package.json))) version;
       inherit src;
 
-      npmDepsHash = "sha256-jZKbs5cdydkBhRdWqro4nc4IPZ100hq8aNs7H3qHhgc=";
+      npmDepsHash = "sha256-bUWQhYv3jZtUlB5kXWUDwb4JyUIkt+k6Bw2geS8191A=";
       npmRebuildFlags = ["--ignore-scripts"];
 
       nativeBuildInputs = with pkgs; [
         makeWrapper
-        nodejs
+        nodejs_24
         git
         purescript
         elmPackages.elm
@@ -155,7 +155,7 @@
         fi
 
         mkdir -p $out/bin
-        makeWrapper ${pkgs.nodejs}/bin/node $out/bin/corpus-server \
+        makeWrapper ${pkgs.nodejs_24}/bin/node $out/bin/corpus-server \
           --add-flags "--no-deprecation" \
           --add-flags "$out/lib/corpus/server.js" \
           --chdir "$out/lib/corpus"
@@ -166,7 +166,7 @@
       name = "corpus";
       packages = [
         elm2nix.packages.${system}.default
-        pkgs.nodejs
+        pkgs.nodejs_24
         pkgs.purescript
         pkgs.elmPackages.elm
         pkgs.elmPackages.elm-format

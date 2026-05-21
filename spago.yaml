@@ -20,7 +20,6 @@ package:
     - http-methods
     - integers
     - js-uri
-    - logging
     - maybe
     - node-buffer
     - node-event-emitter
@@ -53,5 +52,5 @@ package:
       - node-process
 workspace:
   packageSet:
-    registry: 76.2.1
+    registry: 77.3.0
   extraPackages: {}
