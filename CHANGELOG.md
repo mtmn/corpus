@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.16.0] - 2026-05-22
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.15.1..v2.16.0)
+
+### Features
+
+- Move from npm to pnpm ([`f526a3d`](https://git.sr.ht/~mtmn/corpus/commit/f526a3d8f08ba9166c5b2df29720b8c32dbac681))
+
+### Housekeeping
+
+- Remove `nix-fake-hash` script ([`a6c7da2`](https://git.sr.ht/~mtmn/corpus/commit/a6c7da287002c44eadd1fc9f30d80dfe7406cb3d))
+- Update release script to ues pnpm ([`1d8c099`](https://git.sr.ht/~mtmn/corpus/commit/1d8c099df52af61fc6a7b9faaca6fe84d7f61ac4))
+- Remove package-lock.json ([`5c41c0a`](https://git.sr.ht/~mtmn/corpus/commit/5c41c0a1ce7cb55e13271a5f92ef7b4a22e27166))
+
 ## [2.15.1] - 2026-05-21
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.15.0..v2.15.1)
@@ -7,6 +21,10 @@
 ### Bug Fixes
 
 - Remove deprecated package ([`ad9f27a`](https://git.sr.ht/~mtmn/corpus/commit/ad9f27adbe022c927aba0c0481065ad10b30dccd))
+
+### Housekeeping
+
+- Release v2.15.1 ([`78e0e4d`](https://git.sr.ht/~mtmn/corpus/commit/78e0e4dbcf0fb5b745245ae88411633b80193f6e))
 
 ## [2.15.0] - 2026-05-15
 
