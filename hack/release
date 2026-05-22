@@ -30,22 +30,15 @@ echo "releasing -> v$next"
 jq --arg v "$next" '.version = $v' package.json >package.json.tmp
 mv package.json.tmp package.json
 
-# --- update package-lock.json ---
-npm install
-
+# --- run git-cliff ---
 git-cliff --tag "v$next" --output CHANGELOG.md
 
+# --- remove newlines ---
 sed -i -e :a -e '/^\s*$/{$d;N;ba' -e '}' CHANGELOG.md
-
-# update npmDepsHash if nix and prefetch-npm-deps are available
-if command -v nix &>/dev/null; then
-	hash=$(nix run nixpkgs#prefetch-npm-deps -- package-lock.json 2>/dev/null)
-	sed -i "s|npmDepsHash = \"sha256-[^\"]*\"|npmDepsHash = \"$hash\"|" flake.nix
-fi
 
 # --- commit, tag, push ---
 
-git add package.json package-lock.json CHANGELOG.md flake.nix
+git add package.json pnpm-lock.yaml CHANGELOG.md flake.nix
 git commit --no-verify -m "chore: release v$next"
 git tag -a "v$next" -m "release v$next"
 git push
