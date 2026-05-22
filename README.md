@@ -27,22 +27,24 @@ just nix run
 
 ### Build
 
+This project uses [pnpm](https://pnpm.io) for dependency management.
+
 ```bash
 # Install dependencies
-npm install
-npx spago install
+pnpm install
+pnpm spago install
 
 # Build the project
-npm run build
+pnpm run build
 
 # Run tests
-npx spago test
+pnpm test
 
 # Build an optimized release
-npm run release
+pnpm run release
 
 # Run the application
-npx spago run
+pnpm spago run
 ```
 
 ### Scrobbling API

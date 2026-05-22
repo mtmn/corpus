@@ -6,33 +6,33 @@ bump:
     @hack/git-release
 
 
-# Setup npm and spago
+# Setup pnpm and spago
 setup:
-    npm install
-    npx spago install
+    pnpm install
+    pnpm spago install
 
 # Build the project locally
 build:
-    npm run build
+    pnpm run build
 
 # Build a release
 release:
-    npm run release
+    pnpm run release
 
 # Run the project locally
 run:
-    npx spago run
+    pnpm spago run
 
 # Build and run locally
 dev: build run
 
 # Run tests
 test:
-    npm test
+    pnpm test
 
 # Format PureScript source code
 tidy:
-    npm run tidy
+    pnpm run tidy
 
 # Enter the Nix development shell
 shell:
@@ -67,9 +67,9 @@ docs:
 
 # Run quality and security checks
 check:
-    npx whine
-    npx spago build --strict
-    npx purs-tidy check "src/**/*.purs"
+    pnpm exec whine
+    pnpm spago build --strict
+    pnpm exec purs-tidy check "src/**/*.purs"
     elm-analyse
     statix check .
 

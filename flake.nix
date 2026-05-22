@@ -44,43 +44,61 @@
       inherit registryDat;
     };
 
+    pnpmDeps = pkgs.fetchPnpmDeps {
+      src = pkgs.lib.cleanSourceWith {
+        src = self;
+        filter = name: _type: let
+          baseName = baseNameOf (toString name);
+        in
+          pkgs.lib.elem baseName [
+            "package.json"
+            "pnpm-lock.yaml"
+            "pnpm-workspace.yaml"
+          ];
+        name = "corpus-pnpm-source";
+      };
+      pname = "corpus";
+      hash = "sha256-dwSjXCN9Ake1O6IgF5ZaGvDvZ19MUV2RLKIrJU/suP4=";
+      fetcherVersion = 3;
+    };
+
     spagoDeps = pkgs.stdenv.mkDerivation {
       name = "corpus-spago-deps";
+      outputHashAlgo = "sha256";
+      outputHashMode = "recursive";
+      outputHash = "sha256-sdor+SLxjw/e+OQeBiEyKyWeBLVaGo2tcAxf06vxth8=";
 
       src = pkgs.lib.cleanSourceWith {
         src = self;
         filter = name: _type: let
           baseName = baseNameOf (toString name);
         in
-          pkgs.lib.elem baseName
-          [
+          pkgs.lib.elem baseName [
             "package.json"
-            "package-lock.json"
+            "pnpm-lock.yaml"
+            "pnpm-workspace.yaml"
             "spago.yaml"
             "spago.lock"
           ];
       };
 
-      nativeBuildInputs = with pkgs; [nodejs_24 git cacert purescript];
-
-      outputHashAlgo = "sha256";
-      outputHashMode = "recursive";
-      outputHash = "sha256-sdor+SLxjw/e+OQeBiEyKyWeBLVaGo2tcAxf06vxth8=";
+      nativeBuildInputs = with pkgs; [nodejs_24 git cacert purescript pnpm];
 
       buildPhase = ''
         export HOME=$TMPDIR
         export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+        export NODE_EXTRA_CA_CERTS="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
 
         mkdir -p $HOME/.cache/spago-nodejs
         cp -r ${spagoRegistry} $HOME/.cache/spago-nodejs/registry
         cp -r ${spagoRegistryIndex} $HOME/.cache/spago-nodejs/registry-index
         chmod -R u+w $HOME/.cache/spago-nodejs
 
-        npm ci --ignore-scripts
+        pnpm install --no-frozen-lockfile --ignore-scripts
         patchShebangs node_modules
         mkdir -p node_modules/.bin
         ln -sf ${pkgs.purescript}/bin/purs node_modules/.bin/purs
-        npx spago install
+        pnpm spago install
       '';
 
       installPhase = ''
@@ -92,13 +110,15 @@
     src = pkgs.lib.cleanSourceWith {
       src = self;
       filter = name: _type: let
-        relPath = pkgs.lib.removePrefix (toString self + "/") (toString name);
+        relPath =
+          pkgs.lib.removePrefix (toString self + "/") (toString name);
         topDir = builtins.head (pkgs.lib.splitString "/" relPath);
       in
         pkgs.lib.elem topDir [
           ".env.example"
           "package.json"
-          "package-lock.json"
+          "pnpm-lock.yaml"
+          "pnpm-workspace.yaml"
           "elm.json"
           "spago.yaml"
           "spago.lock"
@@ -110,13 +130,12 @@
         ];
     };
 
-    corpus = pkgs.buildNpmPackage {
+    corpus = pkgs.stdenv.mkDerivation {
       pname = "corpus";
-      inherit ((builtins.fromJSON (builtins.readFile ./package.json))) version;
+      inherit (builtins.fromJSON (builtins.readFile ./package.json)) version;
       inherit src;
 
-      npmDepsHash = "sha256-vK0WKd10SnA39sj71/lMRuVrIeM717WM5vXKXk6IJk8=";
-      npmRebuildFlags = ["--ignore-scripts"];
+      inherit pnpmDeps;
 
       nativeBuildInputs = with pkgs; [
         makeWrapper
@@ -124,11 +143,11 @@
         git
         purescript
         elmPackages.elm
+        pnpm
+        pnpmConfigHook
       ];
 
       buildPhase = ''
-        export HOME="$TMPDIR"
-
         mkdir -p node_modules/@duckdb/node-bindings-linux-x64
         tar -xf ${duckdbPrebuilt} -C node_modules/@duckdb/node-bindings-linux-x64 --strip-components=1
 
@@ -142,7 +161,7 @@
         chmod -R u+w $HOME/.cache/spago-nodejs
 
         eval ${elmHomeScript}
-        npm run release
+        pnpm run release
       '';
 
       installPhase = ''
@@ -171,6 +190,7 @@
         pkgs.elmPackages.elm
         pkgs.elmPackages.elm-format
         pkgs.elmPackages.elm-json
+        pkgs.pnpm
       ];
     };
 
