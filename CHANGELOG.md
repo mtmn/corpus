@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.16.1] - 2026-05-23
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.16.0..v2.16.1)
+
+### Housekeeping
+
+- Add garnix badge to readme ([`63d299d`](https://git.sr.ht/~mtmn/corpus/commit/63d299dcefb65a87315c770bad44a20b25d8b01e))
+- Comment out whine from checks ([`fb31b79`](https://git.sr.ht/~mtmn/corpus/commit/fb31b7914e275fe1a6b412dd66d40581b3faf071))
+- Bump flakes and version ([`b640141`](https://git.sr.ht/~mtmn/corpus/commit/b6401415afb65c87969b5328d7af8447a7d42f9e))
+
 ## [2.16.0] - 2026-05-22
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.15.1..v2.16.0)
@@ -13,6 +23,7 @@
 - Remove `nix-fake-hash` script ([`a6c7da2`](https://git.sr.ht/~mtmn/corpus/commit/a6c7da287002c44eadd1fc9f30d80dfe7406cb3d))
 - Update release script to ues pnpm ([`1d8c099`](https://git.sr.ht/~mtmn/corpus/commit/1d8c099df52af61fc6a7b9faaca6fe84d7f61ac4))
 - Remove package-lock.json ([`5c41c0a`](https://git.sr.ht/~mtmn/corpus/commit/5c41c0a1ce7cb55e13271a5f92ef7b4a22e27166))
+- Release v2.16.0 ([`c89de13`](https://git.sr.ht/~mtmn/corpus/commit/c89de13482a083ebe31f221842658113b2caf7ed))
 
 ## [2.15.1] - 2026-05-21
 
