@@ -3,6 +3,8 @@ A self-hosted [ListenBrainz](https://listenbrainz.org) and [Last.fm](https://las
 
 It stores scrobbles, enriches track metadata and provides an interactive [Elm](https://elm-lang.org) interface.
 
+[![built with garnix](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fgarnix.io%2Fapi%2Fbadges%2Fmtmn%2Fcorpus%3Fbranch%3Dmaster)](https://garnix.io/repo/mtmn/corpus)
+
 ## Documentation
 
 - [Architecture](docs/architecture.md) — Deep dive into the system components, data flow, and FFI usage.
