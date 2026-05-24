@@ -94,7 +94,7 @@
         cp -r ${spagoRegistryIndex} $HOME/.cache/spago-nodejs/registry-index
         chmod -R u+w $HOME/.cache/spago-nodejs
 
-        pnpm install --no-frozen-lockfile --ignore-scripts
+        pnpm install --frozen-lockfile
         patchShebangs node_modules
         mkdir -p node_modules/.bin
         ln -sf ${pkgs.purescript}/bin/purs node_modules/.bin/purs
@@ -115,7 +115,6 @@
         topDir = builtins.head (pkgs.lib.splitString "/" relPath);
       in
         pkgs.lib.elem topDir [
-          ".env.example"
           "package.json"
           "pnpm-lock.yaml"
           "pnpm-workspace.yaml"
@@ -167,12 +166,6 @@
       installPhase = ''
         mkdir -p $out/lib/corpus
         cp -r server.js client.js users.json package.json node_modules assets $out/lib/corpus/
-        if [ -f .env ]; then
-          cp .env $out/lib/corpus/
-        else
-          cp .env.example $out/lib/corpus/.env
-        fi
-
         mkdir -p $out/bin
         makeWrapper ${pkgs.nodejs_24}/bin/node $out/bin/corpus-server \
           --add-flags "--no-deprecation" \
