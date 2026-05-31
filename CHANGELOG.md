@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.17.0] - 2026-05-31
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.16.1..v2.17.0)
+
+### Bug Fixes
+
+- Improve nix builds ([`1589114`](https://git.sr.ht/~mtmn/corpus/commit/158911443a5ad991d41008570297de98b413e041))
+
+### Features
+
+- Use elm2nix fork with lix support ([`09e694c`](https://git.sr.ht/~mtmn/corpus/commit/09e694ceacbbfdf1aea32cdff1ce2a929e98e67a))
+
+### Housekeeping
+
+- Switch to nixpkgs-unstable ([`b3a4a1b`](https://git.sr.ht/~mtmn/corpus/commit/b3a4a1bfb44072409696b2d9d244f6d739fd9466))
+
 ## [2.16.1] - 2026-05-23
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.16.0..v2.16.1)
@@ -9,6 +25,7 @@
 - Add garnix badge to readme ([`63d299d`](https://git.sr.ht/~mtmn/corpus/commit/63d299dcefb65a87315c770bad44a20b25d8b01e))
 - Comment out whine from checks ([`fb31b79`](https://git.sr.ht/~mtmn/corpus/commit/fb31b7914e275fe1a6b412dd66d40581b3faf071))
 - Bump flakes and version ([`b640141`](https://git.sr.ht/~mtmn/corpus/commit/b6401415afb65c87969b5328d7af8447a7d42f9e))
+- Release v2.16.1 ([`a2ab60a`](https://git.sr.ht/~mtmn/corpus/commit/a2ab60ab9be777cf1520e19582d01ebb465e82a1))
 
 ## [2.16.0] - 2026-05-22
 
