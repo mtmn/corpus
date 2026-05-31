@@ -6,15 +6,15 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1769795883,
-        "narHash": "sha256-JfLxMbns2wzu681/HwVcMqijP6dvdGkc6Efqq/UBQoA=",
-        "owner": "dwayne",
+        "lastModified": 1780226956,
+        "narHash": "sha256-HftwyGDKM07UeYWS9l00FRb+k6teC+GQ0DIX3BZhG9Y=",
+        "owner": "mtmn",
         "repo": "elm2nix",
-        "rev": "e84ab8872f1660f5576df19adeb9e1a682402bb4",
+        "rev": "645b36676803c10fb40708170e5d03affb32b8d6",
         "type": "github"
       },
       "original": {
-        "owner": "dwayne",
+        "owner": "mtmn",
         "repo": "elm2nix",
         "type": "github"
       }
@@ -52,11 +52,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1779593580,
-        "narHash": "sha256-le3WvQyzAQjBZnb7q2c8C5Fk2c9LgN/Oq+b0KiD4fM4=",
+        "lastModified": 1780030872,
+        "narHash": "sha256-u6WU/yd/o8iYQrHX3RAwO1hYa3LkoSL+WNQD0rJfJZQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "d849bb215dcdf71bce3e686839ccdb4219e84b2f",
+        "rev": "e9a7635a57597d9754eccebdfc7045e6c8600e6b",
         "type": "github"
       },
       "original": {

@@ -1,7 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    elm2nix.url = "github:dwayne/elm2nix";
+    elm2nix.url = "github:mtmn/elm2nix";
   };
 
   outputs = {
