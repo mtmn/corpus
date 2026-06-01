@@ -20,7 +20,7 @@ import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (Tuple(..))
 import Data.UUID (genUUID, toString) as UUID
 import Effect (Effect)
-import Effect.Aff (Aff, delay, makeAff, nonCanceler, try)
+import Effect.Aff (Aff, bracket, delay, makeAff, nonCanceler, try)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
@@ -117,12 +117,10 @@ backupDb conn dbFile s3cfg intervalMs slug = forever do
       pure unit
 
 -- Acquires the write lock, runs the action inside a transaction, then releases.
--- The lock is always released: on success, on action failure (rollback), and on
--- BEGIN/COMMIT failure. This prevents deadlock if the database throws unexpectedly.
+-- Uses bracket to guarantee lock release even on fiber kill, preventing deadlocks.
 withTransaction :: forall a. Connection -> AVar Unit -> Aff a -> Aff a
-withTransaction conn lock action = do
-  Avar.take lock
-  result <- try do
+withTransaction conn lock action =
+  bracket (Avar.take lock) (\_ -> Avar.put unit lock) \_ -> do
     run conn "BEGIN TRANSACTION" []
     r <- try action
     case r of
@@ -132,10 +130,6 @@ withTransaction conn lock action = do
       Right v -> do
         void $ try $ run conn "COMMIT" []
         pure v
-  Avar.put unit lock
-  case result of
-    Left err -> throwError err
-    Right v -> pure v
 
 queryAll :: Connection -> String -> Array Foreign -> Aff (Array Json)
 queryAll conn sql params = makeAff \cb -> do
