@@ -153,7 +153,8 @@ parseLastfmResponse json = case decodeJson json of
         LastfmTrackSingle' t -> [ t ]
     in
       Just { tracks, totalPages: totalPages }
-  Left _ -> Nothing
+  Left _ ->
+    Nothing
 
 lastfmTrackToListen :: Json -> Maybe Listen
 lastfmTrackToListen json = case decodeJson json of
@@ -176,7 +177,8 @@ lastfmTrackToListen json = case decodeJson json of
               }
           }
       }
-  Left _ -> Nothing
+  Left _ ->
+    Nothing
 
 recordSyncSuccess :: String -> String -> Int -> Aff Unit
 recordSyncSuccess slug source n = do

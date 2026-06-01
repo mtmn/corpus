@@ -254,10 +254,14 @@ instance decodeJsonLastfmRecentTracks :: DecodeJson LastfmRecentTracks where
     attr <- obj .: "@attr"
     trackResult <- obj .:? "track"
     tracks <- case trackResult of
-      Nothing -> pure $ LastfmTrackArray' []
-      Just trackJson -> case toArray trackJson of
-        Just arr -> pure $ LastfmTrackArray' arr
-        Nothing -> pure $ LastfmTrackSingle' trackJson
+      Nothing ->
+        pure $ LastfmTrackArray' []
+      Just trackJson ->
+        case toArray trackJson of
+          Just arr ->
+            pure $ LastfmTrackArray' arr
+          Nothing ->
+            pure $ LastfmTrackSingle' trackJson
     pure $ LastfmRecentTracks { track: tracks, attr }
 
 newtype LastfmResponse = LastfmResponse
