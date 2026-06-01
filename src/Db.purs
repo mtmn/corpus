@@ -39,6 +39,12 @@ import Unsafe.Coerce (unsafeCoerce)
 
 foreign import data Connection :: Type
 
+-- | Coerces a value to Foreign for SQL parameters.
+-- | This centralizes all unsafeCoerce usage for database operations
+-- | into a single auditable point.
+toParam :: forall a. a -> Foreign
+toParam = unsafeCoerce
+
 data FilterField = FilterArtist | FilterAlbum | FilterLabel | FilterYear | FilterGenre | FilterTrack
 
 derive instance Eq FilterField
@@ -152,19 +158,19 @@ initDb conn = do
 
 getOrCreateToken :: Connection -> String -> Aff (Maybe String)
 getOrCreateToken conn slug = do
-  rows <- queryAll conn "SELECT hashed_token FROM api_tokens WHERE slug = ?" [ unsafeCoerce slug ]
+  rows <- queryAll conn "SELECT hashed_token FROM api_tokens WHERE slug = ?" [ toParam slug ]
   case rows !! 0 >>= toObject >>= Object.lookup "hashed_token" >>= toString of
     Just _ ->
       pure Nothing
     Nothing -> do
       token <- liftEffect $ map UUID.toString UUID.genUUID
       let hashedToken = sha256 token
-      run conn "INSERT INTO api_tokens (slug, hashed_token) VALUES (?, ?)" [ unsafeCoerce slug, unsafeCoerce hashedToken ]
+      run conn "INSERT INTO api_tokens (slug, hashed_token) VALUES (?, ?)" [ toParam slug, toParam hashedToken ]
       pure $ Just token
 
 checkExists :: Connection -> Int -> Aff Boolean
 checkExists conn ts = do
-  rows <- queryAll conn "SELECT 1 FROM scrobbles WHERE listened_at = ?" [ unsafeCoerce ts ]
+  rows <- queryAll conn "SELECT 1 FROM scrobbles WHERE listened_at = ?" [ toParam ts ]
   pure case rows of
     [] -> false
     _ -> true
@@ -186,12 +192,12 @@ upsertScrobble conn (Listen { listenedAt, trackMetadata: TrackMetadata track }) 
       mbid = fromMaybe (MbidMapping { releaseMbid: Nothing, caaReleaseMbid: Nothing }) track.mbidMapping
       MbidMapping m = mbid
       params =
-        [ unsafeCoerce ts
-        , unsafeCoerce (fromMaybe "" track.trackName)
-        , unsafeCoerce (fromMaybe "" track.artistName)
-        , unsafeCoerce (fromMaybe "" track.releaseName)
-        , unsafeCoerce (fromMaybe "" m.releaseMbid)
-        , unsafeCoerce (fromMaybe "" m.caaReleaseMbid)
+        [ toParam ts
+        , toParam (fromMaybe "" track.trackName)
+        , toParam (fromMaybe "" track.artistName)
+        , toParam (fromMaybe "" track.releaseName)
+        , toParam (fromMaybe "" m.releaseMbid)
+        , toParam (fromMaybe "" m.caaReleaseMbid)
         ]
     run conn "INSERT INTO scrobbles SELECT * FROM (SELECT ? as listened_at, ? as track_name, ? as artist_name, ? as release_name, ? as release_mbid, ? as caa_release_mbid) t WHERE NOT EXISTS (SELECT 1 FROM scrobbles WHERE listened_at = t.listened_at)" params
 
@@ -215,15 +221,15 @@ getScrobbles conn limit offset _ (Just q) = do
         <> " WHERE (s.track_name ILIKE ? OR s.artist_name ILIKE ? OR s.release_name ILIKE ? OR rm.label ILIKE ?)"
         <> scrobbleOrderPage
     )
-    [ unsafeCoerce pattern, unsafeCoerce pattern, unsafeCoerce pattern, unsafeCoerce pattern, unsafeCoerce limit, unsafeCoerce offset ]
+    [ toParam pattern, toParam pattern, toParam pattern, toParam pattern, toParam limit, toParam offset ]
   pure $ mapMaybe rowToListen rows
 getScrobbles conn limit offset Nothing Nothing = do
   rows <- queryAll conn
     (scrobbleCols <> scrobbleFromLeft <> scrobbleOrderPage)
-    [ unsafeCoerce limit, unsafeCoerce offset ]
+    [ toParam limit, toParam offset ]
   pure $ mapMaybe rowToListen rows
 getScrobbles conn limit offset (Just { field, value }) Nothing = do
-  rows <- queryAll conn (filterQuery field) [ unsafeCoerce value, unsafeCoerce limit, unsafeCoerce offset ]
+  rows <- queryAll conn (filterQuery field) [ toParam value, toParam limit, toParam offset ]
   pure $ mapMaybe rowToListen rows
 
 filterQuery :: FilterField -> String
@@ -265,7 +271,7 @@ getUnenrichedMbids :: Connection -> Int -> Aff (Array String)
 getUnenrichedMbids conn limit = do
   rows <- queryAll conn
     "SELECT DISTINCT release_mbid FROM scrobbles WHERE release_mbid != '' AND release_mbid NOT IN (SELECT release_mbid FROM release_metadata) LIMIT ?"
-    [ unsafeCoerce limit ]
+    [ toParam limit ]
   pure $ mapMaybe extractMbid rows
   where
   extractMbid json = do
@@ -276,7 +282,7 @@ getEmptyGenreMbids :: Connection -> Int -> Aff (Array String)
 getEmptyGenreMbids conn limit = do
   rows <- queryAll conn
     "SELECT DISTINCT s.release_mbid FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE (rm.genre IS NULL OR rm.genre = '') AND (rm.genre_checked_at IS NULL OR rm.genre_checked_at < CAST(epoch(now()) AS INTEGER) - 604800) LIMIT ?"
-    [ unsafeCoerce limit ]
+    [ toParam limit ]
   pure $ mapMaybe extractMbid rows
   where
   extractMbid json = do
@@ -287,17 +293,17 @@ upsertReleaseMetadata :: Connection -> String -> Maybe String -> Maybe String ->
 upsertReleaseMetadata conn mbid genre label year =
   run conn
     "INSERT INTO release_metadata (release_mbid, genre, label, release_year) VALUES (?, ?, ?, ?) ON CONFLICT(release_mbid) DO UPDATE SET genre=excluded.genre, label=excluded.label, release_year=excluded.release_year"
-    [ unsafeCoerce mbid
-    , unsafeCoerce (toNullable genre)
-    , unsafeCoerce (toNullable label)
-    , unsafeCoerce (toNullable year)
+    [ toParam mbid
+    , toParam (toNullable genre)
+    , toParam (toNullable label)
+    , toParam (toNullable year)
     ]
 
 touchGenreCheckedAt :: Connection -> String -> Aff Unit
 touchGenreCheckedAt conn mbid = do
   run conn
     "UPDATE release_metadata SET genre_checked_at = CAST(epoch(now()) AS INTEGER) WHERE release_mbid = ?"
-    [ unsafeCoerce mbid ]
+    [ toParam mbid ]
 
 getStats :: Connection -> Maybe String -> Maybe String -> Maybe String -> Maybe String -> Aff Stats
 getStats conn mPeriod mFrom mTo mSection = do
@@ -306,12 +312,12 @@ getStats conn mPeriod mFrom mTo mSection = do
     buildTimeFilterAndParams = case mFrom, mTo of
       Just from, Just to ->
         { timeFilter: " AND s.listened_at >= CAST(epoch(TIMESTAMP ? || ' 00:00:00') AS INTEGER) AND s.listened_at < CAST(epoch(TIMESTAMP ? || ' 00:00:00') AS INTEGER) + 86400"
-        , params: [ unsafeCoerce from, unsafeCoerce to ]
+        , params: [ toParam from, toParam to ]
         }
       _, _ -> case mPeriod >>= Int.fromString of
         Just days ->
           { timeFilter: " AND s.listened_at >= CAST(epoch(now()) AS INTEGER) - ?"
-          , params: [ unsafeCoerce (days * 86400) ]
+          , params: [ toParam (days * 86400) ]
           }
         Nothing ->
           { timeFilter: "", params: [] }
@@ -350,7 +356,7 @@ getArtistReleasesByMbids conn mbids = do
         <> placeholders
         <> ") AND artist_name != '' AND release_name != ''"
     )
-    (map unsafeCoerce mbids)
+    (map toParam mbids)
   pure $ Object.fromFoldable (mapMaybe extractPair rows)
   where
   extractPair json = do
@@ -390,5 +396,5 @@ rowToListen json = do
 getTokenUser :: Connection -> String -> Aff (Maybe String)
 getTokenUser conn token = do
   let hashedToken = sha256 token
-  rows <- queryAll conn "SELECT slug FROM api_tokens WHERE hashed_token = ?" [ unsafeCoerce hashedToken ]
+  rows <- queryAll conn "SELECT slug FROM api_tokens WHERE hashed_token = ?" [ toParam hashedToken ]
   pure $ rows !! 0 >>= toObject >>= Object.lookup "slug" >>= toString

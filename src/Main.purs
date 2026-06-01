@@ -23,18 +23,17 @@ import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
 import Effect.Exception as Exception
+import Node.Encoding (Encoding(UTF8))
 import Log as Log
 import Node.EventEmitter (on_)
 import Metadata (enrichMetadata)
 import Metrics as Metrics
-import Node.Encoding (Encoding(UTF8))
 import Node.FS.Aff as FSA
 import Node.HTTP (createServer)
 import Node.HTTP.IncomingMessage as IM
 import Node.HTTP.OutgoingMessage (setHeader, toWriteable)
 import Node.HTTP.ServerResponse (setStatusCode, toOutgoingMessage)
 import Node.HTTP.Server as Server
-import Node.HTTP.Types (ServerResponse, IncomingMessage, IMServer)
 import Node.Net.Server (listenTcp, listeningH)
 import Node.Process (argv, lookupEnv)
 import Node.Stream (end, write, writeString)
@@ -44,14 +43,10 @@ import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
 import Command as Command
+import Handler (Request, Response, serveBadRequest, serveError, serveInternalError, serveNotFound, serveUnauthorized)
 import Templates (indexHtml)
 import Types (Listen(..), ListenBrainzAdditionalInfo(..), ListenBrainzSubmitListen(..), ListenBrainzSubmitPayload(..), ListenBrainzSubmitTrackMetadata(..), MbidMapping(..), TrackMetadata(..))
 import Foreign.Object as Object
-
--- Types
-type Request = IncomingMessage IMServer
-
-type Response = ServerResponse
 
 type UserContext =
   { conn :: Connection
@@ -334,46 +329,6 @@ submitTrackMetadataToTrackMetadata (ListenBrainzSubmitTrackMetadata { trackName,
           , caaReleaseMbid: i.releaseMbid
           }
     }
-
-serveNotFound :: Response -> Effect Unit
-serveNotFound res = do
-  setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
-  setStatusCode 404 res
-  let w = toWriteable (toOutgoingMessage res)
-  void $ writeString w UTF8 "Not Found"
-  end w
-
-serveUnauthorized :: Response -> Effect Unit
-serveUnauthorized res = do
-  setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
-  setStatusCode 401 res
-  let w = toWriteable (toOutgoingMessage res)
-  void $ writeString w UTF8 "Unauthorized"
-  end w
-
-serveInternalError :: Response -> Effect Unit
-serveInternalError res = do
-  setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
-  setStatusCode 500 res
-  let w = toWriteable (toOutgoingMessage res)
-  void $ writeString w UTF8 "Internal Server Error"
-  end w
-
-serveBadRequest :: Response -> String -> Effect Unit
-serveBadRequest res message = do
-  setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
-  setStatusCode 400 res
-  let w = toWriteable (toOutgoingMessage res)
-  void $ writeString w UTF8 message
-  end w
-
-serveError :: Response -> Int -> String -> String -> Effect Unit
-serveError res statusCode statusName message = do
-  setHeader "Content-Type" "text/plain" (toOutgoingMessage res)
-  setStatusCode statusCode res
-  let w = toWriteable (toOutgoingMessage res)
-  void $ writeString w UTF8 (statusName <> ": " <> message)
-  end w
 
 startUser :: UserEntry -> Aff UserContext
 startUser { slug, name, config } = do
