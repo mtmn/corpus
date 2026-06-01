@@ -14,10 +14,10 @@ import Data.String.Regex (regex, parseFlags)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..), ListenBrainzSubmitPayload(..), ListenBrainzSubmitListen(..), ListenBrainzSubmitTrackMetadata(..), ListenBrainzAdditionalInfo(..))
-import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt, getOrCreateToken, getTokenUser)
+import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt, getOrCreateToken, getTokenUser, fromString)
 import Data.Argonaut.Core (Json)
 import Foreign.Object as Object
-import Main (parseFilterField, submitListenToListen, findUserByToken, sanitizeDate)
+import Main (submitListenToListen, findUserByToken, sanitizeDate)
 import Cover (sanitizeKey)
 import Sync (listenBrainzUrl, lastfmTrackToListen, parseLastfmResponse)
 import S3 (getS3Url)
@@ -49,17 +49,17 @@ main = runSpecAndExitProcess [consoleReporter] do
         sanitizeKey "a...b" `shouldEqual` "a...b"
         sanitizeKey "UPPER lower" `shouldEqual` "UPPER_lower"
 
-      describe "parseFilterField" do
+      describe "fromString" do
         it "maps all valid field names" do
-          parseFilterField "artist" `shouldEqual` Just FilterArtist
-          parseFilterField "album" `shouldEqual` Just FilterAlbum
-          parseFilterField "label" `shouldEqual` Just FilterLabel
-          parseFilterField "year" `shouldEqual` Just FilterYear
-          parseFilterField "genre" `shouldEqual` Just FilterGenre
+          fromString "artist" `shouldEqual` Just FilterArtist
+          fromString "album" `shouldEqual` Just FilterAlbum
+          fromString "label" `shouldEqual` Just FilterLabel
+          fromString "year" `shouldEqual` Just FilterYear
+          fromString "genre" `shouldEqual` Just FilterGenre
 
         it "returns Nothing for unknown or empty input" do
-          parseFilterField "unknown" `shouldEqual` Nothing
-          parseFilterField "" `shouldEqual` Nothing
+          fromString "unknown" `shouldEqual` Nothing
+          fromString "" `shouldEqual` Nothing
 
       describe "sanitizeDate" do
         it "strips non-numeric characters except hyphens" do

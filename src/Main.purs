@@ -10,13 +10,13 @@ import Data.Array (find, length)
 import Data.Array as Data.Array
 import Data.Either (Either(..), fromRight')
 import Data.Foldable (for_, traverse_)
-import Data.Int (fromString, toNumber)
+import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (Pattern(..), stripPrefix)
 import Data.String.Regex (regex, replace, parseFlags)
 import Partial.Unsafe (unsafeCrashWith)
 import Data.Traversable (traverse)
-import Db (Connection, FilterField(..), backupDb, connect, getOrCreateToken, getTokenUser, getScrobbles, getStats, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
+import Db (Connection, backupDb, connect, fromString, getOrCreateToken, getScrobbles, getStats, getTokenUser, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, forkAff, joinFiber, killFiber, launchAff_, try)
 import Effect.Aff.AVar (AVar)
@@ -212,26 +212,17 @@ serveClientJs res = do
 getQueryParam :: String -> URL -> Maybe String
 getQueryParam name url = URLSearchParams.get name (URL.searchParams url)
 
-parseFilterField :: String -> Maybe FilterField
-parseFilterField "artist" = Just FilterArtist
-parseFilterField "album" = Just FilterAlbum
-parseFilterField "label" = Just FilterLabel
-parseFilterField "year" = Just FilterYear
-parseFilterField "genre" = Just FilterGenre
-parseFilterField "track" = Just FilterTrack
-parseFilterField _ = Nothing
-
 serveProxy :: String -> Connection -> URL -> Response -> Effect Unit
 serveProxy corsOrigin db url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   setHeader "Access-Control-Allow-Origin" corsOrigin (toOutgoingMessage res)
 
   launchAff_ do
-    let limit = fromMaybe 25 (getQueryParam "limit" url >>= fromString)
-    let offset = fromMaybe 0 (getQueryParam "offset" url >>= fromString)
+    let limit = fromMaybe 25 (getQueryParam "limit" url >>= Int.fromString)
+    let offset = fromMaybe 0 (getQueryParam "offset" url >>= Int.fromString)
     let
       mFilter = do
-        field <- getQueryParam "filterField" url >>= parseFilterField
+        field <- getQueryParam "filterField" url >>= fromString
         value <- getQueryParam "filterValue" url
         pure { field, value }
 
@@ -418,7 +409,7 @@ startUser { slug, name, config } = do
 
   enrichMetadataFiber <- forkAff $ enrichMetadata conn config slug
   backupFiber <-
-    if config.backupEnabled then Just <$> forkAff (backupDb conn config.databaseFile (s3ConfigFromUser config) (toNumber config.backupIntervalHours * 3600000.0) slug)
+    if config.backupEnabled then Just <$> forkAff (backupDb conn config.databaseFile (s3ConfigFromUser config) (Int.toNumber config.backupIntervalHours * 3600000.0) slug)
     else pure Nothing
 
   let displayName = fromMaybe (if slug == "" then "root" else slug) name

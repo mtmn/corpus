@@ -3,8 +3,11 @@ module Types where
 import Prelude
 
 import Data.Argonaut (class DecodeJson, class EncodeJson, decodeJson, encodeJson, (.:), (.:?), (:=), (~>))
-import Data.Argonaut.Core (jsonEmptyObject)
-import Data.Maybe (Maybe)
+import Data.Argonaut.Decode.Error (JsonDecodeError(..))
+import Data.Either (Either(..))
+import Data.Argonaut.Core (Json, toArray, jsonEmptyObject, toNumber, toString)
+import Data.Int (fromString, fromNumber)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
 
@@ -202,6 +205,136 @@ instance EncodeJson MbidMapping where
     "release_mbid" := encodeJson releaseMbid
       ~> "caa_release_mbid" := encodeJson caaReleaseMbid
       ~> jsonEmptyObject
+
+-- Last.fm API types
+
+newtype LastfmAttr = LastfmAttr
+  { totalPages :: Int
+  }
+
+derive instance genericLastfmAttr :: Generic LastfmAttr _
+instance showLastfmAttr :: Show LastfmAttr where
+  show = genericShow
+
+instance decodeJsonLastfmAttr :: DecodeJson LastfmAttr where
+  decodeJson json = do
+    obj <- decodeJson json
+    tpJson <- obj .: "totalPages"
+    let
+      tpStr = toString tpJson
+      tpNum = toNumber tpJson
+      parsed = case tpStr >>= fromString of
+        Just n -> Just n
+        Nothing -> tpNum >>= fromNumber
+    case parsed of
+      Just n -> pure $ LastfmAttr { totalPages: n }
+      Nothing -> Left $ TypeMismatch "Invalid totalPages"
+
+newtype LastfmTrackArray = LastfmTrackArray (Array Json)
+newtype LastfmTrackSingle = LastfmTrackSingle Json
+
+data LastfmTracks = LastfmTrackArray' (Array Json) | LastfmTrackSingle' Json
+
+instance showLastfmTracks :: Show LastfmTracks where
+  show (LastfmTrackArray' _) = "LastfmTrackArray' _"
+  show (LastfmTrackSingle' _) = "LastfmTrackSingle' _"
+
+newtype LastfmRecentTracks = LastfmRecentTracks
+  { track :: LastfmTracks
+  , attr :: LastfmAttr
+  }
+
+derive instance genericLastfmRecentTracks :: Generic LastfmRecentTracks _
+instance showLastfmRecentTracks :: Show LastfmRecentTracks where
+  show = genericShow
+
+instance decodeJsonLastfmRecentTracks :: DecodeJson LastfmRecentTracks where
+  decodeJson json = do
+    obj <- decodeJson json
+    attr <- obj .: "@attr"
+    trackResult <- obj .:? "track"
+    tracks <- case trackResult of
+      Nothing -> pure $ LastfmTrackArray' []
+      Just trackJson -> case toArray trackJson of
+        Just arr -> pure $ LastfmTrackArray' arr
+        Nothing -> pure $ LastfmTrackSingle' trackJson
+    pure $ LastfmRecentTracks { track: tracks, attr }
+
+newtype LastfmResponse = LastfmResponse
+  { recenttracks :: LastfmRecentTracks
+  }
+
+derive instance genericLastfmResponse :: Generic LastfmResponse _
+instance showLastfmResponse :: Show LastfmResponse where
+  show = genericShow
+
+instance decodeJsonLastfmResponse :: DecodeJson LastfmResponse where
+  decodeJson json = do
+    obj <- decodeJson json
+    recenttracks <- obj .: "recenttracks"
+    pure $ LastfmResponse { recenttracks }
+
+newtype LastfmArtist = LastfmArtist { text :: String }
+
+derive instance genericLastfmArtist :: Generic LastfmArtist _
+instance showLastfmArtist :: Show LastfmArtist where
+  show = genericShow
+
+instance decodeJsonLastfmArtist :: DecodeJson LastfmArtist where
+  decodeJson json = do
+    obj <- decodeJson json
+    text <- obj .: "#text"
+    pure $ LastfmArtist { text }
+
+newtype LastfmAlbum = LastfmAlbum
+  { text :: Maybe String
+  , mbid :: String
+  }
+
+derive instance genericLastfmAlbum :: Generic LastfmAlbum _
+instance showLastfmAlbum :: Show LastfmAlbum where
+  show = genericShow
+
+instance decodeJsonLastfmAlbum :: DecodeJson LastfmAlbum where
+  decodeJson json = do
+    obj <- decodeJson json
+    text <- obj .:? "#text"
+    mbid <- fromMaybe "" <$> obj .:? "mbid"
+    pure $ LastfmAlbum { text, mbid }
+
+newtype LastfmDate = LastfmDate { uts :: Int }
+
+derive instance genericLastfmDate :: Generic LastfmDate _
+instance showLastfmDate :: Show LastfmDate where
+  show = genericShow
+
+instance decodeJsonLastfmDate :: DecodeJson LastfmDate where
+  decodeJson json = do
+    obj <- decodeJson json
+    utsStr <- obj .: "uts"
+    case fromString utsStr of
+      Just n -> pure $ LastfmDate { uts: n }
+      Nothing -> Left $ TypeMismatch $ "Invalid uts: " <> utsStr
+
+newtype LastfmTrack = LastfmTrack
+  { name :: String
+  , artist :: LastfmArtist
+  , album :: Maybe LastfmAlbum
+  , date :: Maybe LastfmDate
+  }
+
+derive instance genericLastfmTrack :: Generic LastfmTrack _
+instance showLastfmTrack :: Show LastfmTrack where
+  show = genericShow
+
+instance decodeJsonLastfmTrack :: DecodeJson LastfmTrack where
+  decodeJson json = do
+    obj <- decodeJson json
+    name <- obj .: "name"
+    artist <- obj .: "artist"
+    album <- obj .:? "album"
+    date <- obj .:? "date"
+    pure $ LastfmTrack { name, artist, album, date }
 
 newtype StatsEntry = StatsEntry
   { name :: String

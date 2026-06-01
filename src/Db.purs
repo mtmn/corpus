@@ -11,8 +11,10 @@ import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Formatter.DateTime (formatDateTime)
 import Data.Function.Uncurried (Fn2, Fn4, runFn2, runFn4)
-import Data.Int (fromString, round)
+import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Generic.Rep (class Generic)
+import Data.Show.Generic (genericShow)
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.String (Pattern(..), split, stripSuffix)
 import Data.String.Common (joinWith)
@@ -40,14 +42,18 @@ foreign import data Connection :: Type
 data FilterField = FilterArtist | FilterAlbum | FilterLabel | FilterYear | FilterGenre | FilterTrack
 
 derive instance Eq FilterField
-
+derive instance Generic FilterField _
 instance Show FilterField where
-  show FilterArtist = "FilterArtist"
-  show FilterAlbum = "FilterAlbum"
-  show FilterLabel = "FilterLabel"
-  show FilterYear = "FilterYear"
-  show FilterGenre = "FilterGenre"
-  show FilterTrack = "FilterTrack"
+  show = genericShow
+
+fromString :: String -> Maybe FilterField
+fromString "artist" = Just FilterArtist
+fromString "album" = Just FilterAlbum
+fromString "label" = Just FilterLabel
+fromString "year" = Just FilterYear
+fromString "genre" = Just FilterGenre
+fromString "track" = Just FilterTrack
+fromString _ = Nothing
 
 foreign import connectImpl :: Fn2 String (Nullable Error -> Nullable Connection -> Effect Unit) (Effect Unit)
 foreign import runImpl :: Fn4 Connection String (Array Foreign) (Nullable Error -> Effect Unit) (Effect Unit)
@@ -170,7 +176,7 @@ getOldestTs conn = do
     row <- rows !! 0
     obj <- toObject row
     n <- Object.lookup "min_ts" obj >>= toNumber
-    let ts = round n
+    let ts = Int.round n
     if ts == 0 then Nothing else Just ts
 
 upsertScrobble :: Connection -> Listen -> Aff Unit
@@ -299,10 +305,10 @@ getStats conn mPeriod mFrom mTo mSection = do
     buildTimeFilterAndParams :: { timeFilter :: String, params :: Array Foreign }
     buildTimeFilterAndParams = case mFrom, mTo of
       Just from, Just to ->
-        { timeFilter: " AND s.listened_at >= CAST(epoch(TIMESTAMP '" <> from <> " 00:00:00') AS INTEGER) AND s.listened_at < CAST(epoch(TIMESTAMP '" <> to <> " 00:00:00') AS INTEGER) + 86400"
-        , params: []
+        { timeFilter: " AND s.listened_at >= CAST(epoch(TIMESTAMP ? || ' 00:00:00') AS INTEGER) AND s.listened_at < CAST(epoch(TIMESTAMP ? || ' 00:00:00') AS INTEGER) + 86400"
+        , params: [ unsafeCoerce from, unsafeCoerce to ]
         }
-      _, _ -> case mPeriod >>= fromString of
+      _, _ -> case mPeriod >>= Int.fromString of
         Just days ->
           { timeFilter: " AND s.listened_at >= CAST(epoch(now()) AS INTEGER) - ?"
           , params: [ unsafeCoerce (days * 86400) ]
@@ -331,7 +337,7 @@ rowToEntry :: Json -> Maybe StatsEntry
 rowToEntry json = do
   obj <- toObject json
   name <- Object.lookup "name" obj >>= toString
-  count <- map round $ Object.lookup "count" obj >>= toNumber
+  count <- map Int.round $ Object.lookup "count" obj >>= toNumber
   pure $ StatsEntry { name, count }
 
 getArtistReleasesByMbids :: Connection -> Array String -> Aff (Object.Object { artist :: String, release :: String })
@@ -357,7 +363,7 @@ getArtistReleasesByMbids conn mbids = do
 rowToListen :: Json -> Maybe Listen
 rowToListen json = do
   obj <- toObject json
-  listenedAt <- map round $ Object.lookup "listened_at" obj >>= toNumber
+  listenedAt <- map Int.round $ Object.lookup "listened_at" obj >>= toNumber
   trackName <- Object.lookup "track_name" obj >>= toString
   artistName <- Object.lookup "artist_name" obj >>= toString
   releaseName <- Object.lookup "release_name" obj >>= toString

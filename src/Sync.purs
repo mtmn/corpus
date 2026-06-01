@@ -13,15 +13,13 @@ import Prelude
 
 import Control.Monad.Rec.Class (forever)
 import Data.Argonaut (decodeJson, parseJson)
-import Data.Argonaut.Core (Json, toArray, toObject, toString, toNumber, stringify)
+import Data.Argonaut.Core (Json, stringify)
 import Data.Array (length, mapMaybe, null)
 import Data.Either (Either(..))
 import Data.Foldable (foldM, for_)
-import Data.Int (fromNumber, fromString)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (Tuple(..))
-import Control.Alt ((<|>))
 import Db (Connection, checkExists, getOldestTs, upsertScrobble, withTransaction)
 import Effect.Aff (Aff, delay, launchAff_, makeAff, nonCanceler, try)
 import Effect.Aff.AVar (AVar)
@@ -31,7 +29,6 @@ import Effect.Exception as Exception
 import Effect.Uncurried (mkEffectFn1)
 import Fetch (fetch, Method(GET))
 import Fetch.Argonaut.Json (fromJson)
-import Foreign.Object as Object
 import JSURI (encodeURIComponent)
 import Log as Log
 import Metrics as Metrics
@@ -40,7 +37,7 @@ import Node.HTTP.ClientRequest as Client
 import Node.HTTP.IncomingMessage as IM
 import Node.HTTPS as HTTPS
 import Node.Stream.Aff (readableToStringUtf8)
-import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..))
+import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..), LastfmResponse(..), LastfmRecentTracks(..), LastfmAttr(..), LastfmTracks(..), LastfmArtist(..), LastfmAlbum(..), LastfmDate(..), LastfmTrack(..))
 import Unsafe.Coerce (unsafeCoerce)
 
 listenBrainzUrl :: String -> String
@@ -102,50 +99,38 @@ fetchLastfmPage apiKey lfmUser page mTo = withRetry "Last.fm fetch" do
     liftEffect $ Exception.error ("Last.fm API returned status " <> show fr.status) # Exception.throwException
 
 parseLastfmResponse :: Json -> Maybe { tracks :: Array Json, totalPages :: Int }
-parseLastfmResponse json = do
-  let
-    obj = toObject json
-    rt = obj >>= Object.lookup "recenttracks" >>= toObject
-    mTracks = rt >>= Object.lookup "track"
-    tracks = case mTracks of
-      Just t -> fromMaybe [ t ] (toArray t)
-      Nothing -> []
-    attr = rt >>= Object.lookup "@attr" >>= toObject
-    totalPages = fromMaybe 0 $ attr >>= Object.lookup "totalPages" >>= \tp ->
-      (toString tp >>= fromString) <|> (toNumber tp >>= fromNumber)
-  case rt, attr of
-    Just _, Just _ -> Just { tracks, totalPages }
-    _, _ -> Nothing
+parseLastfmResponse json = case decodeJson json of
+  Right (LastfmResponse { recenttracks: LastfmRecentTracks { track, attr: LastfmAttr { totalPages } } }) ->
+    let
+      tracks = case track of
+        LastfmTrackArray' ts -> ts
+        LastfmTrackSingle' t -> [ t ]
+    in
+      Just { tracks, totalPages: totalPages }
+  Left _ -> Nothing
 
 lastfmTrackToListen :: Json -> Maybe Listen
-lastfmTrackToListen json = do
-  obj <- toObject json
-  trackName <- Object.lookup "name" obj >>= toString
-  artistObj <- Object.lookup "artist" obj >>= toObject
-  artistName <- Object.lookup "#text" artistObj >>= toString
-  albumObj <- Object.lookup "album" obj >>= toObject
-  let releaseName = Object.lookup "#text" albumObj >>= toString
-  let
-    releaseMbid = do
-      s <- Object.lookup "mbid" albumObj >>= toString
-      if s == "" then Nothing else Just s
-  dateObj <- Object.lookup "date" obj >>= toObject
-  utsStr <- Object.lookup "uts" dateObj >>= toString
-  ts <- fromString utsStr
-  pure $ Listen
-    { listenedAt: Just ts
-    , trackMetadata: TrackMetadata
-        { trackName: Just trackName
-        , artistName: Just artistName
-        , releaseName: releaseName
-        , genre: Nothing
-        , label: Nothing
-        , mbidMapping: Just $ MbidMapping
-            { releaseMbid: releaseMbid
-            , caaReleaseMbid: releaseMbid
-            }
-        }
-    }
+lastfmTrackToListen json = case decodeJson json of
+  Right (LastfmTrack { name, artist: LastfmArtist { text: artistName }, album, date }) -> do
+    ts <- date >>= \(LastfmDate { uts }) -> Just uts
+    let
+      releaseName = album >>= \(LastfmAlbum { text }) -> text
+      releaseMbid = album >>= \(LastfmAlbum { mbid }) -> if mbid == "" then Nothing else Just mbid
+    pure $ Listen
+      { listenedAt: Just ts
+      , trackMetadata: TrackMetadata
+          { trackName: Just name
+          , artistName: Just artistName
+          , releaseName: releaseName
+          , genre: Nothing
+          , label: Nothing
+          , mbidMapping: Just $ MbidMapping
+              { releaseMbid: releaseMbid
+              , caaReleaseMbid: releaseMbid
+              }
+          }
+      }
+  Left _ -> Nothing
 
 recordSyncSuccess :: String -> String -> Int -> Aff Unit
 recordSyncSuccess slug source n = do
