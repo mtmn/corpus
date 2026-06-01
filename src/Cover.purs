@@ -13,13 +13,13 @@ import Control.Alt ((<|>))
 import Config (UserConfig, s3ConfigFromUser)
 import S3 (existsInS3, getS3Url, uploadToS3)
 import Data.Array ((!!), find)
-import Data.Either (Either(..))
+import Data.Either (Either(..), fromRight')
 import Data.Foldable (foldM)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String.CaseInsensitive (CaseInsensitiveString(..))
-import Data.String.Regex (replace, parseFlags)
-import Data.String.Regex.Unsafe (unsafeRegex)
+import Data.String.Regex (regex, replace, parseFlags)
+import Partial.Unsafe (unsafeCrashWith)
 import Effect (Effect)
 import Effect.Aff (Aff, forkAff, try)
 import Effect.Class (liftEffect)
@@ -52,8 +52,8 @@ type CoverSource =
 sanitizeKey :: String -> String
 sanitizeKey = replace re1 "_" >>> replace re2 "_"
   where
-  re1 = unsafeRegex "[^a-z0-9.-]" (parseFlags "gi")
-  re2 = unsafeRegex "_{2,}" (parseFlags "g")
+  re1 = fromRight' (\_ -> unsafeCrashWith "invalid regex re1") $ regex "[^a-z0-9.-]" (parseFlags "gi")
+  re2 = fromRight' (\_ -> unsafeCrashWith "invalid regex re2") $ regex "_{2,}" (parseFlags "g")
 
 getQueryParam :: String -> URL -> Maybe String
 getQueryParam key url = URLSearchParams.get key (URL.searchParams url)

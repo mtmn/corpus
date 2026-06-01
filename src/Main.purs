@@ -8,13 +8,13 @@ import Cosine (serveSimilar)
 import Data.Argonaut (decodeJson, encodeJson, parseJson, stringify)
 import Data.Array (find, length)
 import Data.Array as Data.Array
-import Data.Either (Either(..))
+import Data.Either (Either(..), fromRight')
 import Data.Foldable (for_, traverse_)
 import Data.Int (fromString, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (Pattern(..), stripPrefix)
-import Data.String.Regex (replace, parseFlags)
-import Data.String.Regex.Unsafe (unsafeRegex)
+import Data.String.Regex (regex, replace, parseFlags)
+import Partial.Unsafe (unsafeCrashWith)
 import Data.Traversable (traverse)
 import Db (Connection, FilterField(..), backupDb, connect, getOrCreateToken, getTokenUser, getScrobbles, getStats, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
 import Effect (Effect)
@@ -245,13 +245,16 @@ serveProxy corsOrigin db url res = do
       void $ writeString w UTF8 responseBody
       end w
 
+sanitizeDate :: String -> String
+sanitizeDate = replace (fromRight' (\_ -> unsafeCrashWith "invalid regex") $ regex "[^0-9\\-]" (parseFlags "g")) ""
+
 serveStats :: Connection -> URL -> Response -> Effect Unit
 serveStats db url res = do
   setHeader "Content-Type" "application/json" (toOutgoingMessage res)
   launchAff_ do
     let period = getQueryParam "period" url
     let section = getQueryParam "section" url
-    let safeDate = map (replace (unsafeRegex "[^0-9\\-]" (parseFlags "g")) "")
+    let safeDate = map sanitizeDate
     let mFrom = safeDate (getQueryParam "from" url)
     let mTo = safeDate (getQueryParam "to" url)
     stats <- getStats db period mFrom mTo section

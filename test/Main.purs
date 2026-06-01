@@ -5,18 +5,19 @@ import Prelude
 import Unsafe.Coerce (unsafeCoerce)
 import Data.Argonaut (decodeJson, encodeJson, parseJson)
 import Data.Array (length)
-import Data.Either (Either(..))
+import Data.Either (Either(..), isRight)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Test.Spec (describe, it)
 import Test.Spec.Assertions (shouldEqual, fail)
+import Data.String.Regex (regex, parseFlags)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..), ListenBrainzSubmitPayload(..), ListenBrainzSubmitListen(..), ListenBrainzSubmitTrackMetadata(..), ListenBrainzAdditionalInfo(..))
 import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt, getOrCreateToken, getTokenUser)
 import Data.Argonaut.Core (Json)
 import Foreign.Object as Object
-import Main (parseFilterField, submitListenToListen, findUserByToken)
+import Main (parseFilterField, submitListenToListen, findUserByToken, sanitizeDate)
 import Cover (sanitizeKey)
 import Sync (listenBrainzUrl, lastfmTrackToListen, parseLastfmResponse)
 import S3 (getS3Url)
@@ -27,10 +28,26 @@ main = runSpecAndExitProcess [consoleReporter] do
       it "should build ListenBrainz URLs correctly" do
         listenBrainzUrl "user1" `shouldEqual` "https://api.listenbrainz.org/1/user/user1/listens"
 
+      it "regex patterns should compile successfully" do
+        let re1 = regex "[^a-z0-9.-]" (parseFlags "gi")
+        let re2 = regex "_{2,}" (parseFlags "g")
+        let re3 = regex "[^0-9\\-]" (parseFlags "g")
+        isRight re1 `shouldEqual` true
+        isRight re2 `shouldEqual` true
+        isRight re3 `shouldEqual` true
+
       it "should sanitize S3 keys correctly" do
         sanitizeKey "hello world!" `shouldEqual` "hello_world_"
         sanitizeKey "T.est-123" `shouldEqual` "T.est-123"
         sanitizeKey "multiple   spaces" `shouldEqual` "multiple_spaces"
+
+      it "should sanitize S3 keys - edge cases" do
+        sanitizeKey "" `shouldEqual` ""
+        sanitizeKey "already-clean" `shouldEqual` "already-clean"
+        sanitizeKey "a@#b$c%d" `shouldEqual` "a_b_c_d"
+        sanitizeKey "___" `shouldEqual` "_"
+        sanitizeKey "a...b" `shouldEqual` "a...b"
+        sanitizeKey "UPPER lower" `shouldEqual` "UPPER_lower"
 
       describe "parseFilterField" do
         it "maps all valid field names" do
@@ -43,6 +60,18 @@ main = runSpecAndExitProcess [consoleReporter] do
         it "returns Nothing for unknown or empty input" do
           parseFilterField "unknown" `shouldEqual` Nothing
           parseFilterField "" `shouldEqual` Nothing
+
+      describe "sanitizeDate" do
+        it "strips non-numeric characters except hyphens" do
+          sanitizeDate "2024-01-15" `shouldEqual` "2024-01-15"
+          sanitizeDate "2024/01/15" `shouldEqual` "20240115"
+          sanitizeDate "Jan 15, 2024" `shouldEqual` "152024"
+          sanitizeDate "2024-01-15T10:30:00" `shouldEqual` "2024-01-15103000"
+
+        it "handles edge cases" do
+          sanitizeDate "" `shouldEqual` ""
+          sanitizeDate "12345" `shouldEqual` "12345"
+          sanitizeDate "abc" `shouldEqual` ""
 
     describe "ListenBrainz Submission" do
       it "should decode a ListenBrainz submission payload" do
