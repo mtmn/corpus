@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.17.1] - 2026-06-01
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.17.0..v2.17.1)
+
+### Bug Fixes
+
+- Replace `unsafeRegex` clauses ([`be7ee69`](https://git.sr.ht/~mtmn/corpus/commit/be7ee69398cc6aef5989dcf92340e7fc323517a6))
+- Guarantee lock release in db transaction ([`84a7307`](https://git.sr.ht/~mtmn/corpus/commit/84a7307cd1eb5d243fbbd35e1f3f853ffe950018))
+- Better type safety ([`96b22d1`](https://git.sr.ht/~mtmn/corpus/commit/96b22d1c3a5e8459c4807eb86d06533a48233cfb))
+- Deduplicate sql logic; separate Handler.purs ([`612dceb`](https://git.sr.ht/~mtmn/corpus/commit/612dcebd7ae4f62ddb284a5d6b3a933e7da3c11a))
+
+### Housekeeping
+
+- Add purs-tidy config ([`12fde33`](https://git.sr.ht/~mtmn/corpus/commit/12fde33d119bb89bc332c4e17551d03feeadb328))
+- Fix whines ([`a70f22f`](https://git.sr.ht/~mtmn/corpus/commit/a70f22f7593ebae3974c4b7cd56e40dbb68de2e5))
+
 ## [2.17.0] - 2026-05-31
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.16.1..v2.17.0)
@@ -15,6 +31,7 @@
 ### Housekeeping
 
 - Switch to nixpkgs-unstable ([`b3a4a1b`](https://git.sr.ht/~mtmn/corpus/commit/b3a4a1bfb44072409696b2d9d244f6d739fd9466))
+- Release v2.17.0 ([`d750f9f`](https://git.sr.ht/~mtmn/corpus/commit/d750f9f7aab43a912871d96eadb2ebd5254e09c4))
 
 ## [2.16.1] - 2026-05-23
 
