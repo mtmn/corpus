@@ -61,7 +61,7 @@
     },
     "package_set": {
       "address": {
-        "registry": "77.3.0"
+        "registry": "77.5.0"
       },
       "compiler": ">=0.15.15 <0.16.0",
       "content": {
@@ -359,6 +359,7 @@
         "monoidal": "0.16.0",
         "morello": "0.4.0",
         "mote": "3.0.0",
+        "motion": "4.0.0",
         "motsunabe": "2.0.0",
         "mvc": "0.0.1",
         "mysql": "6.0.1",
@@ -655,7 +656,7 @@
         "webextension-polyfill": "0.1.0",
         "webgpu": "0.0.1",
         "which": "2.0.0",
-        "whine-core": "0.0.33",
+        "whine-core": "0.0.34",
         "xterm": "1.0.0",
         "yaml-next": "3.1.1",
         "yoga-acp-om": "0.1.1",
@@ -669,7 +670,8 @@
         "yoga-fastify": "0.5.1",
         "yoga-fastify-om": "0.4.4",
         "yoga-fetch": "1.0.1",
-        "yoga-fetch-om": "0.6.2",
+        "yoga-fetch-om": "0.6.3",
+        "yoga-heroui": "2.0.2",
         "yoga-http-api": "0.3.1",
         "yoga-jaeger": "0.1.1",
         "yoga-json": "5.2.1",

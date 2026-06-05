@@ -26,15 +26,15 @@
     spagoRegistry = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry";
-      rev = "8418977aa0ab7d5cb2c1f43aae3cdd46d762101a";
-      hash = "sha256-kGlHQBXRDlFa953AfV9e+k0OThnIgVSkSyplarkA9pk=";
+      rev = "7c020ee4076070dfc917ed0efa6129ce1b60c0a8";
+      hash = "sha256-5fxgKomfEI0SqLC/b55H5mLitLbXGh1syEWzuupwK7Y=";
     };
 
     spagoRegistryIndex = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry-index";
-      rev = "86250cbb8ec9a344ec10d0a97d76a37d357a260f";
-      hash = "sha256-2tpE9v46od3z4iZqJtXsdgifnrOJD2MxTQ5CvGWsoHg=";
+      rev = "0f05445d856c828ef029fd9a982e119038778eda";
+      hash = "sha256-cwp/L0YgKtbwyL0JhUsR8VTubmGxoaYgjHEwmI4Cypo=";
     };
 
     registryDat = generateRegistryDat {elmLock = ./elm.lock;};
@@ -58,7 +58,7 @@
         name = "corpus-pnpm-source";
       };
       pname = "corpus";
-      hash = "sha256-dwSjXCN9Ake1O6IgF5ZaGvDvZ19MUV2RLKIrJU/suP4=";
+      hash = "sha256-7xgw8iQ1d69rQCiiyuRXMk5phMg2df5NHfzKGDboxak=";
       fetcherVersion = 3;
     };
 
