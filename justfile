@@ -74,7 +74,7 @@ check:
     statix check .
 
 # Manage the container image (build, load, push)
-container command:
+oci command:
     @if [ "{{ command }}" = "build" ]; then \
         nix build .#container; \
     elif [ "{{ command }}" = "load" ]; then \

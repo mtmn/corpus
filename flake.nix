@@ -173,6 +173,13 @@
           --chdir "$out/lib/corpus"
       '';
     };
+    dockerImage = pkgs.dockerTools.buildLayeredImage {
+      name = "corpus";
+      tag = corpus.version;
+      contents = [corpus];
+      extraCommands = "mkdir -p tmp";
+      config.Cmd = ["${corpus}/bin/corpus-server"];
+    };
   in {
     devShells.${system}.default = pkgs.mkShell {
       name = "corpus";
@@ -187,6 +194,9 @@
       ];
     };
 
-    packages.${system}.default = corpus;
+    packages.${system} = {
+      default = corpus;
+      container = dockerImage;
+    };
   };
 }
