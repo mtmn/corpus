@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.18.1] - 2026-06-06
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.18.0..v2.18.1)
+
+### Housekeeping
+
+- Remove garnix from readme ([`559e352`](https://git.sr.ht/~mtmn/corpus/commit/559e3527459d6e2abe3276d836e788009dbcd60e))
+
 ## [2.18.0] - 2026-06-06
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.17.1..v2.18.0)
@@ -11,6 +19,7 @@
 ### Housekeeping
 
 - Update deps ([`99a8e5c`](https://git.sr.ht/~mtmn/corpus/commit/99a8e5cbc153ff87ec8e2f8f0f2f98922d05baf8))
+- Release v2.18.0 ([`b8949bd`](https://git.sr.ht/~mtmn/corpus/commit/b8949bd90efdd85778518c2af5c51b3bdc3a42cf))
 
 ## [2.17.1] - 2026-06-01
 
