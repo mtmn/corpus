@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.18.0] - 2026-06-06
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.17.1..v2.18.0)
+
+### Features
+
+- Add container build to flake.nix ([`3ba41c4`](https://git.sr.ht/~mtmn/corpus/commit/3ba41c464f9b3c51839973a95f787527ff847665))
+
+### Housekeeping
+
+- Update deps ([`99a8e5c`](https://git.sr.ht/~mtmn/corpus/commit/99a8e5cbc153ff87ec8e2f8f0f2f98922d05baf8))
+
 ## [2.17.1] - 2026-06-01
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.17.0..v2.17.1)
@@ -15,6 +27,7 @@
 
 - Add purs-tidy config ([`12fde33`](https://git.sr.ht/~mtmn/corpus/commit/12fde33d119bb89bc332c4e17551d03feeadb328))
 - Fix whines ([`a70f22f`](https://git.sr.ht/~mtmn/corpus/commit/a70f22f7593ebae3974c4b7cd56e40dbb68de2e5))
+- Release v2.17.1 ([`21b2cb8`](https://git.sr.ht/~mtmn/corpus/commit/21b2cb8a99fd9215507e278257a22252b062ead2))
 
 ## [2.17.0] - 2026-05-31
 
