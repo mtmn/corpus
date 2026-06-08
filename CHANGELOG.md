@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.19.0] - 2026-06-08
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.18.1..v2.19.0)
+
+### Features
+
+- **cache:** Generate presigned URLs for covers ([`b7a2afe`](https://git.sr.ht/~mtmn/corpus/commit/b7a2afe9432db697e6ef4b7838e83490a335583e))
+
 ## [2.18.1] - 2026-06-06
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.18.0..v2.18.1)
@@ -7,6 +15,7 @@
 ### Housekeeping
 
 - Remove garnix from readme ([`559e352`](https://git.sr.ht/~mtmn/corpus/commit/559e3527459d6e2abe3276d836e788009dbcd60e))
+- Release v2.18.1 ([`4786b57`](https://git.sr.ht/~mtmn/corpus/commit/4786b57869b935b953a4a2f4718b9e26d95341e4))
 
 ## [2.18.0] - 2026-06-06
 
