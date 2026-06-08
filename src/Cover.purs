@@ -11,7 +11,7 @@ import Prelude
 
 import Control.Alt ((<|>))
 import Config (UserConfig, s3ConfigFromUser)
-import S3 (existsInS3, getS3Url, uploadToS3)
+import S3 (existsInS3, getPresignedUrl, uploadToS3)
 import Data.Array ((!!), find)
 import Data.Either (Either(..), fromRight')
 import Data.Foldable (foldM)
@@ -181,7 +181,7 @@ serveCover serveNotFound cfg slug url res = do
     if cached then do
       Log.info $ "Serving " <> name <> " cover from cache: " <> s3Key
       liftEffect $ Metrics.incCoverRequest slug name "s3_hit"
-      liftEffect $ serveS3Redirect s3cfg s3Key res
+      serveS3Redirect s3cfg s3Key res
       pure true
     else do
       mUrl <- findUrl
@@ -202,9 +202,11 @@ serveCover serveNotFound cfg slug url res = do
           Left _ -> false
 
   serveS3Redirect s3cfg s3Key response = do
-    setStatusCode 302 response
-    setHeader "Location" (getS3Url s3cfg s3Key) (toOutgoingMessage response)
-    end (toWriteable (toOutgoingMessage response))
+    presignedUrl <- getPresignedUrl s3cfg s3Key
+    liftEffect $ do
+      setStatusCode 302 response
+      setHeader "Location" presignedUrl (toOutgoingMessage response)
+      end (toWriteable (toOutgoingMessage response))
 
   -- Redirect the client immediately to the upstream URL, then fetch+convert+cache in background.
   -- This avoids blocking the response on AVIF conversion (which can take hundreds of ms).

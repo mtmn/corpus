@@ -37,6 +37,9 @@ foreign import uploadToS3Impl
 foreign import existsInS3Impl
   :: Fn3 S3ConfigJs String (Nullable Error -> Boolean -> Effect Unit) (Effect Unit)
 
+foreign import getPresignedUrlImpl
+  :: Fn3 S3ConfigJs String (Nullable Error -> String -> Effect Unit) (Effect Unit)
+
 foreign import getS3UrlImpl :: Fn2 S3ConfigJs String String
 
 uploadToS3 :: S3Config -> String -> Buffer -> String -> Aff Unit
@@ -53,6 +56,14 @@ existsInS3 cfg key = makeAff \cb -> do
     case toMaybe err of
       Just e -> cb (Left e)
       Nothing -> cb (Right exists)
+  pure nonCanceler
+
+getPresignedUrl :: S3Config -> String -> Aff String
+getPresignedUrl cfg key = makeAff \cb -> do
+  runFn3 getPresignedUrlImpl (toJs cfg) key \err url ->
+    case toMaybe err of
+      Just e -> cb (Left e)
+      Nothing -> cb (Right url)
   pure nonCanceler
 
 getS3Url :: S3Config -> String -> String

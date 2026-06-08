@@ -2,7 +2,9 @@ import {
 	S3Client,
 	PutObjectCommand,
 	HeadObjectCommand,
+	GetObjectCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const makeClient = (cfg) =>
 	new S3Client({
@@ -50,6 +52,18 @@ export const existsInS3Impl = (cfg, key, cb) => () => {
 				cb(err)(false)();
 			}
 		});
+};
+
+export const getPresignedUrlImpl = (cfg, key, cb) => () => {
+	const client = makeClient(cfg);
+	const command = new GetObjectCommand({
+		Bucket: cfg.bucket,
+		Key: key,
+	});
+
+	getSignedUrl(client, command, { expiresIn: 86400 })
+		.then((url) => cb(null)(url)())
+		.catch((err) => cb(err)("")());
 };
 
 export const getS3UrlImpl = (cfg, key) => {
