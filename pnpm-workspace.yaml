@@ -1,5 +1,6 @@
 allowBuilds:
   cpu-features: true
   esbuild: true
+  purescript: true
   sharp: true
   ssh2: true

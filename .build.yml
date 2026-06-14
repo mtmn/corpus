@@ -1,0 +1,29 @@
+image: archlinux
+packages:
+  - nodejs
+  - pnpm
+  - duckdb
+sources:
+  - https://git.sr.ht/~mtmn/corpus
+environment:
+  NIX_CONFIG: "experimental-features = nix-command flakes"
+tasks:
+  - setup-purescript: |
+      cd corpus
+      pnpm install purescript
+      pnpm install spago
+  - setup-elm: |
+      curl -L -o /tmp/elm.gz https://github.com/elm/compiler/releases/download/0.19.1/binary-for-linux-64-bit.gz
+      echo "e44af52bb27f725a973478e589d990a6428e115fe1bb14f03833134d6c0f155c  /tmp/elm.gz" | sha256sum -c -
+      mkdir -p /home/build/bin
+      gzip --decompress /tmp/elm.gz && mv /tmp/elm /home/build/bin
+      chmod +x /home/build/bin/elm
+  - build: |
+      export PATH="$PATH:/home/build/bin"
+      cd corpus
+      pnpm install
+      pnpm run build
+  - test: |
+      export PATH="$PATH:/home/build/bin"
+      cd corpus
+      pnpm test
