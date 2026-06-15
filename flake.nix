@@ -58,7 +58,7 @@
         name = "corpus-pnpm-source";
       };
       pname = "corpus";
-      hash = "sha256-H8XTwSL9ura4VYTrBQwqtxt881TDBXOZyoUzAHDvep4=";
+      hash = "sha256-ghIjDWkrNTy3xegpHuCaIQur+EhObd1Y5ml6XgIXlKQ=";
       fetcherVersion = 3;
     };
 
@@ -82,7 +82,7 @@
           ];
       };
 
-      nativeBuildInputs = with pkgs; [nodejs_24 git cacert purescript pnpm];
+      nativeBuildInputs = with pkgs; [nodejs git cacert pnpm];
 
       buildPhase = ''
         export HOME=$TMPDIR
@@ -97,7 +97,6 @@
         pnpm install --frozen-lockfile
         patchShebangs node_modules
         mkdir -p node_modules/.bin
-        ln -sf ${pkgs.purescript}/bin/purs node_modules/.bin/purs
         pnpm spago install
       '';
 
@@ -138,10 +137,10 @@
 
       nativeBuildInputs = with pkgs; [
         makeWrapper
-        nodejs_24
+        nodejs
         git
-        purescript
         elmPackages.elm
+        purescript
         pnpm
         pnpmConfigHook
       ];
@@ -149,6 +148,8 @@
       buildPhase = ''
         mkdir -p node_modules/@duckdb/node-bindings-linux-x64
         tar -xf ${duckdbPrebuilt} -C node_modules/@duckdb/node-bindings-linux-x64 --strip-components=1
+
+        ln -sf ${pkgs.purescript}/bin/purs node_modules/.bin/purs
 
         mkdir -p .spago
         cp -r ${spagoDeps}/packages .spago/p
@@ -167,7 +168,7 @@
         mkdir -p $out/lib/corpus
         cp -r server.js client.js users.json package.json node_modules assets $out/lib/corpus/
         mkdir -p $out/bin
-        makeWrapper ${pkgs.nodejs_24}/bin/node $out/bin/corpus-server \
+        makeWrapper ${pkgs.nodejs}/bin/node $out/bin/corpus-server \
           --add-flags "--no-deprecation" \
           --add-flags "$out/lib/corpus/server.js" \
           --chdir "$out/lib/corpus"
@@ -185,8 +186,7 @@
       name = "corpus";
       packages = [
         elm2nix.packages.${system}.default
-        pkgs.nodejs_24
-        pkgs.purescript
+        pkgs.nodejs
         pkgs.elmPackages.elm
         pkgs.elmPackages.elm-format
         pkgs.elmPackages.elm-json
