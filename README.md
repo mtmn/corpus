@@ -1,4 +1,6 @@
 # corpus
+[![builds.sr.ht status](https://builds.sr.ht/~mtmn/corpus.svg)](https://builds.sr.ht/~mtmn/corpus?)
+
 A self-hosted [ListenBrainz](https://listenbrainz.org) and [Last.fm](https://last.fm) frontend that stores metadata and cover images.
 
 It stores scrobbles, enriches track metadata and provides an interactive [Elm](https://elm-lang.org) interface.
