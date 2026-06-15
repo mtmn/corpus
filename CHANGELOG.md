@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.20.0] - 2026-06-15
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.19.0..v2.20.0)
+
+### Documentation
+
+- Add build badge to readme ([`b270f65`](https://git.sr.ht/~mtmn/corpus/commit/b270f65a8e058513fa627632dbf19c10fbc18831))
+
+### Features
+
+- **nix:** Update to node26, cleanup flake.nix ([`c3e3577`](https://git.sr.ht/~mtmn/corpus/commit/c3e357738ce258a36b6bd7f1990ebdadf32d56e8))
+
 ## [2.19.0] - 2026-06-08
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.18.1..v2.19.0)
@@ -7,6 +19,10 @@
 ### Features
 
 - **cache:** Generate presigned URLs for covers ([`b7a2afe`](https://git.sr.ht/~mtmn/corpus/commit/b7a2afe9432db697e6ef4b7838e83490a335583e))
+
+### Housekeeping
+
+- Release v2.19.0 ([`bd34fb0`](https://git.sr.ht/~mtmn/corpus/commit/bd34fb0f2b3f4a38641d10832d87356025c4cb58))
 
 ## [2.18.1] - 2026-06-06
 
