@@ -21,8 +21,10 @@ view model =
     { title = "scrobbler"
     , body =
         [ div [ class "container" ]
-            [ h1 [] [ text "scrobbler" ]
-            , div [ class "tabs" ]
+            [ h1 [ class "site-header", onClick ToggleTabs ]
+                [ img [ src "/cover.webp", Attr.alt "scrobbler" ] [] ]
+            , if model.tabsVisible then
+                div [ class "tabs" ]
                 [ a
                     [ class
                         ("tab-btn"
@@ -69,6 +71,9 @@ view model =
                     ]
                     [ text "about" ]
                 ]
+
+              else
+                text ""
             , case model.activeTab of
                 ListensTab ->
                     div []
@@ -157,7 +162,7 @@ renderContent model =
                                     Maybe.withDefault "" listen.trackName
 
                                 key =
-                                    artist ++ "\t" ++ trackName
+                                    String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ trackName
                             in
                             div [ class "track-with-similar-container" ]
                                 [ ul [ class "track-item" ]
@@ -182,7 +187,7 @@ renderListen userSlug currentTime failedCovers hoveredCover similarStates idx li
             Maybe.withDefault "" listen.releaseName
 
         key =
-            artist ++ "\t" ++ trackName
+            String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ trackName
 
         mbid =
             case listen.caaReleaseMbid of
@@ -278,7 +283,7 @@ renderListen userSlug currentTime failedCovers hoveredCover similarStates idx li
                                     ""
                                )
                         )
-                    , onClick (FetchSimilar artist trackName)
+                    , onClick (FetchSimilar idx artist trackName)
                     ]
                     [ text "similar" ]
 

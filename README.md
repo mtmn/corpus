@@ -1,4 +1,8 @@
-# corpus
+<div align="center">
+<img src="assets/cover.webp" alt="corpus" width="480">
+
+</div>
+
 [![builds.sr.ht status](https://builds.sr.ht/~mtmn/corpus.svg)](https://builds.sr.ht/~mtmn/corpus?)
 
 A self-hosted [ListenBrainz](https://listenbrainz.org) and [Last.fm](https://last.fm) frontend that stores metadata and cover images.

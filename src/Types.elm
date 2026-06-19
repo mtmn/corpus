@@ -112,6 +112,7 @@ type alias Model =
     , allUsers : List UserInfo
     , searchInput : String
     , activeSearch : Maybe String
+    , tabsVisible : Bool
     }
 
 
@@ -125,6 +126,7 @@ type Msg
     | NextPage
     | PrevPage
     | SwitchTab Tab
+    | ToggleTabs
     | SetStatsPeriod Period
     | OpenCustomInput
     | UpdateCustomInput String
@@ -136,8 +138,8 @@ type Msg
     | ExpandSection String
     | ShowAllSection String
     | CollapseSection String
-    | FetchSimilar String String
-    | FetchSimilarTracks String String (Result Http.Error (List SimilarTrack))
+    | FetchSimilar Int String String
+    | FetchSimilarTracks Int String String (Result Http.Error (List SimilarTrack))
     | UpdateSearchInput String
     | SubmitSearch
     | ClearSearch

@@ -92,6 +92,8 @@ routeRequest metricsEnabled corsOrigin contexts req url path allUsers res = lift
     serveClientJs res
   "/favicon.png" ->
     serveAsset "image/png" "assets/favicon.png" res
+  "/cover.webp" ->
+    serveAsset "image/webp" "assets/cover.webp" res
   "/" ->
     serveIndex allUsers "" res
   "/metrics" ->

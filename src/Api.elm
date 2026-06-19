@@ -75,11 +75,11 @@ statsUrl userSlug period mSection =
     "/stats?user=" ++ userSlug ++ periodPart ++ sectionPart
 
 
-fetchSimilarTracks : String -> String -> Cmd Msg
-fetchSimilarTracks artist track =
+fetchSimilarTracks : Int -> String -> String -> Cmd Msg
+fetchSimilarTracks idx artist track =
     Http.get
         { url = "/similar?artist=" ++ Url.percentEncode artist ++ "&track=" ++ Url.percentEncode track
-        , expect = Http.expectJson (FetchSimilarTracks artist track) similarTracksDecoder
+        , expect = Http.expectJson (FetchSimilarTracks idx artist track) similarTracksDecoder
         }
 
 

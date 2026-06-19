@@ -22,15 +22,15 @@ indexHtml userSlug allUsers =
     <style>
         body {
             font-family: 'Intel One Mono', 'Courier New', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            background: #181818;
-            color: #e7e7e7;
+            background: oklch(0.194 0.0345 225.31);
+            color: oklch(0.91 0.012 225.31);
             margin: 0;
             line-height: 1.6;
         }
 
         ::selection {
-            background: #505050;
-            color: #e7e7e7;
+            background: oklch(0.42 0.04 225.31);
+            color: oklch(0.91 0.012 225.31);
         }
 
         .container {
@@ -40,11 +40,27 @@ indexHtml userSlug allUsers =
         }
 
         h1 {
-            color: #e7e7e7;
+            color: oklch(0.91 0.012 225.31);
             margin: 0 0 20px 0;
             font-size: 24px;
-            border-bottom: 2px solid #505050;
+            border-bottom: 2px solid oklch(0.42 0.04 225.31);
             padding-bottom: 8px;
+        }
+
+        h1.site-header {
+            border-bottom: none;
+            padding-bottom: 0;
+            line-height: 0;
+            cursor: pointer;
+        }
+
+        h1.site-header img {
+            display: block;
+            width: 100%;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid oklch(0.42 0.04 225.31);
         }
 
         ul {
@@ -54,21 +70,21 @@ indexHtml userSlug allUsers =
         }
 
         li {
-            background: #2f2f2f;
-            border: 1px solid #505050;
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
             border-radius: 4px;
             padding: 5px 15px 5px 15px;
             margin-bottom: 5px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 4px 4px 0px #505050;
+            box-shadow: 4px 4px 0px oklch(0.42 0.04 225.31);
         }
 
         li.success {
-            background: #2f2f2f;
-            border-color: #505050;
-            box-shadow: 4px 4px 0px #505050;
+            background: oklch(0.27 0.038 225.31);
+            border-color: oklch(0.42 0.04 225.31);
+            box-shadow: 4px 4px 0px oklch(0.42 0.04 225.31);
         }
 
         .track-info {
@@ -78,18 +94,18 @@ indexHtml userSlug allUsers =
         .track-name {
             font-weight: bold;
             font-size: 16px;
-            color: #e7e7e7;
+            color: oklch(0.91 0.012 225.31);
         }
 
         .track-artist {
             font-size: 14px;
-            color: #a0c0d0;
+            color: oklch(0.70 0.035 225.31);
             margin-top: 1px;
         }
 
         .track-time {
             font-size: 12px;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             margin-top: 2px;
         }
 
@@ -97,7 +113,7 @@ indexHtml userSlug allUsers =
             background: none;
             border: none;
             padding: 0;
-            color: #e7e7e7;
+            color: oklch(0.91 0.012 225.31);
             font-weight: bold;
             font-size: 16px;
             font-family: inherit;
@@ -110,7 +126,7 @@ indexHtml userSlug allUsers =
             background: none;
             border: none;
             padding: 0;
-            color: #a0c0d0;
+            color: oklch(0.70 0.035 225.31);
             font-size: 14px;
             font-family: inherit;
             cursor: pointer;
@@ -122,7 +138,7 @@ indexHtml userSlug allUsers =
             background: none;
             border: none;
             padding: 0;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             text-decoration: underline;
             font-family: inherit;
             font-size: inherit;
@@ -130,14 +146,14 @@ indexHtml userSlug allUsers =
         }
 
         .album-link:hover {
-            color: #e7e7e7;
+            color: oklch(0.78 0.13 357.86);
         }
 
         .label-link {
             background: none;
             border: none;
             padding: 0;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             text-decoration: underline;
             font-family: inherit;
             font-size: inherit;
@@ -145,7 +161,7 @@ indexHtml userSlug allUsers =
         }
 
         .label-link:hover {
-            color: #e7e7e7;
+            color: oklch(0.78 0.13 357.86);
         }
 
         .track-cover {
@@ -167,29 +183,29 @@ indexHtml userSlug allUsers =
 
         .loading {
             padding: 20px;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             text-align: center;
         }
 
         .error {
             padding: 20px;
-            color: #eca28f;
+            color: oklch(0.78 0.085 225.31);
             text-align: center;
         }
 
         .small {
             font-size: 12px;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             margin-top: 20px;
         }
 
         .small a {
-            color: #a0c0d0;
+            color: oklch(0.70 0.035 225.31);
             text-decoration: none;
         }
 
         .small a:hover {
-            color: #e7e7e7;
+            color: oklch(0.78 0.13 357.86);
             text-decoration: underline;
         }
 
@@ -201,19 +217,19 @@ indexHtml userSlug allUsers =
         }
 
         .page-btn {
-            background: #2f2f2f;
-            border: 1px solid #505050;
-            color: #e7e7e7;
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
+            color: oklch(0.91 0.012 225.31);
             padding: 8px 16px;
             border-radius: 4px;
             cursor: pointer;
             font-family: inherit;
-            box-shadow: 2px 2px 0px #505050;
+            box-shadow: 2px 2px 0px oklch(0.42 0.04 225.31);
         }
 
         .page-btn:hover {
-            background: #505050;
-            border-color: #505050;
+            background: oklch(0.32 0.045 225.31);
+            border-color: oklch(0.52 0.05 225.31);
         }
 
         .page-btn:disabled {
@@ -225,7 +241,7 @@ indexHtml userSlug allUsers =
             display: flex;
             align-items: center;
             font-size: 14px;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
         }
 
         .tabs {
@@ -236,8 +252,8 @@ indexHtml userSlug allUsers =
 
         .tab-btn {
             background: none;
-            border: 1px solid #505050;
-            color: #9fbfe7;
+            border: 1px solid oklch(0.42 0.04 225.31);
+            color: oklch(0.74 0.075 225.31);
             padding: 6px 14px;
             border-radius: 4px;
             cursor: pointer;
@@ -248,14 +264,14 @@ indexHtml userSlug allUsers =
         }
 
         .tab-btn.active {
-            background: #2f2f2f;
-            color: #e7e7e7;
-            box-shadow: 2px 2px 0px #505050;
+            background: oklch(0.27 0.038 225.31);
+            color: oklch(0.91 0.012 225.31);
+            box-shadow: 2px 2px 0px oklch(0.42 0.04 225.31);
         }
 
         .tab-btn:hover {
-            color: #e7e7e7;
-            background: #505050;
+            color: oklch(0.91 0.012 225.31);
+            background: oklch(0.42 0.04 225.31);
         }
 
         .stats-section {
@@ -264,11 +280,11 @@ indexHtml userSlug allUsers =
 
         .stats-section h2 {
             font-size: 11px;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             text-transform: uppercase;
             letter-spacing: 3px;
             margin: 0 0 10px 0;
-            border-bottom: 1px solid #505050;
+            border-bottom: 1px solid oklch(0.42 0.04 225.31);
             padding-bottom: 5px;
         }
 
@@ -289,15 +305,15 @@ indexHtml userSlug allUsers =
             left: 0;
             top: 0;
             height: 100%;
-            background: #2f2f2f;
-            border-right: 1px solid #505050;
+            background: oklch(0.27 0.038 225.31);
+            border-right: 1px solid oklch(0.42 0.04 225.31);
             z-index: 0;
         }
 
         .stat-name {
             position: relative;
             z-index: 1;
-            color: #e7e7e7;
+            color: oklch(0.91 0.012 225.31);
             flex: 1;
             padding-right: 10px;
             white-space: nowrap;
@@ -308,13 +324,13 @@ indexHtml userSlug allUsers =
         .stat-count {
             position: relative;
             z-index: 1;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             font-size: 12px;
             flex-shrink: 0;
         }
 
         .stats-empty {
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             font-size: 13px;
             padding: 10px 0;
         }
@@ -341,20 +357,20 @@ indexHtml userSlug allUsers =
         }
 
         .stat-row.clickable:hover .stat-name {
-            color: #a0c0d0;
+            color: oklch(0.70 0.035 225.31);
         }
 
         .filter-banner {
             display: flex;
             align-items: center;
             gap: 10px;
-            background: #2f2f2f;
-            border: 1px solid #505050;
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
             border-radius: 4px;
             padding: 8px 12px;
             margin-bottom: 12px;
             font-size: 13px;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
         }
 
         .filter-label {
@@ -362,13 +378,13 @@ indexHtml userSlug allUsers =
         }
 
         .filter-label strong {
-            color: #e7e7e7;
+            color: oklch(0.91 0.012 225.31);
         }
 
         .filter-clear {
             background: none;
-            border: 1px solid #505050;
-            color: #9fbfe7;
+            border: 1px solid oklch(0.42 0.04 225.31);
+            color: oklch(0.74 0.075 225.31);
             padding: 2px 8px;
             border-radius: 3px;
             cursor: pointer;
@@ -377,15 +393,15 @@ indexHtml userSlug allUsers =
         }
 
         .filter-clear:hover {
-            color: #e7e7e7;
-            border-color: #e7e7e7;
-            background: #505050;
+            color: oklch(0.91 0.012 225.31);
+            border-color: oklch(0.52 0.05 225.31);
+            background: oklch(0.32 0.045 225.31);
         }
 
         .show-all-btn {
             background: none;
             border: none;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             cursor: pointer;
             font-family: inherit;
             font-size: 12px;
@@ -394,8 +410,8 @@ indexHtml userSlug allUsers =
         }
 
         .show-all-btn:hover {
-            color: #e7e7e7;
-            background: #505050;
+            color: oklch(0.91 0.012 225.31);
+            background: oklch(0.32 0.045 225.31);
         }
 
         .period-selector {
@@ -406,8 +422,8 @@ indexHtml userSlug allUsers =
 
         .period-btn {
             background: none;
-            border: 1px solid #505050;
-            color: #9fbfe7;
+            border: 1px solid oklch(0.42 0.04 225.31);
+            color: oklch(0.74 0.075 225.31);
             padding: 4px 12px;
             border-radius: 3px;
             cursor: pointer;
@@ -416,13 +432,14 @@ indexHtml userSlug allUsers =
         }
 
         .period-btn:hover {
-            color: #e7e7e7;
-            border-color: #e7e7e7;
+            color: oklch(0.91 0.012 225.31);
+            border-color: oklch(0.7 0.1274 357.86);
         }
 
         .period-btn.active {
-            background: #505050;
-            color: #e7e7e7;
+            background: oklch(0.5 0.1274 357.86);
+            border-color: oklch(0.7 0.1274 357.86);
+            color: oklch(0.97 0.01 357.86);
         }
 
         .custom-range {
@@ -433,9 +450,9 @@ indexHtml userSlug allUsers =
         }
 
         .custom-range-input {
-            background: #2f2f2f;
-            border: 1px solid #505050;
-            color: #e7e7e7;
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
+            color: oklch(0.91 0.012 225.31);
             padding: 4px 8px;
             border-radius: 3px;
             font-family: inherit;
@@ -444,29 +461,29 @@ indexHtml userSlug allUsers =
         }
 
         .custom-range-input::placeholder {
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             opacity: 0.7;
         }
 
         .custom-range-input:focus {
             outline: none;
-            border-color: #e7e7e7;
+            border-color: oklch(0.91 0.012 225.31);
         }
 
         .custom-range-input.error {
-            border-color: #ff6b6b;
+            border-color: oklch(0.68 0.11 225.31);
         }
 
         .custom-range-error {
-            color: #ff6b6b;
+            color: oklch(0.68 0.11 225.31);
             font-size: 12px;
             margin-top: 4px;
         }
 
         .similar-btn {
             background: none;
-            border: 1px solid #505050;
-            color: #9fbfe7;
+            border: 1px solid oklch(0.42 0.04 225.31);
+            color: oklch(0.74 0.075 225.31);
             padding: 2px 8px;
             border-radius: 3px;
             cursor: pointer;
@@ -477,30 +494,30 @@ indexHtml userSlug allUsers =
         }
 
         .similar-btn:hover {
-            background: #505050;
-            color: #e7e7e7;
-            border-color: #e7e7e7;
+            background: oklch(0.32 0.045 225.31);
+            color: oklch(0.91 0.012 225.31);
+            border-color: oklch(0.7 0.1274 357.86);
         }
 
         .similar-btn.active {
-            background: #2f2f2f;
-            color: #e7e7e7;
-            border-color: #505050;
-            box-shadow: 2px 2px 0px #505050;
+            background: oklch(0.5 0.1274 357.86);
+            color: oklch(0.97 0.01 357.86);
+            border-color: oklch(0.7 0.1274 357.86);
+            box-shadow: 2px 2px 0px oklch(0.7 0.1274 357.86);
         }
 
         .similar-panel {
             margin-top: 10px;
-            background: #2f2f2f;
-            border: 1px solid #505050;
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
             border-radius: 4px;
             padding: 10px;
-            box-shadow: 2px 2px 0px #505050;
+            box-shadow: 2px 2px 0px oklch(0.42 0.04 225.31);
         }
 
         .similar-panel-header {
             font-size: 11px;
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 8px;
@@ -508,21 +525,21 @@ indexHtml userSlug allUsers =
         }
 
         .similar-loading {
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             font-size: 12px;
             text-align: center;
             padding: 8px;
         }
 
         .similar-error {
-            color: #eca28f;
+            color: oklch(0.78 0.085 225.31);
             font-size: 12px;
             text-align: center;
             padding: 8px;
         }
 
         .similar-empty {
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             font-size: 12px;
             text-align: center;
             padding: 8px;
@@ -534,9 +551,9 @@ indexHtml userSlug allUsers =
             align-items: center;
             padding: 6px 8px;
             margin-bottom: 4px;
-            background: #2f2f2f;
+            background: oklch(0.27 0.038 225.31);
             border-radius: 3px;
-            border-left: 2px solid #505050;
+            border-left: 2px solid oklch(0.42 0.04 225.31);
         }
 
         .similar-track:last-child {
@@ -550,7 +567,7 @@ indexHtml userSlug allUsers =
 
         .similar-track-name {
             font-size: 12px;
-            color: #e7e7e7;
+            color: oklch(0.91 0.012 225.31);
             font-weight: 500;
             white-space: nowrap;
             overflow: hidden;
@@ -559,7 +576,7 @@ indexHtml userSlug allUsers =
 
         .similar-track-artist {
             font-size: 11px;
-            color: #a0c0d0;
+            color: oklch(0.70 0.035 225.31);
             margin-top: 1px;
             white-space: nowrap;
             overflow: hidden;
@@ -568,9 +585,9 @@ indexHtml userSlug allUsers =
 
         .similar-score {
             font-size: 10px;
-            color: #9fbfe7;
-            background: #2f2f2f;
-            border: 1px solid #505050;
+            color: oklch(0.74 0.075 225.31);
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
             padding: 2px 6px;
             border-radius: 2px;
             margin-right: 8px;
@@ -578,19 +595,19 @@ indexHtml userSlug allUsers =
         }
 
         .similar-link {
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             text-decoration: none;
             font-size: 12px;
-            background: #2f2f2f;
-            border: 1px solid #505050;
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
             padding: 2px 6px;
             border-radius: 2px;
             transition: all 0.2s ease;
         }
 
         .similar-link:hover {
-            color: #e7e7e7;
-            background: #505050;
+            color: oklch(0.78 0.13 357.86);
+            background: oklch(0.42 0.04 225.31);
         }
 
         .tracks-with-similar {
@@ -624,9 +641,9 @@ indexHtml userSlug allUsers =
 
         .search-input {
             flex: 1;
-            background: #2f2f2f;
-            border: 1px solid #505050;
-            color: #e7e7e7;
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
+            color: oklch(0.91 0.012 225.31);
             padding: 6px 10px;
             border-radius: 4px;
             font-family: inherit;
@@ -634,19 +651,19 @@ indexHtml userSlug allUsers =
         }
 
         .search-input::placeholder {
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             opacity: 0.7;
         }
 
         .search-input:focus {
             outline: none;
-            border-color: #e7e7e7;
+            border-color: oklch(0.91 0.012 225.31);
         }
 
         .search-btn {
-            background: #505050;
-            border: 1px solid #505050;
-            color: #e7e7e7;
+            background: oklch(0.32 0.045 225.31);
+            border: 1px solid oklch(0.52 0.05 225.31);
+            color: oklch(0.91 0.012 225.31);
             padding: 6px 12px;
             border-radius: 4px;
             cursor: pointer;
@@ -655,24 +672,30 @@ indexHtml userSlug allUsers =
         }
 
         .search-btn:hover {
-            background: #707070;
-            border-color: #707070;
+            background: oklch(0.42 0.05 225.31);
+            border-color: oklch(0.52 0.05 225.31);
+        }
+
+        .search-bar:focus-within .search-btn {
+            background: oklch(0.5 0.1274 357.86);
+            border-color: oklch(0.7 0.1274 357.86);
+            color: oklch(0.97 0.01 357.86);
         }
 
         .about-lead {
-            color: #a0c0d0;
+            color: oklch(0.70 0.035 225.31);
             font-size: 13px;
             line-height: 1.8;
             margin: 0 0 30px 0;
         }
 
         .about-link {
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             text-decoration: underline;
         }
 
         .about-link:hover {
-            color: #e7e7e7;
+            color: oklch(0.78 0.13 357.86);
         }
 
         .about-list {
@@ -690,12 +713,12 @@ indexHtml userSlug allUsers =
             display: block;
             box-shadow: none;
             font-size: 13px;
-            color: #a0c0d0;
+            color: oklch(0.70 0.035 225.31);
         }
 
         .about-list li::before {
             content: "→  ";
-            color: #505050;
+            color: oklch(0.42 0.04 225.31);
         }
 
         .about-meta {
@@ -720,13 +743,13 @@ indexHtml userSlug allUsers =
         }
 
         .about-users a {
-            color: #9fbfe7;
+            color: oklch(0.74 0.075 225.31);
             text-decoration: none;
             font-size: 13px;
         }
 
         .about-users a:hover {
-            color: #e7e7e7;
+            color: oklch(0.78 0.13 357.86);
             text-decoration: underline;
         }
     </style>

@@ -45,6 +45,7 @@ init flags url navKey =
       , allUsers = flags.allUsers
       , searchInput = ""
       , activeSearch = Nothing
+      , tabsVisible = False
       }
     , Cmd.batch
         [ fetchListens flags.userSlug 25 offset Nothing Nothing
@@ -274,6 +275,9 @@ update msg model =
                     Cmd.none
             )
 
+        ToggleTabs ->
+            ( { model | tabsVisible = not model.tabsVisible }, Cmd.none )
+
         SetStatsPeriod period ->
             ( { model
                 | statsPeriod = period
@@ -438,23 +442,23 @@ update msg model =
             , Cmd.none
             )
 
-        FetchSimilar artist track ->
+        FetchSimilar idx artist track ->
             let
                 key =
-                    artist ++ "\t" ++ track
+                    String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ track
             in
             if Dict.member key model.similarStates then
                 ( { model | similarStates = Dict.remove key model.similarStates }, Cmd.none )
 
             else
                 ( { model | similarStates = Dict.insert key SimilarLoading model.similarStates }
-                , fetchSimilarTracks artist track
+                , fetchSimilarTracks idx artist track
                 )
 
-        FetchSimilarTracks artist track result ->
+        FetchSimilarTracks idx artist track result ->
             let
                 key =
-                    artist ++ "\t" ++ track
+                    String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ track
 
                 newStates =
                     case result of
