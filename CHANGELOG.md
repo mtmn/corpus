@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.21.0] - 2026-06-20
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.20.0..v2.21.0)
+
+### Features
+
+- New navbar, colors, double trigger fixes, etc. ([`cffaa50`](https://git.sr.ht/~mtmn/corpus/commit/cffaa503c72d25adc9062981bf1be8aa74451407))
+
+### Housekeeping
+
+- Add cover in png ([`8b19ca3`](https://git.sr.ht/~mtmn/corpus/commit/8b19ca30d2fb20e94458672bd21b7392fceb5f2a))
+
 ## [2.20.0] - 2026-06-15
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.19.0..v2.20.0)
@@ -11,6 +23,10 @@
 ### Features
 
 - **nix:** Update to node26, cleanup flake.nix ([`c3e3577`](https://git.sr.ht/~mtmn/corpus/commit/c3e357738ce258a36b6bd7f1990ebdadf32d56e8))
+
+### Housekeeping
+
+- Release v2.20.0 ([`c4b7ce3`](https://git.sr.ht/~mtmn/corpus/commit/c4b7ce378af0cfffac7da1830a9a4f093e9e449c))
 
 ## [2.19.0] - 2026-06-08
 
