@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.22.0] - 2026-06-24
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.21.0..v2.22.0)
+
+### Features
+
+- Add listenbrainz validate-token endpoint ([`863e65c`](https://git.sr.ht/~mtmn/corpus/commit/863e65cb10204e0498a9f13d19c27c684bf21d04))
+
+### Housekeeping
+
+- Revert readme ([`146a6b3`](https://git.sr.ht/~mtmn/corpus/commit/146a6b3417a8d6b5434c1fa82ac7177ed0fa2364))
+
 ## [2.21.0] - 2026-06-20
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.20.0..v2.21.0)
@@ -11,6 +23,7 @@
 ### Housekeeping
 
 - Add cover in png ([`8b19ca3`](https://git.sr.ht/~mtmn/corpus/commit/8b19ca30d2fb20e94458672bd21b7392fceb5f2a))
+- Release v2.21.0 ([`f155aa8`](https://git.sr.ht/~mtmn/corpus/commit/f155aa879d75fa7fddd65fa9fc65d670909d8793))
 
 ## [2.20.0] - 2026-06-15
 
