@@ -43,7 +43,7 @@ import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
 import Command as Command
-import Handler (Request, Response, serveBadRequest, serveError, serveInternalError, serveNotFound, serveUnauthorized)
+import Handler (Request, Response, respond, serveBadRequest, serveError, serveInternalError, serveNotFound, serveUnauthorized)
 import Templates (indexHtml)
 import Types (Listen(..), ListenBrainzAdditionalInfo(..), ListenBrainzSubmitListen(..), ListenBrainzSubmitPayload(..), ListenBrainzSubmitTrackMetadata(..), MbidMapping(..), TrackMetadata(..))
 import Foreign.Object as Object
@@ -111,6 +111,11 @@ routeRequest metricsEnabled corsOrigin contexts req url path allUsers res = lift
     withUser url \ctx -> serveSimilar serveBadRequest serveError ctx.slug ctx.config url res
   "/healthz" ->
     withUser url \ctx -> serveHealthz ctx.conn res
+  "/1/validate-token" ->
+    if IM.method req == "GET" then
+      launchAff_ $ serveValidateToken contexts req res
+    else
+      liftEffect $ serveBadRequest res "Method not allowed"
   "/1/submit-listens" ->
     if IM.method req == "POST" then
       launchAff_ $ withUserFromToken contexts req res \ctx ->
@@ -138,10 +143,7 @@ routeRequest metricsEnabled corsOrigin contexts req url path allUsers res = lift
 
 withUserFromToken :: Array UserContext -> Request -> Response -> (UserContext -> Aff Unit) -> Aff Unit
 withUserFromToken contextsParam reqParam resParam f = do
-  let
-    headers = IM.headers reqParam
-    mAuth = Object.lookup "authorization" headers
-    mToken = mAuth >>= stripPrefix (Pattern "Token ")
+  let mToken = parseAuthToken (Object.lookup "authorization" (IM.headers reqParam))
   case mToken of
     Nothing -> liftEffect $ do
       Log.warn "Missing or invalid Authorization header"
@@ -158,6 +160,42 @@ withUserFromToken contextsParam reqParam resParam f = do
           serveUnauthorized resParam
         Just ctx ->
           f ctx
+
+-- ListenBrainz `validate-token` endpoint. Clients such as Navidrome call this
+-- (GET, with `Authorization: Token <token>`) before linking and require a
+-- `{"valid": true, "user_name": ...}` response, otherwise they refuse to scrobble.
+serveValidateToken :: Array UserContext -> Request -> Response -> Aff Unit
+serveValidateToken contextsParam reqParam resParam = do
+  let mToken = parseAuthToken (Object.lookup "authorization" (IM.headers reqParam))
+  case mToken of
+    Nothing -> liftEffect $ do
+      Log.warn "validate-token: missing or invalid Authorization header"
+      respond "application/json" 401
+        """{"code":401,"error":"You need to provide an Authorization header."}"""
+        resParam
+    Just tokenValue -> do
+      mCtx <- findUserByToken contextsParam tokenValue
+      liftEffect $ respond "application/json" 200
+        (validateTokenJson (map _.displayName mCtx))
+        resParam
+
+-- Extract a ListenBrainz API token from an `Authorization: Token <token>` header value.
+parseAuthToken :: Maybe String -> Maybe String
+parseAuthToken mAuth = mAuth >>= stripPrefix (Pattern "Token ")
+
+-- Build the `validate-token` response body. `Just displayName` means the token
+-- resolved to a user (valid); `Nothing` means the token is unknown (invalid).
+-- The shape mirrors the real ListenBrainz API so clients like Navidrome accept it.
+validateTokenJson :: Maybe String -> String
+validateTokenJson Nothing =
+  """{"code":200,"message":"Token invalid.","valid":false}"""
+validateTokenJson (Just displayName) =
+  stringify $ encodeJson
+    { code: 200
+    , message: "Token valid."
+    , valid: true
+    , user_name: displayName
+    }
 
 findUserByToken :: Array UserContext -> String -> Aff (Maybe UserContext)
 findUserByToken contexts tokenValue = case Data.Array.uncons contexts of

@@ -15,9 +15,9 @@ import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..), ListenBrainzSubmitPayload(..), ListenBrainzSubmitListen(..), ListenBrainzSubmitTrackMetadata(..), ListenBrainzAdditionalInfo(..))
 import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt, getOrCreateToken, getTokenUser, fromString)
-import Data.Argonaut.Core (Json)
+import Data.Argonaut.Core (Json, toBoolean, toNumber, toString)
 import Foreign.Object as Object
-import Main (submitListenToListen, findUserByToken, sanitizeDate)
+import Main (submitListenToListen, findUserByToken, sanitizeDate, parseAuthToken, validateTokenJson)
 import Cover (sanitizeKey)
 import Sync (listenBrainzUrl, lastfmTrackToListen, parseLastfmResponse)
 import S3 (getS3Url)
@@ -151,6 +151,66 @@ main = runSpecAndExitProcess [consoleReporter] do
                   }
               }
         submitListenToListen "playing_now" submission `shouldEqual` Nothing
+
+      it "should convert an import listen the same as a single listen" do
+        let submission = ListenBrainzSubmitListen
+              { listenedAt: Just 987654321
+              , trackMetadata: ListenBrainzSubmitTrackMetadata
+                  { trackName: "Imported Song"
+                  , artistName: "Imported Artist"
+                  , releaseName: Just "Imported Album"
+                  , additionalInfo: Nothing
+                  }
+              }
+        case submitListenToListen "import" submission of
+          Just (Listen { listenedAt, trackMetadata: TrackMetadata m }) -> do
+            listenedAt `shouldEqual` Just 987654321
+            m.trackName `shouldEqual` Just "Imported Song"
+            m.artistName `shouldEqual` Just "Imported Artist"
+            m.releaseName `shouldEqual` Just "Imported Album"
+            m.mbidMapping `shouldEqual` Nothing
+          Nothing -> do
+            fail "Conversion failed"
+
+      it "should ignore unknown listen types" do
+        let submission = ListenBrainzSubmitListen
+              { listenedAt: Nothing
+              , trackMetadata: ListenBrainzSubmitTrackMetadata
+                  { trackName: "Song Name"
+                  , artistName: "Artist Name"
+                  , releaseName: Nothing
+                  , additionalInfo: Nothing
+                  }
+              }
+        submitListenToListen "bogus" submission `shouldEqual` Nothing
+
+    describe "ListenBrainz validate-token" do
+      it "extracts the token from a 'Token <token>' Authorization header" do
+        parseAuthToken (Just "Token abc-123") `shouldEqual` Just "abc-123"
+
+      it "rejects a missing or malformed Authorization header" do
+        parseAuthToken Nothing `shouldEqual` Nothing
+        parseAuthToken (Just "Bearer abc-123") `shouldEqual` Nothing
+        parseAuthToken (Just "token abc-123") `shouldEqual` Nothing
+
+      it "builds a valid-token response with the user name" do
+        let body = validateTokenJson (Just "User One")
+        let result = parseJson body >>= decodeJson :: _ (Object.Object Json)
+        case result of
+          Right obj -> do
+            (Object.lookup "valid" obj >>= toBoolean) `shouldEqual` Just true
+            (Object.lookup "user_name" obj >>= toString) `shouldEqual` Just "User One"
+            (Object.lookup "code" obj >>= toNumber) `shouldEqual` Just 200.0
+          Left _ -> fail "validateTokenJson did not produce valid JSON"
+
+      it "builds an invalid-token response for an unknown token" do
+        let body = validateTokenJson Nothing
+        let result = parseJson body >>= decodeJson :: _ (Object.Object Json)
+        case result of
+          Right obj -> do
+            (Object.lookup "valid" obj >>= toBoolean) `shouldEqual` Just false
+            Object.member "user_name" obj `shouldEqual` false
+          Left _ -> fail "validateTokenJson did not produce valid JSON"
 
     describe "Token Authentication" do
       it "should create and verify tokens" do
