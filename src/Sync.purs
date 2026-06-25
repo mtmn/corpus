@@ -24,8 +24,10 @@ import Db (Connection, checkExists, getOldestTs, upsertScrobble, withTransaction
 import Effect.Aff (Aff, delay, launchAff_, makeAff, nonCanceler, throwError, try)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.Retry (RetryStatus(..), exponentialBackoff, limitRetries, recovering)
+import Effect (Effect)
 import Effect.Class (liftEffect)
-import Effect.Exception (error, message)
+import Effect.Exception (Error, error, message)
+import Effect.Ref as Ref
 import Effect.Uncurried (mkEffectFn1)
 import Fetch (fetch, Method(GET))
 import Fetch.Argonaut.Json (fromJson)
@@ -100,6 +102,24 @@ withRetry label action = recovering policy [ \_ err -> pure $ isTransientError e
 
 fetchListenBrainzUrl :: String -> Aff String
 fetchListenBrainzUrl url = withRetry "ListenBrainz fetch" $ makeAff \callback -> do
+  -- One-shot gate: the response handler and the error handler both race to
+  -- resolve this Aff. The first invocation wins; any subsequent (late) event
+  -- is logged so silent socket errors after a successful response aren't lost.
+  done <- Ref.new false
+  let
+    once :: Either Error String -> Effect Unit
+    once result = do
+      already <- Ref.read done
+      if already then
+        case result of
+          Left err ->
+            Log.warn $ "ListenBrainz: dropped late error after response: " <> message err
+          Right _ ->
+            pure unit
+      else do
+        Ref.write true done
+        callback result
+
   req <- HTTPS.get url
 
   req # on_ Client.responseH \res -> do
@@ -107,15 +127,15 @@ fetchListenBrainzUrl url = withRetry "ListenBrainz fetch" $ makeAff \callback ->
       result <- try $ readableToStringUtf8 (IM.toReadable res)
       liftEffect $ case result of
         Left err ->
-          callback (Left err)
+          once (Left err)
         Right body ->
           if IM.statusCode res == 200 then
-            callback (Right body)
+            once (Right body)
           else
-            callback (Left $ error $ "ListenBrainz API returned status " <> show (IM.statusCode res))
+            once (Left $ error $ "ListenBrainz API returned status " <> show (IM.statusCode res))
 
   let errorH = EventHandle "error" mkEffectFn1
-  on_ errorH (\err -> callback (Left err)) (castRequestForError req)
+  on_ errorH (\err -> once (Left err)) (castRequestForError req)
 
   pure nonCanceler
 
