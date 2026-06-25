@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.23.0] - 2026-06-25
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.22.0..v2.23.0)
+
+### Bug Fixes
+
+- Precompile regexes instead of unsafeCrashWith ([`36fdb15`](https://git.sr.ht/~mtmn/corpus/commit/36fdb151704960fce8e78150d45dc3dc6a543c17))
+- Use Db.toParam instead of ad-hoc unsafeCoerce ([`bd81b2b`](https://git.sr.ht/~mtmn/corpus/commit/bd81b2bed7f62979a7d023a54b3d2795fe64249d))
+- Guard fetchListenBrainzUrl callback ([`0cab7a6`](https://git.sr.ht/~mtmn/corpus/commit/0cab7a6b2a82d6a3d7694db9a63775bc9712b689))
+- Kill sync loop fibers on shutdown ([`734014c`](https://git.sr.ht/~mtmn/corpus/commit/734014cedecabe12fecb96a37fc38cbf0fd072c1))
+
+### Features
+
+- Remove header ([`d99860b`](https://git.sr.ht/~mtmn/corpus/commit/d99860b85d497b41857362d5fbeef881ebd8f381))
+
 ## [2.22.0] - 2026-06-24
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.21.0..v2.22.0)
@@ -11,6 +26,7 @@
 ### Housekeeping
 
 - Revert readme ([`146a6b3`](https://git.sr.ht/~mtmn/corpus/commit/146a6b3417a8d6b5434c1fa82ac7177ed0fa2364))
+- Release v2.22.0 ([`3cafafa`](https://git.sr.ht/~mtmn/corpus/commit/3cafafa461a3cfa707bb5c57be92cf16bb6d522e))
 
 ## [2.21.0] - 2026-06-20
 
