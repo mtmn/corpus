@@ -45,7 +45,7 @@ init flags url navKey =
       , allUsers = flags.allUsers
       , searchInput = ""
       , activeSearch = Nothing
-      , tabsVisible = False
+      , tabsVisible = True
       }
     , Cmd.batch
         [ fetchListens flags.userSlug 25 offset Nothing Nothing

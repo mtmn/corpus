@@ -247,6 +247,7 @@ indexHtml userSlug allUsers =
         .tabs {
             display: flex;
             gap: 10px;
+            margin-top: 5px;
             margin-bottom: 20px;
         }
 

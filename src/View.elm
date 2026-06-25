@@ -21,9 +21,7 @@ view model =
     { title = "scrobbler"
     , body =
         [ div [ class "container" ]
-            [ h1 [ class "site-header", onClick ToggleTabs ]
-                [ img [ src "/cover.webp", Attr.alt "scrobbler" ] [] ]
-            , if model.tabsVisible then
+            [ if model.tabsVisible then
                 div [ class "tabs" ]
                 [ a
                     [ class
