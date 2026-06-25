@@ -8,13 +8,12 @@ import Cosine (serveSimilar)
 import Data.Argonaut (decodeJson, encodeJson, parseJson, stringify)
 import Data.Array (find, length)
 import Data.Array as Data.Array
-import Data.Either (Either(..), fromRight')
+import Data.Either (Either(..), hush)
 import Data.Foldable (for_, traverse_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (Pattern(..), stripPrefix)
-import Data.String.Regex (regex, replace, parseFlags)
-import Partial.Unsafe (unsafeCrashWith)
+import Data.String.Regex (Regex, regex, replace, parseFlags)
 import Data.Traversable (traverse)
 import Db (Connection, backupDb, connect, fromString, getOrCreateToken, getScrobbles, getStats, getTokenUser, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
 import Effect (Effect)
@@ -272,7 +271,12 @@ serveProxy corsOrigin db url res = do
       end w
 
 sanitizeDate :: String -> String
-sanitizeDate = replace (fromRight' (\_ -> unsafeCrashWith "invalid regex") $ regex "[^0-9\\-]" (parseFlags "g")) ""
+sanitizeDate s = case sanitizeDateRe of
+  Nothing -> s
+  Just re -> replace re "" s
+
+sanitizeDateRe :: Maybe Regex
+sanitizeDateRe = hush $ regex "[^0-9\\-]" (parseFlags "g")
 
 serveStats :: Connection -> URL -> Response -> Effect Unit
 serveStats db url res = do
