@@ -2,12 +2,12 @@ module Test.Main where
 
 import Prelude
 
-import Unsafe.Coerce (unsafeCoerce)
 import Data.Argonaut (decodeJson, encodeJson, parseJson)
 import Data.Array (length)
 import Data.Either (Either(..), isRight)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
+import Effect.Aff.AVar as Avar
 import Test.Spec (describe, it)
 import Test.Spec.Assertions (shouldEqual, fail)
 import Data.String.Regex (regex, parseFlags)
@@ -256,8 +256,11 @@ main = runSpecAndExitProcess [consoleReporter] do
                 , backupEnabled: false
                 , backupIntervalHours: 0
                 }
-              ctx1 = { conn: conn1, writeLock: unsafeCoerce unit, config: dummyConfig, slug: "user1", displayName: "User 1", enrichMetadataFiber: Nothing, backupFiber: Nothing }
-              ctx2 = { conn: conn2, writeLock: unsafeCoerce unit, config: dummyConfig, slug: "user2", displayName: "User 2", enrichMetadataFiber: Nothing, backupFiber: Nothing }
+            lock1 <- Avar.new unit
+            lock2 <- Avar.new unit
+            let
+              ctx1 = { conn: conn1, writeLock: lock1, config: dummyConfig, slug: "user1", displayName: "User 1", enrichMetadataFiber: Nothing, backupFiber: Nothing, syncFibers: [] }
+              ctx2 = { conn: conn2, writeLock: lock2, config: dummyConfig, slug: "user2", displayName: "User 2", enrichMetadataFiber: Nothing, backupFiber: Nothing, syncFibers: [] }
               contexts = [ ctx1, ctx2 ]
 
             res1 <- findUserByToken contexts token1

@@ -55,6 +55,7 @@ type UserContext =
   , displayName :: String
   , enrichMetadataFiber :: Maybe (Fiber Unit)
   , backupFiber :: Maybe (Fiber Unit)
+  , syncFibers :: Array (Fiber Unit)
   }
 
 normalizePath :: String -> String
@@ -397,14 +398,23 @@ startUser { slug, name, config } = do
     Just lfmUser, Just apiKey -> Just <$> forkAff (lfSync conn apiKey lfmUser slug writeLock)
     _, _ -> pure Nothing
 
+  -- Join the initial sync fibers so their completion is logged before loops start.
   void $ forkAff do
     for_ lbFiber joinFiber
     for_ lfFiber joinFiber
-    for_ config.listenbrainzUser \username ->
-      void $ forkAff $ lbSyncLoop conn username slug writeLock
-    case config.lastfmUser, config.lastfmApiKey of
-      Just lfmUser, Just apiKey -> void $ forkAff $ lfSyncLoop conn apiKey lfmUser slug writeLock
-      _, _ -> pure unit
+
+  -- Spawn the recurring sync loops eagerly; each starts with a 60s delay so
+  -- they won't race with the initial sync above. Track them so cleanupUser
+  -- can kill them on shutdown.
+  loopFibers <- traverse forkAff
+    $
+      [ case config.listenbrainzUser of
+          Just username -> Just $ lbSyncLoop conn username slug writeLock
+          Nothing -> Nothing
+      , case config.lastfmUser, config.lastfmApiKey of
+          Just lfmUser, Just apiKey -> Just $ lfSyncLoop conn apiKey lfmUser slug writeLock
+          _, _ -> Nothing
+      ] # Data.Array.mapMaybe identity
 
   enrichMetadataFiber <- forkAff $ enrichMetadata conn config slug
   backupFiber <-
@@ -412,7 +422,7 @@ startUser { slug, name, config } = do
     else pure Nothing
 
   let displayName = fromMaybe (if slug == "" then "root" else slug) name
-  pure { conn, writeLock, config, slug, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber }
+  pure { conn, writeLock, config, slug, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber, syncFibers: loopFibers }
 
 cleanupUser :: UserContext -> Aff Unit
 cleanupUser ctx = do
@@ -421,6 +431,8 @@ cleanupUser ctx = do
   for_ ctx.enrichMetadataFiber \fiber ->
     void $ try $ killFiber (Exception.error "Server shutting down") fiber
   for_ ctx.backupFiber \fiber ->
+    void $ try $ killFiber (Exception.error "Server shutting down") fiber
+  for_ ctx.syncFibers \fiber ->
     void $ try $ killFiber (Exception.error "Server shutting down") fiber
   Log.info $ "Closed user: " <> label
 
