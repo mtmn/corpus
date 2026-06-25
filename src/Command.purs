@@ -20,7 +20,6 @@ import Foreign.Object as Object
 import Node.Encoding (Encoding(UTF8))
 import Node.FS.Aff as FSA
 import Node.Process (cwd, exit', lookupEnv)
-import Unsafe.Coerce (unsafeCoerce)
 
 foreign import prettyStringify :: Json -> String
 
@@ -118,7 +117,7 @@ resetToken configFile args = do
   mDbPath <- liftEffect $ lookupEnv "DATABASE_PATH"
   let fullPath = resolvePath defaultDir mDbPath dbFile
   conn <- Db.connect fullPath
-  Db.run conn "DELETE FROM api_tokens WHERE slug = ?" [ unsafeCoerce slug ]
+  Db.run conn "DELETE FROM api_tokens WHERE slug = ?" [ Db.toParam slug ]
   mToken <- Db.getOrCreateToken conn slug
   liftEffect $ for_ mToken \token ->
     log $ "New token for '" <> slug <> "': " <> token
