@@ -19,22 +19,22 @@
       ;
 
     duckdbPrebuilt = pkgs.fetchurl {
-      url = "https://registry.npmjs.org/@duckdb/node-bindings-linux-x64/-/node-bindings-linux-x64-1.5.2-r.1.tgz";
-      hash = "sha256-IMn1URw5Cn5hN801LmHoI/XgGrezlkcF+5ItJNeclvg=";
+      url = "https://registry.npmjs.org/@duckdb/node-bindings-linux-x64/-/node-bindings-linux-x64-1.5.4-r.1.tgz";
+      sha256 = "056c0ea133e54e1c74b21a09f1cf3fe1f6c497644e2c7dd6ecac4ae612fa0b5c";
     };
 
     spagoRegistry = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry";
-      rev = "7c020ee4076070dfc917ed0efa6129ce1b60c0a8";
-      hash = "sha256-5fxgKomfEI0SqLC/b55H5mLitLbXGh1syEWzuupwK7Y=";
+      rev = "9ec4b408f38d1b61069922991c86ce63a0a30022";
+      hash = "sha256-pmfd6F7x8ZSEwwzJR2pzT5cvK5S1YNdZW31WhpiyfPw=";
     };
 
     spagoRegistryIndex = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry-index";
-      rev = "0f05445d856c828ef029fd9a982e119038778eda";
-      hash = "sha256-cwp/L0YgKtbwyL0JhUsR8VTubmGxoaYgjHEwmI4Cypo=";
+      rev = "c7ad501685bfbbeb1192ff3d2f19e23a2cf0e48b";
+      hash = "sha256-J5SUrDrRNIRRHwyQ/k7oZi+oBXmtvcBUGs/Auf1YdzY=";
     };
 
     registryDat = generateRegistryDat {elmLock = ./elm.lock;};
@@ -58,7 +58,7 @@
         name = "corpus-pnpm-source";
       };
       pname = "corpus";
-      hash = "sha256-ghIjDWkrNTy3xegpHuCaIQur+EhObd1Y5ml6XgIXlKQ=";
+      hash = "sha256-/cUYadYeNoFyStuEE4Ztc5jToY4BsJ2/a+CMh35OmWA=";
       fetcherVersion = 3;
     };
 

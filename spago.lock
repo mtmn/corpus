@@ -61,7 +61,7 @@
     },
     "package_set": {
       "address": {
-        "registry": "77.5.0"
+        "registry": "77.11.0"
       },
       "compiler": ">=0.15.15 <0.16.0",
       "content": {
@@ -263,6 +263,7 @@
         "halogen-vdom": "8.0.0",
         "halogen-vdom-string-renderer": "0.5.0",
         "halogen-xterm": "2.0.0",
+        "harmonia": "0.2.0",
         "heckin": "2.0.1",
         "heterogeneous": "0.7.0",
         "homogeneous": "0.4.0",
@@ -552,7 +553,7 @@
         "tanstack-query": "3.0.0",
         "tecton": "0.2.1",
         "tecton-halogen": "0.2.0",
-        "temporal": "0.1.0",
+        "temporal": "0.2.0",
         "test-unit": "17.0.0",
         "text-formatting": "0.1.0",
         "thermite": "6.3.1",
@@ -608,6 +609,7 @@
         "versions": "7.0.0",
         "visx": "0.0.2",
         "vitest": "2.0.0",
+        "wasm-base": "0.2.0",
         "web-chain": "1.0.1",
         "web-clipboard": "6.0.0",
         "web-cssom": "2.0.0",
@@ -667,10 +669,11 @@
         "yoga-docker-compose": "0.1.1",
         "yoga-dynamodb": "0.1.1",
         "yoga-elasticsearch": "0.1.1",
-        "yoga-fastify": "0.5.1",
+        "yoga-fastify": "0.5.2",
         "yoga-fastify-om": "0.4.4",
         "yoga-fetch": "1.0.1",
         "yoga-fetch-om": "0.6.3",
+        "yoga-format": "1.0.0",
         "yoga-heroui": "2.0.2",
         "yoga-http-api": "0.3.1",
         "yoga-jaeger": "0.1.1",
@@ -692,7 +695,7 @@
         "yoga-redis": "0.1.0",
         "yoga-shadcn": "1.0.5",
         "yoga-sql-types": "0.1.0",
-        "yoga-sqlite": "0.3.2",
+        "yoga-sqlite": "0.3.3",
         "yoga-sse": "0.1.1",
         "yoga-subtlecrypto": "0.1.0",
         "yoga-test-docker": "0.1.2",
