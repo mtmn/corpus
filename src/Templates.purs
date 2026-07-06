@@ -699,34 +699,6 @@ indexHtml userSlug allUsers =
             color: oklch(0.78 0.13 357.86);
         }
 
-        .about-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .about-list li {
-            background: none;
-            border: none;
-            border-radius: 0;
-            padding: 3px 0;
-            margin-bottom: 0;
-            display: block;
-            box-shadow: none;
-            font-size: 13px;
-            color: oklch(0.70 0.035 225.31);
-        }
-
-        .about-list li::before {
-            content: "→  ";
-            color: oklch(0.42 0.04 225.31);
-        }
-
-        .about-meta {
-            font-size: 13px;
-            margin: 0;
-        }
-
         .about-users {
             list-style: none;
             padding: 0;

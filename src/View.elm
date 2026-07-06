@@ -2,7 +2,7 @@ module View exposing (view)
 
 import Browser
 import Dict exposing (Dict)
-import Html exposing (Html, a, button, div, h1, h2, img, input, li, p, span, strong, text, ul)
+import Html exposing (Html, a, button, div, h2, img, input, li, p, span, strong, text, ul)
 import Html.Attributes as Attr exposing (class, disabled, href, placeholder, src, style, target, type_, value)
 import Html.Events exposing (on, onClick, onInput)
 import Json.Decode as D
@@ -667,29 +667,11 @@ renderAboutView currentSlug allUsers =
     in
     div []
         [ p [ class "about-lead" ]
-            [ text "corpus is a self-hosted proxy that syncs scrobbles from "
+            [ extLink "https://github.com/mtmn/corpus" "corpus"
+            , text " is a self-hosted proxy that syncs scrobbles from "
             , extLink "https://listenbrainz.org" "ListenBrainz"
             , text " and "
             , extLink "https://www.last.fm" "Last.fm."
-            ]
-        , div [ class "stats-section" ]
-            [ h2 [] [ text "features" ]
-            , ul [ class "about-list" ]
-                [ li [] [ text "searchable listen history with pagination" ]
-                , li [] [ text "stats by artist, track, label, year, and genre" ]
-                , li [] [ text "filter listens by label, artist, genre, or year" ]
-                , li [] [ text "cover art from Cover Art Archive, Last.fm, and Discogs" ]
-                , li [] [ text "similar track discovery via cosine.club" ]
-                , li [] [ text "metadata enrichment via MusicBrainz, Last.fm, and Discogs" ]
-                ]
-            ]
-        , div [ class "stats-section" ]
-            [ h2 [] [ text "links" ]
-            , p [ class "about-meta" ]
-                [ div [] [ extLink "https://instagram.com/counterpoint303" "counterpoint" ]
-                , div [] [ extLink "https://sr.ht/~mtmn/corpus" "sourcehut" ]
-                , div [] [ extLink "https://mtmn.name" "mtmn.name" ]
-                ]
             ]
         , if List.isEmpty otherUsers then
             text ""
