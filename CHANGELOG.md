@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.23.1] - 2026-07-06
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.23.0..v2.23.1)
+
+### Bug Fixes
+
+- Cleanup about section, unused import ([`b32d4c7`](https://git.sr.ht/~mtmn/corpus/commit/b32d4c759e33e48f1b99dd52221058b75f0f9d1b))
+
+### Housekeeping
+
+- Update deps ([`7a96a24`](https://git.sr.ht/~mtmn/corpus/commit/7a96a2452fdfadb18e966fa4adbc145c6d612ee2))
+
 ## [2.23.0] - 2026-06-25
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.22.0..v2.23.0)
@@ -14,6 +26,10 @@
 ### Features
 
 - Remove header ([`d99860b`](https://git.sr.ht/~mtmn/corpus/commit/d99860b85d497b41857362d5fbeef881ebd8f381))
+
+### Housekeeping
+
+- Release v2.23.0 ([`defb72c`](https://git.sr.ht/~mtmn/corpus/commit/defb72c5a218bb1983f222702ee7954a2f305fb0))
 
 ## [2.22.0] - 2026-06-24
 
