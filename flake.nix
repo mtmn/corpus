@@ -59,7 +59,7 @@
       };
       pname = "corpus";
       hash = "sha256-/cUYadYeNoFyStuEE4Ztc5jToY4BsJ2/a+CMh35OmWA=";
-      fetcherVersion = 3;
+      fetcherVersion = 4;
     };
 
     spagoDeps = pkgs.stdenv.mkDerivation {
