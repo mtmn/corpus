@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.23.2] - 2026-07-11
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.23.1..v2.23.2)
+
+### Housekeeping
+
+- Update nixpkgs, set pnpm fetcherVersion to 4 ([`b655a69`](https://git.sr.ht/~mtmn/corpus/commit/b655a69f221b4c5bb45b9f957c5cd043f313aa22))
+
 ## [2.23.1] - 2026-07-06
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.23.0..v2.23.1)
@@ -11,6 +19,7 @@
 ### Housekeeping
 
 - Update deps ([`7a96a24`](https://git.sr.ht/~mtmn/corpus/commit/7a96a2452fdfadb18e966fa4adbc145c6d612ee2))
+- Release v2.23.1 ([`829203a`](https://git.sr.ht/~mtmn/corpus/commit/829203a631300d64da9fcdddf4ee957e896c2496))
 
 ## [2.23.0] - 2026-06-25
 
