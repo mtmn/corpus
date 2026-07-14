@@ -1,12 +1,23 @@
 # Changelog
 
-## [2.23.2] - 2026-07-11
+## [3.0.0] - 2026-07-14
 
-[compare](https://git.sr.ht/~mtmn/corpus/log/v2.23.1..v2.23.2)
+[compare](https://git.sr.ht/~mtmn/corpus/log/v2.23.1..v3.0.0)
+
+### Bug Fixes
+
+- Cleanup admin ([`3c7109a`](https://git.sr.ht/~mtmn/corpus/commit/3c7109ab2e4a876e5f6a4d1cd93d42fa6c5dd5ef))
+- Register --> join in navbar ([`4a464dc`](https://git.sr.ht/~mtmn/corpus/commit/4a464dc7ea2c23ef107e4b2d9f5cc6c840c52e26))
+
+### Features
+
+- Add registration flow ([`167070c`](https://git.sr.ht/~mtmn/corpus/commit/167070c7b13dd2df2eb999ad87d65e18a1388083))
+- Add user deletion to admin ([`db98026`](https://git.sr.ht/~mtmn/corpus/commit/db9802659863b1d5349e3551bd884f6ba90e2bf7))
 
 ### Housekeeping
 
 - Update nixpkgs, set pnpm fetcherVersion to 4 ([`b655a69`](https://git.sr.ht/~mtmn/corpus/commit/b655a69f221b4c5bb45b9f957c5cd043f313aa22))
+- Release v2.23.2 ([`53d48ea`](https://git.sr.ht/~mtmn/corpus/commit/53d48eae03076a0f08cea6c78b5e85807e2406b9))
 
 ## [2.23.1] - 2026-07-06
 
