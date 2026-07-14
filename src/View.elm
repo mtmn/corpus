@@ -775,13 +775,10 @@ regField label placeholderText field val =
 renderAdmin : Model -> Html Msg
 renderAdmin model =
     div []
-        [ h2 [] [ text "admin" ]
-        , div [ class "reg-field" ]
-            [ span [ class "reg-label" ] [ text "admin token" ]
-            , input
+        [ div [ class "reg-field" ]
+            [ input
                 [ type_ "password"
                 , class "reg-input"
-                , placeholder "ADMIN_TOKEN"
                 , value model.adminTokenInput
                 , onInput UpdateAdminTokenInput
                 ]
