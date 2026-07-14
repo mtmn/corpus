@@ -1,8 +1,9 @@
-module Api exposing (fetchListens, fetchSectionData, fetchSimilarTracks, fetchStats, httpErrorToString, listensDecoder, sectionEntriesDecoder, similarTracksDecoder, statsDecoder, statsUrl)
+module Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, httpErrorToString, listensDecoder, sectionEntriesDecoder, similarTracksDecoder, statsDecoder, statsUrl, submitRegistration)
 
 import Http
 import Json.Decode as D exposing (Decoder)
-import Types exposing (ActiveFilter, Listen, Msg(..), Period(..), SimilarTrack, Stats, StatsEntry)
+import Json.Encode as E
+import Types exposing (ActiveFilter, ApproveResponse, Listen, Msg(..), Period(..), Registration, SimilarTrack, Stats, StatsEntry)
 import Url
 
 
@@ -80,6 +81,101 @@ fetchSimilarTracks idx artist track =
     Http.get
         { url = "/similar?artist=" ++ Url.percentEncode artist ++ "&track=" ++ Url.percentEncode track
         , expect = Http.expectJson (FetchSimilarTracks idx artist track) similarTracksDecoder
+        }
+
+
+submitRegistration : { slug : String, name : String, email : String, lbUser : String, lfUser : String } -> Cmd Msg
+submitRegistration f =
+    let
+        optional key val =
+            if String.isEmpty (String.trim val) then
+                []
+
+            else
+                [ ( key, E.string (String.trim val) ) ]
+
+        body =
+            E.object
+                ([ ( "slug", E.string (String.trim f.slug) )
+                 , ( "name", E.string (String.trim f.name) )
+                 , ( "email", E.string (String.trim f.email) )
+                 ]
+                    ++ optional "listenbrainzUser" f.lbUser
+                    ++ optional "lastfmUser" f.lfUser
+                )
+    in
+    Http.post
+        { url = "/register"
+        , body = Http.jsonBody body
+        , expect = expectWhateverWithError GotRegistrationResult
+        }
+
+
+{-| Like Http.expectWhatever, but surfaces the server's plaintext error body.
+-}
+expectWhateverWithError : (Result String () -> msg) -> Http.Expect msg
+expectWhateverWithError toMsg =
+    Http.expectStringResponse toMsg <|
+        \response ->
+            case response of
+                Http.GoodStatus_ _ _ ->
+                    Ok ()
+
+                Http.BadStatus_ _ errBody ->
+                    Err
+                        (if String.isEmpty errBody then
+                            "Request failed"
+
+                         else
+                            errBody
+                        )
+
+                Http.BadUrl_ u ->
+                    Err ("Bad URL: " ++ u)
+
+                Http.Timeout_ ->
+                    Err "Request timed out"
+
+                Http.NetworkError_ ->
+                    Err "Network error"
+
+
+fetchRegistrations : String -> Cmd Msg
+fetchRegistrations token =
+    Http.request
+        { method = "GET"
+        , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
+        , url = "/admin/registrations"
+        , body = Http.emptyBody
+        , expect = Http.expectJson GotRegistrations (D.list registrationDecoder)
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+approveRegistration : String -> String -> Cmd Msg
+approveRegistration token id =
+    Http.request
+        { method = "POST"
+        , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
+        , url = "/admin/registrations/approve"
+        , body = Http.jsonBody (E.object [ ( "id", E.string id ) ])
+        , expect = Http.expectJson GotApproveResult approveResponseDecoder
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+denyRegistration : String -> String -> Cmd Msg
+denyRegistration token id =
+    Http.request
+        { method = "POST"
+        , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
+        , url = "/admin/registrations/deny"
+        , body = Http.jsonBody (E.object [ ( "id", E.string id ) ])
+        , expect = expectWhateverWithError GotDenyResult
+        , timeout = Nothing
+        , tracker = Nothing
         }
 
 
@@ -207,3 +303,21 @@ similarTrackDecoder =
         (D.field "track" D.string)
         (D.maybe (D.field "score" D.float))
         (D.maybe (D.field "video_uri" D.string))
+
+
+registrationDecoder : Decoder Registration
+registrationDecoder =
+    D.map6 Registration
+        (D.field "id" D.string)
+        (D.field "slug" D.string)
+        (D.field "name" D.string)
+        (D.field "email" D.string)
+        (D.maybe (D.field "listenbrainzUser" D.string))
+        (D.maybe (D.field "lastfmUser" D.string))
+
+
+approveResponseDecoder : Decoder ApproveResponse
+approveResponseDecoder =
+    D.map2 ApproveResponse
+        (D.field "status" D.string)
+        (D.maybe (D.field "token" D.string))

@@ -2,26 +2,31 @@ module Main where
 
 import Prelude
 
-import Config (AppConfig, UserConfig, UserEntry, loadConfig, s3ConfigFromUser)
+import Config (AppConfig, UserConfig, UserEntry, defaultUserConfig, fillUserConfigFromEnv, loadConfig, s3ConfigFromUser)
 import Cover (serveCover)
 import Cosine (serveSimilar)
 import Data.Argonaut (decodeJson, encodeJson, parseJson, stringify)
-import Data.Array (find, length)
+import Data.Array (find, length, snoc)
 import Data.Array as Data.Array
 import Data.Either (Either(..), hush)
-import Data.Foldable (for_, traverse_)
+import Data.Foldable (any, elem, for_, traverse_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.String (Pattern(..), stripPrefix)
+import Data.String (Pattern(..), stripPrefix, trim)
 import Data.String.Regex (Regex, regex, replace, parseFlags)
 import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..), fst)
 import Db (Connection, backupDb, connect, fromString, getOrCreateToken, getScrobbles, getStats, getTokenUser, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, forkAff, joinFiber, killFiber, launchAff_, try)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
+import Effect.Ref (Ref)
+import Effect.Ref as Ref
 import Effect.Exception as Exception
+import Mail as Mail
+import Registrations as Reg
 import Node.Encoding (Encoding(UTF8))
 import Log as Log
 import Node.EventEmitter (on_)
@@ -58,6 +63,14 @@ type UserContext =
   , syncFibers :: Array (Fiber Unit)
   }
 
+-- Shared server state. contextsRef is mutable so approved users can go live without a restart.
+type ServerEnv =
+  { contextsRef :: Ref (Array UserContext)
+  , regConn :: Connection
+  , regLock :: AVar Unit
+  , appConfig :: AppConfig
+  }
+
 normalizePath :: String -> String
 normalizePath path = case stripPrefix (Pattern "/u/") path of
   Just _ -> "/u/:slug"
@@ -66,10 +79,11 @@ normalizePath path = case stripPrefix (Pattern "/u/") path of
 -- Request handler
 -- API endpoints (/proxy, /stats, /cover, /healthz) select the user via ?user=<slug>.
 -- Index pages are served at / (root user) and /u/<slug> (named users).
-handleRequest :: Boolean -> String -> Array UserContext -> Request -> Response -> Effect Unit
-handleRequest metricsEnabled corsOrigin contexts req res = do
+handleRequest :: ServerEnv -> Request -> Response -> Effect Unit
+handleRequest env req res = do
   let method = IM.method req
   let rawUrl = IM.url req
+  contexts <- Ref.read env.contextsRef
   let allUsers = map (\ctx -> { slug: ctx.slug, name: ctx.displayName }) contexts
   case URL.fromRelative rawUrl "http://localhost" of
     Nothing ->
@@ -78,7 +92,7 @@ handleRequest metricsEnabled corsOrigin contexts req res = do
       let path = URL.pathname url
       Metrics.wrapRequest method (normalizePath path) Log.info req res do
         launchAff_ $ do
-          result <- try $ routeRequest metricsEnabled corsOrigin contexts req url path allUsers res
+          result <- try $ routeRequest env contexts req url path allUsers res
           case result of
             Left err -> do
               Log.error $ "Internal server error: " <> Exception.message err
@@ -86,8 +100,8 @@ handleRequest metricsEnabled corsOrigin contexts req res = do
             Right _ ->
               pure unit
 
-routeRequest :: Boolean -> String -> Array UserContext -> Request -> URL -> String -> Array { slug :: String, name :: String } -> Response -> Aff Unit
-routeRequest metricsEnabled corsOrigin contexts req url path allUsers res = liftEffect $ case path of
+routeRequest :: ServerEnv -> Array UserContext -> Request -> URL -> String -> Array { slug :: String, name :: String } -> Response -> Aff Unit
+routeRequest env contexts req url path allUsers res = liftEffect $ case path of
   "/client.js" ->
     serveClientJs res
   "/favicon.png" ->
@@ -95,14 +109,36 @@ routeRequest metricsEnabled corsOrigin contexts req url path allUsers res = lift
   "/cover.webp" ->
     serveAsset "image/webp" "assets/cover.webp" res
   "/" ->
-    serveIndex allUsers "" res
+    serveIndex regEnabled allUsers "" res
+  "/register" ->
+    if IM.method req == "POST" then
+      launchAff_ $ serveRegister env req res
+    else
+      serveIndex regEnabled allUsers "" res
+  "/admin" ->
+    serveIndex regEnabled allUsers "" res
+  "/admin/registrations" ->
+    if IM.method req == "GET" then
+      launchAff_ $ withAdmin env req res (serveListRegistrations env res)
+    else
+      serveBadRequest res "Method not allowed"
+  "/admin/registrations/approve" ->
+    if IM.method req == "POST" then
+      launchAff_ $ withAdmin env req res (serveApprove env req res)
+    else
+      serveBadRequest res "Method not allowed"
+  "/admin/registrations/deny" ->
+    if IM.method req == "POST" then
+      launchAff_ $ withAdmin env req res (serveDeny env req res)
+    else
+      serveBadRequest res "Method not allowed"
   "/metrics" ->
-    if metricsEnabled then serveMetrics res
+    if env.appConfig.metricsEnabled then serveMetrics res
     else do
       Log.warn "Path not found: /metrics"
       serveNotFound res
   "/proxy" ->
-    withUser url \ctx -> serveProxy corsOrigin ctx.conn url res
+    withUser url \ctx -> serveProxy env.appConfig.corsOrigin ctx.conn url res
   "/stats" ->
     withUser url \ctx -> serveStats ctx.conn url res
   "/cover" ->
@@ -125,11 +161,12 @@ routeRequest metricsEnabled corsOrigin contexts req url path allUsers res = lift
   _ ->
     case stripPrefix (Pattern "/u/") path of
       Just slug ->
-        serveIndex allUsers slug res
+        serveIndex regEnabled allUsers slug res
       Nothing -> do
         Log.warn $ "Path not found: " <> path
         serveNotFound res
   where
+  regEnabled = env.appConfig.registrationEnabled
   withUser urlParam f =
     let
       slug = fromMaybe "" (getQueryParam "user" urlParam)
@@ -209,13 +246,214 @@ findUserByToken contexts tokenValue = case Data.Array.uncons contexts of
       _ ->
         findUserByToken rest tokenValue
 
-serveIndex :: Array { slug :: String, name :: String } -> String -> Response -> Effect Unit
-serveIndex allUsers slug res = do
+serveIndex :: Boolean -> Array { slug :: String, name :: String } -> String -> Response -> Effect Unit
+serveIndex registrationEnabled allUsers slug res = do
   setHeader "Content-Type" "text/html" (toOutgoingMessage res)
   setStatusCode 200 res
   let w = toWriteable (toOutgoingMessage res)
-  void $ writeString w UTF8 (indexHtml slug allUsers)
+  void $ writeString w UTF8 (indexHtml registrationEnabled slug allUsers)
   end w
+
+-- 409 Conflict helper for slug collisions.
+serveConflict :: Response -> String -> Effect Unit
+serveConflict res message = respond "text/plain" 409 message res
+
+-- Extract an admin secret from an `Authorization: Bearer <token>` header value.
+parseBearer :: Maybe String -> Maybe String
+parseBearer mAuth = mAuth >>= stripPrefix (Pattern "Bearer ")
+
+-- Gates admin endpoints behind ADMIN_TOKEN: unset -> 404 (disabled), mismatch -> 401.
+withAdmin :: ServerEnv -> Request -> Response -> Aff Unit -> Aff Unit
+withAdmin env req res action =
+  case env.appConfig.adminToken of
+    Nothing ->
+      liftEffect $ serveNotFound res
+    Just secret -> do
+      let mToken = parseBearer (Object.lookup "authorization" (IM.headers req))
+      if mToken == Just secret then action
+      else liftEffect $ serveUnauthorized res
+
+type RegisterPayload =
+  { slug :: String
+  , name :: String
+  , email :: String
+  , listenbrainzUser :: Maybe String
+  , lastfmUser :: Maybe String
+  }
+
+-- Trims optional input and treats an empty string as absent.
+normalizeOptional :: Maybe String -> Maybe String
+normalizeOptional m = case map trim m of
+  Just "" -> Nothing
+  other -> other
+
+-- Public registration endpoint: validates the slug, records a pending request, emails the admin.
+serveRegister :: ServerEnv -> Request -> Response -> Aff Unit
+serveRegister env req res =
+  if not env.appConfig.registrationEnabled then liftEffect $ serveNotFound res
+  else do
+    body <- readableToStringUtf8 (IM.toReadable req)
+    case parseJson body >>= decodeJson of
+      Left _ ->
+        liftEffect $ serveBadRequest res "Invalid JSON"
+      Right (payload :: RegisterPayload) -> do
+        let
+          slug = trim payload.slug
+          displayName = trim payload.name
+          email = trim payload.email
+          lb = normalizeOptional payload.listenbrainzUser
+          lf = normalizeOptional payload.lastfmUser
+        contexts <- liftEffect $ Ref.read env.contextsRef
+        let existingSlugs = map _.slug contexts
+        if displayName == "" || email == "" then
+          liftEffect $ serveBadRequest res "Name and email are required"
+        else if not (Reg.validSlugFormat slug) then
+          liftEffect $ serveBadRequest res "Invalid username: use lowercase letters, numbers and dashes"
+        else if Reg.isReservedSlug slug || elem slug existingSlugs then
+          liftEffect $ serveConflict res "That username is already taken"
+        else do
+          taken <- Reg.slugTaken env.regConn slug
+          if taken then
+            liftEffect $ serveConflict res "That username has already been requested"
+          else do
+            Reg.insertRegistration env.regConn env.regLock
+              { slug, displayName, email, listenbrainzUser: lb, lastfmUser: lf }
+            notifyAdminNewRegistration env slug displayName email
+            liftEffect $ respond "application/json" 200 """{"status":"ok"}""" res
+
+serveListRegistrations :: ServerEnv -> Response -> Aff Unit
+serveListRegistrations env res = do
+  regs <- Reg.listByStatus env.regConn "pending"
+  liftEffect $ respond "application/json" 200 (stringify $ encodeJson (map regToJson regs)) res
+
+regToJson
+  :: Reg.Registration
+  -> { id :: String, slug :: String, name :: String, email :: String, listenbrainzUser :: Maybe String, lastfmUser :: Maybe String, status :: String, createdAt :: Int }
+regToJson r =
+  { id: r.id
+  , slug: r.slug
+  , name: r.displayName
+  , email: r.email
+  , listenbrainzUser: r.listenbrainzUser
+  , lastfmUser: r.lastfmUser
+  , status: r.status
+  , createdAt: r.createdAt
+  }
+
+serveApprove :: ServerEnv -> Request -> Response -> Aff Unit
+serveApprove env req res = do
+  body <- readableToStringUtf8 (IM.toReadable req)
+  case parseJson body >>= decodeJson of
+    Left _ ->
+      liftEffect $ serveBadRequest res "Invalid JSON"
+    Right ({ id } :: { id :: String }) -> do
+      mReg <- Reg.getById env.regConn id
+      case mReg of
+        Nothing ->
+          liftEffect $ serveNotFound res
+        Just reg ->
+          if reg.status /= "pending" then
+            liftEffect $ serveBadRequest res "Registration is not pending"
+          else do
+            contexts <- liftEffect $ Ref.read env.contextsRef
+            if any (\c -> c.slug == reg.slug) contexts then
+              liftEffect $ serveConflict res "That username is already taken"
+            else do
+              result <- try $ provisionUser env reg
+              case result of
+                Left err -> do
+                  Log.error $ "Failed to provision user '" <> reg.slug <> "': " <> Exception.message err
+                  liftEffect $ serveInternalError res
+                Right mToken -> do
+                  Reg.setStatus env.regConn env.regLock id "approved"
+                  notifyApproved env reg mToken
+                  liftEffect $ respond "application/json" 200
+                    (stringify $ encodeJson { status: "approved", token: mToken })
+                    res
+
+serveDeny :: ServerEnv -> Request -> Response -> Aff Unit
+serveDeny env req res = do
+  body <- readableToStringUtf8 (IM.toReadable req)
+  case parseJson body >>= decodeJson of
+    Left _ ->
+      liftEffect $ serveBadRequest res "Invalid JSON"
+    Right ({ id } :: { id :: String }) -> do
+      mReg <- Reg.getById env.regConn id
+      case mReg of
+        Nothing ->
+          liftEffect $ serveNotFound res
+        Just reg -> do
+          Reg.setStatus env.regConn env.regLock id "denied"
+          notifyDenied env reg
+          liftEffect $ respond "application/json" 200 """{"status":"denied"}""" res
+
+-- Builds a runnable UserEntry from an approved registration (users.json is not touched).
+registrationUserEntry :: Reg.Registration -> Aff UserEntry
+registrationUserEntry reg = do
+  let base = defaultUserConfig ("corpus-" <> reg.slug <> ".db") reg.listenbrainzUser reg.lastfmUser
+  config <- fillUserConfigFromEnv base
+  pure { slug: reg.slug, name: Just reg.displayName, config }
+
+-- Starts an approved registration as a live user, returning its new API token.
+provisionUser :: ServerEnv -> Reg.Registration -> Aff (Maybe String)
+provisionUser env reg = do
+  entry <- registrationUserEntry reg
+  Tuple ctx mToken <- startUser entry
+  liftEffect $ Ref.modify_ (\cs -> snoc cs ctx) env.contextsRef
+  pure mToken
+
+-- Sends an email if SMTP is configured, logging (never throwing) on failure.
+sendMailBestEffort :: ServerEnv -> Mail.Mail -> Aff Unit
+sendMailBestEffort env mail =
+  if Mail.isConfigured env.appConfig.smtp then do
+    result <- try $ Mail.sendMail env.appConfig.smtp mail
+    case result of
+      Left err -> Log.error $ "Failed to send email to " <> mail.to <> ": " <> Exception.message err
+      Right _ -> Log.info $ "Sent email to " <> mail.to
+  else
+    Log.warn "SMTP not configured; skipping email"
+
+notifyAdminNewRegistration :: ServerEnv -> String -> String -> String -> Aff Unit
+notifyAdminNewRegistration env slug displayName email =
+  for_ env.appConfig.adminEmail \adminAddr ->
+    sendMailBestEffort env
+      { to: adminAddr
+      , subject: "New corpus registration: " <> slug
+      , text: "A new registration request is pending.\n\nUsername: " <> slug
+          <> "\nName: "
+          <> displayName
+          <> "\nEmail: "
+          <> email
+          <> "\n\nApprove or deny it in the admin page."
+      }
+
+notifyApproved :: ServerEnv -> Reg.Registration -> Maybe String -> Aff Unit
+notifyApproved env reg mToken =
+  sendMailBestEffort env
+    { to: reg.email
+    , subject: "Your corpus account is approved"
+    , text: "Hi " <> reg.displayName
+        <> ",\n\nYour account '"
+        <> reg.slug
+        <> "' has been approved."
+        <> tokenLine
+        <> "\nYou can submit listens to /1/submit-listens using this token.\n"
+    }
+  where
+  tokenLine = case mToken of
+    Just t -> "\n\nYour API token: " <> t
+    Nothing -> ""
+
+notifyDenied :: ServerEnv -> Reg.Registration -> Aff Unit
+notifyDenied env reg =
+  sendMailBestEffort env
+    { to: reg.email
+    , subject: "Your corpus registration"
+    , text: "Hi " <> reg.displayName
+        <> ",\n\nUnfortunately your registration for '"
+        <> reg.slug
+        <> "' was not approved.\n"
+    }
 
 serveMetrics :: Response -> Effect Unit
 serveMetrics res = do
@@ -375,7 +613,7 @@ submitTrackMetadataToTrackMetadata (ListenBrainzSubmitTrackMetadata { trackName,
           }
     }
 
-startUser :: UserEntry -> Aff UserContext
+startUser :: UserEntry -> Aff (Tuple UserContext (Maybe String))
 startUser { slug, name, config } = do
   Log.info $ "Starting user: " <> if slug == "" then "(root)" else slug
   conn <- connect config.databaseFile
@@ -422,7 +660,9 @@ startUser { slug, name, config } = do
     else pure Nothing
 
   let displayName = fromMaybe (if slug == "" then "root" else slug) name
-  pure { conn, writeLock, config, slug, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber, syncFibers: loopFibers }
+  pure $ Tuple
+    { conn, writeLock, config, slug, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber, syncFibers: loopFibers }
+    mToken
 
 cleanupUser :: UserContext -> Aff Unit
 cleanupUser ctx = do
@@ -456,10 +696,26 @@ main = do
             liftEffect $ Exception.throwException err
           Right (appConfig :: AppConfig) -> do
             Log.info $ "Loaded " <> show (length appConfig.users) <> " user(s) from " <> configFile
-            contexts <- traverse startUser appConfig.users
+            results <- traverse startUser appConfig.users
+            let jsonContexts = map fst results
+            -- Also start approved registrations, skipping slugs already in users.json.
+            regConn <- connect appConfig.registrationsDb
+            Reg.initRegistrations regConn
+            approved <- Reg.listByStatus regConn "approved"
+            let jsonSlugs = map _.slug jsonContexts
+            let toStart = Data.Array.filter (\r -> not (elem r.slug jsonSlugs)) approved
+            when (not (Data.Array.null toStart))
+              $ Log.info
+              $ "Starting " <> show (length toStart) <> " approved registered user(s)"
+            approvedEntries <- traverse registrationUserEntry toStart
+            approvedResults <- traverse startUser approvedEntries
+            let contexts = jsonContexts <> map fst approvedResults
+            contextsRef <- liftEffect $ Ref.new contexts
+            regLock <- Avar.new unit
+            let env = { contextsRef, regConn, regLock, appConfig }
             liftEffect $ do
               server <- createServer
-              server # on_ Server.requestH (handleRequest appConfig.metricsEnabled appConfig.corsOrigin contexts)
+              server # on_ Server.requestH (handleRequest env)
               let netServer = Server.toNetServer server
 
               netServer # on_ listeningH do

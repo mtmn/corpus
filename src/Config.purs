@@ -46,7 +46,21 @@ type AppConfig =
   , host :: String
   , metricsEnabled :: Boolean
   , corsOrigin :: String
+  , adminToken :: Maybe String
+  , adminEmail :: Maybe String
+  , registrationEnabled :: Boolean
+  , registrationsDb :: String
+  , smtp :: SmtpConfig
   , users :: Array UserEntry
+  }
+
+-- SMTP settings for notification email (SMTP_* env vars).
+type SmtpConfig =
+  { host :: Maybe String
+  , port :: Int
+  , user :: Maybe String
+  , pass :: Maybe String
+  , from :: Maybe String
   }
 
 type S3Config =
@@ -68,6 +82,26 @@ s3ConfigFromUser cfg =
   , addressingStyle: cfg.awsS3AddressingStyle
   }
 
+-- Defaults for a self-registered user; creds and DB path are filled by fillUserConfigFromEnv.
+defaultUserConfig :: String -> Maybe String -> Maybe String -> UserConfig
+defaultUserConfig databaseFile listenbrainzUser lastfmUser =
+  { listenbrainzUser
+  , lastfmUser
+  , lastfmApiKey: Nothing
+  , discogsToken: Nothing
+  , cosineApiKey: Nothing
+  , databaseFile
+  , s3Bucket: Nothing
+  , s3Region: "us-east-1"
+  , awsAccessKeyId: Nothing
+  , awsSecretAccessKey: Nothing
+  , awsEndpointUrl: Nothing
+  , awsS3AddressingStyle: Nothing
+  , coverCacheEnabled: false
+  , backupEnabled: false
+  , backupIntervalHours: 24
+  }
+
 foreign import loadConfigImpl
   :: Fn3 String (String -> Effect Unit) (Json -> Effect Unit) (Effect Unit)
 
@@ -83,6 +117,61 @@ loadConfig path = do
     Right users -> pure users
   portStr <- liftEffect $ lookupEnv "PORT"
   hostStr <- liftEffect $ lookupEnv "HOST"
+  metricsEnabledStr <- liftEffect $ lookupEnv "METRICS_ENABLED"
+  corsOriginStr <- liftEffect $ lookupEnv "CORS_ORIGIN"
+  adminToken <- liftEffect $ lookupEnv "ADMIN_TOKEN"
+  adminEmail <- liftEffect $ lookupEnv "ADMIN_EMAIL"
+  registrationEnabledStr <- liftEffect $ lookupEnv "REGISTRATION_ENABLED"
+  registrationsDbEnv <- liftEffect $ lookupEnv "CORPUS_REGISTRATIONS_DB"
+  smtpHost <- liftEffect $ lookupEnv "SMTP_HOST"
+  smtpPortStr <- liftEffect $ lookupEnv "SMTP_PORT"
+  smtpUser <- liftEffect $ lookupEnv "SMTP_USER"
+  smtpPass <- liftEffect $ lookupEnv "SMTP_PASS"
+  smtpFrom <- liftEffect $ lookupEnv "SMTP_FROM"
+  databasePath <- liftEffect $ lookupEnv "DATABASE_PATH"
+  defaultPath <- liftEffect cwd
+  filledUsers <- traverse
+    ( \u -> do
+        c <- fillUserConfigFromEnv u.config
+        pure (u { config = c })
+    )
+    rawUsers
+  let
+    resolvePath file = case databasePath of
+      Nothing -> defaultPath <> "/" <> file
+      Just dir -> dir <> "/" <> file
+    port = fromMaybe 8000 (portStr >>= Data.Int.fromString)
+    host = fromMaybe "127.0.0.1" hostStr
+    metricsEnabled = metricsEnabledStr == Just "true"
+    corsOrigin = fromMaybe "*" corsOriginStr
+    registrationEnabled = registrationEnabledStr == Just "true"
+    registrationsDb = resolvePath (fromMaybe "registrations.db" registrationsDbEnv)
+    smtp =
+      { host: smtpHost
+      , port: fromMaybe 587 (smtpPortStr >>= Data.Int.fromString)
+      , user: smtpUser
+      , pass: smtpPass
+      , from: smtpFrom
+      }
+    fullConfig =
+      { port
+      , host
+      , metricsEnabled
+      , corsOrigin
+      , adminToken
+      , adminEmail
+      , registrationEnabled
+      , registrationsDb
+      , smtp
+      , users: filledUsers
+      }
+  case validateConfig fullConfig of
+    Left msg -> throwError (error msg)
+    Right cfg -> pure cfg
+
+-- Fills shared credentials and resolves the database path from the environment.
+fillUserConfigFromEnv :: UserConfig -> Aff UserConfig
+fillUserConfigFromEnv cfg = do
   lastfmApiKey <- liftEffect $ lookupEnv "LASTFM_API_KEY"
   discogsToken <- liftEffect $ lookupEnv "DISCOGS_TOKEN"
   cosineApiKey <- liftEffect $ lookupEnv "COSINE_API_KEY"
@@ -93,34 +182,23 @@ loadConfig path = do
   awsEndpointUrl <- liftEffect $ lookupEnv "AWS_ENDPOINT_URL"
   awsS3AddressingStyle <- liftEffect $ lookupEnv "AWS_S3_ADDRESSING_STYLE"
   databasePath <- liftEffect $ lookupEnv "DATABASE_PATH"
-  metricsEnabledStr <- liftEffect $ lookupEnv "METRICS_ENABLED"
-  corsOriginStr <- liftEffect $ lookupEnv "CORS_ORIGIN"
   defaultPath <- liftEffect cwd
   let
     resolvePath file = case databasePath of
       Nothing -> defaultPath <> "/" <> file
       Just dir -> dir <> "/" <> file
-    fillCreds cfg = cfg
-      { lastfmApiKey = lastfmApiKey
-      , discogsToken = discogsToken
-      , cosineApiKey = cosineApiKey
-      , s3Bucket = s3Bucket
-      , s3Region = s3Region
-      , awsAccessKeyId = awsAccessKeyId
-      , awsSecretAccessKey = awsSecretAccessKey
-      , awsEndpointUrl = awsEndpointUrl
-      , awsS3AddressingStyle = awsS3AddressingStyle
-      , databaseFile = resolvePath cfg.databaseFile
-      }
-  let
-    port = fromMaybe 8000 (portStr >>= Data.Int.fromString)
-    host = fromMaybe "127.0.0.1" hostStr
-    metricsEnabled = metricsEnabledStr == Just "true"
-    corsOrigin = fromMaybe "*" corsOriginStr
-    fullConfig = { port, host, metricsEnabled, corsOrigin, users: map (\u -> u { config = fillCreds u.config }) rawUsers }
-  case validateConfig fullConfig of
-    Left msg -> throwError (error msg)
-    Right cfg -> pure cfg
+  pure cfg
+    { lastfmApiKey = lastfmApiKey
+    , discogsToken = discogsToken
+    , cosineApiKey = cosineApiKey
+    , s3Bucket = s3Bucket
+    , s3Region = s3Region
+    , awsAccessKeyId = awsAccessKeyId
+    , awsSecretAccessKey = awsSecretAccessKey
+    , awsEndpointUrl = awsEndpointUrl
+    , awsS3AddressingStyle = awsS3AddressingStyle
+    , databaseFile = resolvePath cfg.databaseFile
+    }
 
 validateConfig :: AppConfig -> Either String AppConfig
 validateConfig cfg = do

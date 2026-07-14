@@ -93,6 +93,30 @@ The endpoint accepts standard ListenBrainz JSON payloads. See the [ListenBrainz 
 | `COSINE_API_KEY` | — | [cosine.club](https://cosine.club) API key for similar tracks |
 | `METRICS_ENABLED` | `false` | Set to `true` to expose Prometheus metrics at `/metrics` |
 | `CORS_ORIGIN` | `*` | Value for the `Access-Control-Allow-Origin` header on `/proxy` responses (e.g. `https://mtmn.name`) |
+| `REGISTRATION_ENABLED` | `false` | Set to `true` to allow public self-registration at `/register` |
+| `ADMIN_TOKEN` | — | Secret for the admin approval page at `/admin`; when unset, all admin routes 404 |
+| `ADMIN_EMAIL` | — | Address notified by email when a new registration arrives |
+| `CORPUS_REGISTRATIONS_DB` | `registrations.db` | Shared DuckDB file holding pending/approved/denied registrations |
+| `SMTP_HOST` | — | SMTP server host for notification email (email is skipped if unset) |
+| `SMTP_PORT` | `587` | SMTP port (STARTTLS) |
+| `SMTP_USER` | — | SMTP username |
+| `SMTP_PASS` | — | SMTP password |
+| `SMTP_FROM` | — | From address for notification email |
+
+### User self-registration & admin approval
+
+When `REGISTRATION_ENABLED=true`, visitors can request an account at `/register`
+(username, name, email, and optional ListenBrainz/Last.fm usernames). Requests are
+stored as _pending_ in the shared registrations database. Set `ADMIN_TOKEN` and visit
+`/admin` to review them: enter the token (remembered in `localStorage`), then **approve**
+(provisions the user live — no restart — and emails them their API token) or **deny**
+(emails the requester). Set `ADMIN_EMAIL` + `SMTP_*` to receive/send the notifications;
+without SMTP the flow still works and the token is shown in the admin UI on approval.
+
+Approved users persist as `approved` rows in the registrations database and are
+re-loaded automatically at every startup — `users.json` is **not** modified and remains
+the manual/static import mechanism (via the `add-user` CLI). If a slug is defined in both
+`users.json` and an approved registration, the `users.json` entry wins.
 
 ### Per-user configuration
 

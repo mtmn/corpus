@@ -17,7 +17,8 @@ import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..)
 import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt, getOrCreateToken, getTokenUser, fromString)
 import Data.Argonaut.Core (Json, toBoolean, toNumber, toString)
 import Foreign.Object as Object
-import Main (submitListenToListen, findUserByToken, sanitizeDate, parseAuthToken, validateTokenJson)
+import Main (submitListenToListen, findUserByToken, sanitizeDate, parseAuthToken, parseBearer, validateTokenJson)
+import Registrations (getById, initRegistrations, insertRegistration, isReservedSlug, listByStatus, setStatus, slugTaken, validSlugFormat)
 import Cover (sanitizeKey)
 import Sync (listenBrainzUrl, lastfmTrackToListen, parseLastfmResponse)
 import S3 (getS3Url)
@@ -201,7 +202,8 @@ main = runSpecAndExitProcess [consoleReporter] do
             (Object.lookup "valid" obj >>= toBoolean) `shouldEqual` Just true
             (Object.lookup "user_name" obj >>= toString) `shouldEqual` Just "User One"
             (Object.lookup "code" obj >>= toNumber) `shouldEqual` Just 200.0
-          Left _ -> fail "validateTokenJson did not produce valid JSON"
+          Left _ ->
+            fail "validateTokenJson did not produce valid JSON"
 
       it "builds an invalid-token response for an unknown token" do
         let body = validateTokenJson Nothing
@@ -210,7 +212,8 @@ main = runSpecAndExitProcess [consoleReporter] do
           Right obj -> do
             (Object.lookup "valid" obj >>= toBoolean) `shouldEqual` Just false
             Object.member "user_name" obj `shouldEqual` false
-          Left _ -> fail "validateTokenJson did not produce valid JSON"
+          Left _ ->
+            fail "validateTokenJson did not produce valid JSON"
 
     describe "Token Authentication" do
       it "should create and verify tokens" do
@@ -858,3 +861,58 @@ main = runSpecAndExitProcess [consoleReporter] do
             , addressingStyle: Just "path"
             }
         getS3Url cfg "covers/test.jpg" `shouldEqual` "https://s3.example.com/my-bucket/covers/test.jpg"
+
+    describe "Admin auth" do
+      it "parses Bearer tokens" do
+        parseBearer (Just "Bearer secret") `shouldEqual` Just "secret"
+        parseBearer (Just "Token secret") `shouldEqual` Nothing
+        parseBearer Nothing `shouldEqual` Nothing
+
+    describe "Registrations" do
+      it "validates slug format" do
+        validSlugFormat "mtmn" `shouldEqual` true
+        validSlugFormat "a-b-1" `shouldEqual` true
+        validSlugFormat "Ab" `shouldEqual` false
+        validSlugFormat "-x" `shouldEqual` false
+        validSlugFormat "x-" `shouldEqual` false
+        validSlugFormat "" `shouldEqual` false
+        validSlugFormat "a b" `shouldEqual` false
+
+      it "flags reserved slugs" do
+        isReservedSlug "admin" `shouldEqual` true
+        isReservedSlug "register" `shouldEqual` true
+        isReservedSlug "" `shouldEqual` true
+        isReservedSlug "mtmn" `shouldEqual` false
+
+      it "insert/list/get/setStatus/slugTaken round-trip" do
+        conn <- connect ":memory:"
+        initRegistrations conn
+        lock <- Avar.new unit
+        insertRegistration conn lock
+          { slug: "alice"
+          , displayName: "Alice"
+          , email: "a@x.com"
+          , listenbrainzUser: Just "alice_lb"
+          , lastfmUser: Nothing
+          }
+        pending <- listByStatus conn "pending"
+        length pending `shouldEqual` 1
+        taken <- slugTaken conn "alice"
+        taken `shouldEqual` true
+        free <- slugTaken conn "bob"
+        free `shouldEqual` false
+        case pending of
+          [ r ] -> do
+            r.slug `shouldEqual` "alice"
+            r.displayName `shouldEqual` "Alice"
+            r.listenbrainzUser `shouldEqual` Just "alice_lb"
+            r.lastfmUser `shouldEqual` Nothing
+            mReg <- getById conn r.id
+            map _.slug mReg `shouldEqual` Just "alice"
+            setStatus conn lock r.id "denied"
+            pending2 <- listByStatus conn "pending"
+            length pending2 `shouldEqual` 0
+            takenAfterDeny <- slugTaken conn "alice"
+            takenAfterDeny `shouldEqual` false
+          _ ->
+            fail "expected one pending registration"

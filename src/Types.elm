@@ -1,4 +1,4 @@
-module Types exposing (ActiveFilter, Flags, Listen, Model, Msg(..), Period(..), SimilarState(..), SimilarTrack, Stats, StatsEntry, Tab(..), UserInfo)
+module Types exposing (ActiveFilter, ApproveResponse, Flags, Listen, Model, Msg(..), Page(..), Period(..), RegField(..), Registration, SimilarState(..), SimilarTrack, Stats, StatsEntry, Tab(..), UserInfo)
 
 import Browser
 import Browser.Navigation as Nav
@@ -18,6 +18,8 @@ type alias UserInfo =
 type alias Flags =
     { userSlug : String
     , allUsers : List UserInfo
+    , registrationEnabled : Bool
+    , adminToken : String
     }
 
 
@@ -29,6 +31,42 @@ type Tab
     = ListensTab
     | StatsTab
     | AboutTab
+
+
+{-| Which top-level page the SPA shows, derived from the URL path.
+-}
+type Page
+    = MainPage
+    | RegisterPage
+    | AdminPage
+
+
+{-| A pending registration request, as listed on the admin page.
+-}
+type alias Registration =
+    { id : String
+    , slug : String
+    , name : String
+    , email : String
+    , listenbrainzUser : Maybe String
+    , lastfmUser : Maybe String
+    }
+
+
+type alias ApproveResponse =
+    { status : String
+    , token : Maybe String
+    }
+
+
+{-| Fields of the registration form, used by the UpdateRegField message.
+-}
+type RegField
+    = FSlug
+    | FName
+    | FEmail
+    | FLbUser
+    | FLfUser
 
 
 type Period
@@ -113,6 +151,25 @@ type alias Model =
     , searchInput : String
     , activeSearch : Maybe String
     , tabsVisible : Bool
+    , page : Page
+    , registrationEnabled : Bool
+
+    -- Registration form
+    , regSlug : String
+    , regName : String
+    , regEmail : String
+    , regLbUser : String
+    , regLfUser : String
+    , regSubmitting : Bool
+    , regSubmitted : Bool
+    , regError : Maybe String
+
+    -- Admin page
+    , adminToken : String
+    , adminTokenInput : String
+    , registrations : List Registration
+    , adminError : Maybe String
+    , approvedToken : Maybe String
     }
 
 
@@ -143,6 +200,17 @@ type Msg
     | UpdateSearchInput String
     | SubmitSearch
     | ClearSearch
+    | UpdateRegField RegField String
+    | SubmitRegistration
+    | GotRegistrationResult (Result String ())
+    | UpdateAdminTokenInput String
+    | SaveAdminToken
+    | FetchRegistrations
+    | GotRegistrations (Result Http.Error (List Registration))
+    | ApproveRegistration String
+    | DenyRegistration String
+    | GotApproveResult (Result Http.Error ApproveResponse)
+    | GotDenyResult (Result String ())
     | UrlRequested Browser.UrlRequest
     | UrlChanged Url.Url
 

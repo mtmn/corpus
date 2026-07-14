@@ -1,13 +1,14 @@
 module State exposing (init, subscriptions, update)
 
-import Api exposing (fetchListens, fetchSectionData, fetchSimilarTracks, fetchStats, httpErrorToString)
+import Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, httpErrorToString, submitRegistration)
 import Browser
 import Browser.Navigation as Nav
 import Dict
+import Ports
 import Set
 import Task
 import Time
-import Types exposing (Flags, Model, Msg(..), Period(..), SimilarState(..), Stats, StatsEntry, Tab(..))
+import Types exposing (Flags, Model, Msg(..), Page(..), Period(..), RegField(..), SimilarState(..), Stats, StatsEntry, Tab(..))
 import Url
 import Url.Parser exposing ((</>), (<?>))
 import Url.Parser.Query as Query
@@ -16,11 +17,14 @@ import Url.Parser.Query as Query
 init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url navKey =
     let
-        page =
+        pageNum =
             parsePageParam url
 
         offset =
-            max 0 ((page - 1) * 25)
+            max 0 ((pageNum - 1) * 25)
+
+        page =
+            parsePage url
     in
     ( { navKey = navKey
       , listens = []
@@ -46,12 +50,55 @@ init flags url navKey =
       , searchInput = ""
       , activeSearch = Nothing
       , tabsVisible = True
+      , page = page
+      , registrationEnabled = flags.registrationEnabled
+      , regSlug = ""
+      , regName = ""
+      , regEmail = ""
+      , regLbUser = ""
+      , regLfUser = ""
+      , regSubmitting = False
+      , regSubmitted = False
+      , regError = Nothing
+      , adminToken = flags.adminToken
+      , adminTokenInput = flags.adminToken
+      , registrations = []
+      , adminError = Nothing
+      , approvedToken = Nothing
       }
-    , Cmd.batch
-        [ fetchListens flags.userSlug 25 offset Nothing Nothing
-        , Task.perform GotTime Time.now
-        ]
+    , case page of
+        AdminPage ->
+            Cmd.batch
+                [ Task.perform GotTime Time.now
+                , if String.isEmpty flags.adminToken then
+                    Cmd.none
+
+                  else
+                    fetchRegistrations flags.adminToken
+                ]
+
+        RegisterPage ->
+            Task.perform GotTime Time.now
+
+        MainPage ->
+            Cmd.batch
+                [ fetchListens flags.userSlug 25 offset Nothing Nothing
+                , Task.perform GotTime Time.now
+                ]
     )
+
+
+parsePage : Url.Url -> Page
+parsePage url =
+    case url.path of
+        "/register" ->
+            RegisterPage
+
+        "/admin" ->
+            AdminPage
+
+        _ ->
+            MainPage
 
 
 parsePageParam : Url.Url -> Int
@@ -84,89 +131,104 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            let
-                newUserSlug =
-                    if String.startsWith "/u/" url.path then
-                        String.dropLeft 3 url.path
+            case parsePage url of
+                RegisterPage ->
+                    ( { model | page = RegisterPage }, Cmd.none )
 
-                    else
-                        ""
+                AdminPage ->
+                    ( { model | page = AdminPage, approvedToken = Nothing }
+                    , if String.isEmpty model.adminToken then
+                        Cmd.none
 
-                page =
-                    parsePageParam url
+                      else
+                        fetchRegistrations model.adminToken
+                    )
 
-                targetOffset =
-                    max 0 ((page - 1) * model.limit)
+                MainPage ->
+                    let
+                        newUserSlug =
+                            if String.startsWith "/u/" url.path then
+                                String.dropLeft 3 url.path
 
-                isNaked =
-                    url.query == Nothing
+                            else
+                                ""
 
-                userChanged =
-                    newUserSlug /= model.userSlug
+                        pageNum =
+                            parsePageParam url
 
-                needsCleanStart =
-                    userChanged || isNaked
+                        targetOffset =
+                            max 0 ((pageNum - 1) * model.limit)
 
-                finalFilter =
-                    if needsCleanStart then
-                        Nothing
+                        isNaked =
+                            url.query == Nothing
 
-                    else
-                        model.activeFilter
+                        userChanged =
+                            newUserSlug /= model.userSlug
 
-                finalSearch =
-                    if needsCleanStart then
-                        Nothing
+                        needsCleanStart =
+                            userChanged || isNaked
 
-                    else
-                        model.activeSearch
+                        finalFilter =
+                            if needsCleanStart then
+                                Nothing
 
-                finalOffset =
-                    if needsCleanStart then
-                        0
+                            else
+                                model.activeFilter
 
-                    else
-                        targetOffset
-            in
-            if userChanged || model.offset /= finalOffset || model.activeFilter /= finalFilter || model.activeSearch /= finalSearch then
-                let
-                    newModel =
-                        { model
-                            | userSlug = newUserSlug
-                            , offset = finalOffset
-                            , activeFilter = finalFilter
-                            , activeSearch = finalSearch
-                            , searchInput =
-                                if needsCleanStart then
-                                    ""
+                        finalSearch =
+                            if needsCleanStart then
+                                Nothing
+
+                            else
+                                model.activeSearch
+
+                        finalOffset =
+                            if needsCleanStart then
+                                0
+
+                            else
+                                targetOffset
+                    in
+                    if model.page /= MainPage || userChanged || model.offset /= finalOffset || model.activeFilter /= finalFilter || model.activeSearch /= finalSearch then
+                        let
+                            newModel =
+                                { model
+                                    | userSlug = newUserSlug
+                                    , offset = finalOffset
+                                    , activeFilter = finalFilter
+                                    , activeSearch = finalSearch
+                                    , searchInput =
+                                        if needsCleanStart then
+                                            ""
+
+                                        else
+                                            model.searchInput
+                                    , activeTab = ListensTab
+                                    , loading = True
+                                    , page = MainPage
+                                }
+
+                            clearedModel =
+                                if userChanged then
+                                    { newModel
+                                        | stats = Nothing
+                                        , expandedSections = Set.empty
+                                        , loadedSections = Set.empty
+                                        , similarStates = Dict.empty
+                                    }
 
                                 else
-                                    model.searchInput
-                            , activeTab = ListensTab
-                            , loading = True
-                        }
+                                    newModel
+                        in
+                        ( clearedModel
+                        , fetchListens newUserSlug model.limit finalOffset finalFilter finalSearch
+                        )
 
-                    clearedModel =
-                        if userChanged then
-                            { newModel
-                                | stats = Nothing
-                                , expandedSections = Set.empty
-                                , loadedSections = Set.empty
-                                , similarStates = Dict.empty
-                            }
-
-                        else
-                            newModel
-                in
-                ( clearedModel
-                , fetchListens newUserSlug model.limit finalOffset finalFilter finalSearch
-                )
-
-            else
-                ( { model | activeTab = ListensTab }, Cmd.none )
+                    else
+                        ( { model | activeTab = ListensTab, page = MainPage }, Cmd.none )
 
         Tick time ->
-            if not model.loading then
+            if model.page == MainPage && not model.loading then
                 ( { model | currentTime = Just time, loading = True }
                 , fetchListens model.userSlug model.limit model.offset model.activeFilter model.activeSearch
                 )
@@ -469,6 +531,122 @@ update msg model =
                             Dict.insert key (SimilarError (httpErrorToString err)) model.similarStates
             in
             ( { model | similarStates = newStates }, Cmd.none )
+
+        UpdateRegField field val ->
+            let
+                m =
+                    { model | regError = Nothing, regSubmitted = False }
+            in
+            ( case field of
+                FSlug ->
+                    { m | regSlug = val }
+
+                FName ->
+                    { m | regName = val }
+
+                FEmail ->
+                    { m | regEmail = val }
+
+                FLbUser ->
+                    { m | regLbUser = val }
+
+                FLfUser ->
+                    { m | regLfUser = val }
+            , Cmd.none
+            )
+
+        SubmitRegistration ->
+            if String.isEmpty (String.trim model.regSlug) || String.isEmpty (String.trim model.regName) || String.isEmpty (String.trim model.regEmail) then
+                ( { model | regError = Just "Username, name and email are required" }, Cmd.none )
+
+            else
+                ( { model | regSubmitting = True, regError = Nothing }
+                , submitRegistration
+                    { slug = model.regSlug
+                    , name = model.regName
+                    , email = model.regEmail
+                    , lbUser = model.regLbUser
+                    , lfUser = model.regLfUser
+                    }
+                )
+
+        GotRegistrationResult result ->
+            case result of
+                Ok () ->
+                    ( { model | regSubmitting = False, regSubmitted = True, regError = Nothing }, Cmd.none )
+
+                Err msg_ ->
+                    ( { model | regSubmitting = False, regError = Just msg_ }, Cmd.none )
+
+        UpdateAdminTokenInput val ->
+            ( { model | adminTokenInput = val }, Cmd.none )
+
+        SaveAdminToken ->
+            let
+                token =
+                    String.trim model.adminTokenInput
+            in
+            ( { model | adminToken = token, adminError = Nothing }
+            , Cmd.batch
+                [ Ports.saveAdminToken token
+                , if String.isEmpty token then
+                    Cmd.none
+
+                  else
+                    fetchRegistrations token
+                ]
+            )
+
+        FetchRegistrations ->
+            ( { model | adminError = Nothing }
+            , if String.isEmpty model.adminToken then
+                Cmd.none
+
+              else
+                fetchRegistrations model.adminToken
+            )
+
+        GotRegistrations result ->
+            case result of
+                Ok regs ->
+                    ( { model | registrations = regs, adminError = Nothing }, Cmd.none )
+
+                Err err ->
+                    ( { model | adminError = Just (httpErrorToString err) }, Cmd.none )
+
+        ApproveRegistration id ->
+            ( model, approveRegistration model.adminToken id )
+
+        DenyRegistration id ->
+            ( model, denyRegistration model.adminToken id )
+
+        GotApproveResult result ->
+            case result of
+                Ok resp ->
+                    ( { model | approvedToken = resp.token, adminError = Nothing }
+                    , if String.isEmpty model.adminToken then
+                        Cmd.none
+
+                      else
+                        fetchRegistrations model.adminToken
+                    )
+
+                Err err ->
+                    ( { model | adminError = Just (httpErrorToString err) }, Cmd.none )
+
+        GotDenyResult result ->
+            case result of
+                Ok () ->
+                    ( model
+                    , if String.isEmpty model.adminToken then
+                        Cmd.none
+
+                      else
+                        fetchRegistrations model.adminToken
+                    )
+
+                Err msg_ ->
+                    ( { model | adminError = Just msg_ }, Cmd.none )
 
 
 patchStatSection : String -> List StatsEntry -> Stats -> Stats

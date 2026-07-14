@@ -3,11 +3,12 @@ module Templates where
 import Prelude
 import Data.String.Common (joinWith)
 
-indexHtml :: String -> Array { slug :: String, name :: String } -> String
-indexHtml userSlug allUsers =
+indexHtml :: Boolean -> String -> Array { slug :: String, name :: String } -> String
+indexHtml registrationEnabled userSlug allUsers =
   let
     encodeUser { slug, name } = "{\"slug\":\"" <> slug <> "\",\"name\":\"" <> name <> "\"}"
     usersJson = "[" <> joinWith "," (map encodeUser allUsers) <> "]"
+    registrationEnabledJson = if registrationEnabled then "true" else "false"
   in
     """<!DOCTYPE html>
 <html lang="en">
@@ -725,6 +726,138 @@ indexHtml userSlug allUsers =
             color: oklch(0.78 0.13 357.86);
             text-decoration: underline;
         }
+
+        .reg-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 480px;
+            margin: 20px 0;
+        }
+
+        .reg-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .reg-label {
+            font-size: 12px;
+            color: oklch(0.74 0.075 225.31);
+        }
+
+        .reg-input {
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
+            color: oklch(0.91 0.012 225.31);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 13px;
+        }
+
+        .reg-input.error {
+            border-color: oklch(0.62 0.17 25);
+        }
+
+        .reg-btn {
+            background: oklch(0.32 0.045 225.31);
+            border: 1px solid oklch(0.52 0.05 225.31);
+            color: oklch(0.91 0.012 225.31);
+            padding: 8px 14px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            align-self: flex-start;
+        }
+
+        .reg-btn:hover {
+            background: oklch(0.38 0.05 225.31);
+        }
+
+        .reg-btn:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        .reg-error {
+            color: oklch(0.72 0.15 25);
+            font-size: 13px;
+        }
+
+        .reg-success {
+            color: oklch(0.78 0.13 150);
+            font-size: 13px;
+        }
+
+        .admin-list {
+            list-style: none;
+            padding: 0;
+            margin: 16px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .admin-item {
+            background: oklch(0.24 0.035 225.31);
+            border: 1px solid oklch(0.36 0.04 225.31);
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .admin-item-meta {
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .admin-item-slug {
+            font-weight: 700;
+            color: oklch(0.88 0.05 225.31);
+        }
+
+        .admin-item-sub {
+            color: oklch(0.7 0.05 225.31);
+            font-size: 12px;
+        }
+
+        .admin-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .approve-btn {
+            background: oklch(0.34 0.07 150);
+            border: 1px solid oklch(0.5 0.09 150);
+            color: oklch(0.94 0.02 150);
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .deny-btn {
+            background: oklch(0.32 0.07 25);
+            border: 1px solid oklch(0.5 0.1 25);
+            color: oklch(0.94 0.02 25);
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .token-box {
+            background: oklch(0.27 0.038 225.31);
+            border: 1px solid oklch(0.42 0.04 225.31);
+            border-radius: 4px;
+            padding: 10px;
+            margin: 12px 0;
+            font-size: 12px;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
@@ -738,9 +871,24 @@ indexHtml userSlug allUsers =
       <> usersJson
       <>
         """;
+        var registrationEnabled = """
+      <> registrationEnabledJson
+      <>
+        """;
+        var adminToken = window.localStorage.getItem('corpusAdminToken') || '';
         var app = Elm.Client.init({
-            flags: { userSlug: userSlug, allUsers: allUsers }
+            flags: {
+                userSlug: userSlug,
+                allUsers: allUsers,
+                registrationEnabled: registrationEnabled,
+                adminToken: adminToken
+            }
         });
+        if (app.ports && app.ports.saveAdminToken) {
+            app.ports.saveAdminToken.subscribe(function (token) {
+                window.localStorage.setItem('corpusAdminToken', token);
+            });
+        }
     </script>
 </body>
 </html>"""

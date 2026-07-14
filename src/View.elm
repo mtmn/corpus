@@ -8,7 +8,7 @@ import Html.Events exposing (on, onClick, onInput)
 import Json.Decode as D
 import Set exposing (Set)
 import Time
-import Types exposing (Listen, Model, Msg(..), Period(..), SimilarState(..), SimilarTrack, Stats, StatsEntry, Tab(..), UserInfo)
+import Types exposing (Listen, Model, Msg(..), Page(..), Period(..), RegField(..), Registration, SimilarState(..), SimilarTrack, Stats, StatsEntry, Tab(..), UserInfo)
 import Url
 
 
@@ -21,6 +21,23 @@ view model =
     { title = "scrobbler"
     , body =
         [ div [ class "container" ]
+            (case model.page of
+                RegisterPage ->
+                    [ renderRegister model ]
+
+                AdminPage ->
+                    [ renderAdmin model ]
+
+                MainPage ->
+                    [ renderMain model ]
+            )
+        ]
+    }
+
+
+renderMain : Model -> Html Msg
+renderMain model =
+    div []
             [ if model.tabsVisible then
                 div [ class "tabs" ]
                 [ a
@@ -55,6 +72,11 @@ view model =
                     , onClick (SwitchTab StatsTab)
                     ]
                     [ text "stats" ]
+                , if model.registrationEnabled then
+                    a [ class "tab-btn", href "/register" ] [ text "register" ]
+
+                  else
+                    text ""
                 , button
                     [ class
                         ("tab-btn"
@@ -132,10 +154,8 @@ view model =
                         ]
 
                 AboutTab ->
-                    renderAboutView model.userSlug model.allUsers
+                    renderAboutView model.registrationEnabled model.userSlug model.allUsers
             ]
-        ]
-    }
 
 
 renderContent : Model -> Html Msg
@@ -645,8 +665,8 @@ timeAgo mNow mTimestamp =
             "unknown time"
 
 
-renderAboutView : String -> List UserInfo -> Html Msg
-renderAboutView currentSlug allUsers =
+renderAboutView : Bool -> String -> List UserInfo -> Html Msg
+renderAboutView registrationEnabled currentSlug allUsers =
     let
         otherUsers =
             List.filter (\u -> u.slug /= currentSlug) allUsers
@@ -673,13 +693,159 @@ renderAboutView currentSlug allUsers =
             , text " and "
             , extLink "https://www.last.fm" "Last.fm."
             ]
+        , if registrationEnabled then
+            p [] [ a [ href "/register", class "about-link" ] [ text "request an account" ] ]
+
+          else
+            text ""
         , if List.isEmpty otherUsers then
             text ""
 
           else
             div [ class "stats-section" ]
-                [ h2 [] [ text "friends" ]
+                [ h2 [] [ text "users" ]
                 , ul [ class "about-users" ]
                     (List.map userLink otherUsers)
                 ]
         ]
+
+
+
+-- REGISTRATION
+
+
+renderRegister : Model -> Html Msg
+renderRegister model =
+    div []
+        [ h2 [] [ text "register" ]
+        , if not model.registrationEnabled then
+            p [ class "reg-error" ] [ text "Registration is currently closed." ]
+
+          else if model.regSubmitted then
+            div []
+                [ p [ class "reg-success" ]
+                    [ text "Thanks — your request has been submitted. You'll get an email once it's reviewed." ]
+                , p [] [ a [ href "/", class "about-link" ] [ text "back home" ] ]
+                ]
+
+          else
+            div [ class "reg-form" ]
+                [ regField "username" "lowercase letters, numbers, dashes" FSlug model.regSlug
+                , regField "name" "display name" FName model.regName
+                , regField "email" "you will notified here" FEmail model.regEmail
+                , regField "listenbrainz user (optional)" "" FLbUser model.regLbUser
+                , regField "last.fm user (optional)" "" FLfUser model.regLfUser
+                , case model.regError of
+                    Just err ->
+                        p [ class "reg-error" ] [ text err ]
+
+                    Nothing ->
+                        text ""
+                , button
+                    [ class "reg-btn"
+                    , onClick SubmitRegistration
+                    , disabled model.regSubmitting
+                    ]
+                    [ text
+                        (if model.regSubmitting then
+                            "submitting…"
+
+                         else
+                            "submit"
+                        )
+                    ]
+                ]
+        ]
+
+
+regField : String -> String -> RegField -> String -> Html Msg
+regField label placeholderText field val =
+    div [ class "reg-field" ]
+        [ span [ class "reg-label" ] [ text label ]
+        , input
+            [ type_ "text"
+            , class "reg-input"
+            , placeholder placeholderText
+            , value val
+            , onInput (UpdateRegField field)
+            ]
+            []
+        ]
+
+
+
+-- ADMIN
+
+
+renderAdmin : Model -> Html Msg
+renderAdmin model =
+    div []
+        [ h2 [] [ text "admin" ]
+        , div [ class "reg-field" ]
+            [ span [ class "reg-label" ] [ text "admin token" ]
+            , input
+                [ type_ "password"
+                , class "reg-input"
+                , placeholder "ADMIN_TOKEN"
+                , value model.adminTokenInput
+                , onInput UpdateAdminTokenInput
+                ]
+                []
+            , button [ class "reg-btn", onClick SaveAdminToken ] [ text "load" ]
+            ]
+        , case model.approvedToken of
+            Just token ->
+                div [ class "token-box" ]
+                    [ strong [] [ text "Approved. " ]
+                    , text ("API token: " ++ token)
+                    ]
+
+            Nothing ->
+                text ""
+        , case model.adminError of
+            Just err ->
+                p [ class "reg-error" ] [ text err ]
+
+            Nothing ->
+                text ""
+        , if String.isEmpty model.adminToken then
+            text ""
+
+          else if List.isEmpty model.registrations then
+            p [] [ text "No pending registrations." ]
+
+          else
+            ul [ class "admin-list" ]
+                (List.map renderRegistrationItem model.registrations)
+        ]
+
+
+renderRegistrationItem : Registration -> Html Msg
+renderRegistrationItem reg =
+    li [ class "admin-item" ]
+        [ div [ class "admin-item-meta" ]
+            [ div [ class "admin-item-slug" ] [ text reg.slug ]
+            , div [ class "admin-item-sub" ] [ text (reg.name ++ " · " ++ reg.email) ]
+            , div [ class "admin-item-sub" ] [ text (regSources reg) ]
+            ]
+        , div [ class "admin-actions" ]
+            [ button [ class "approve-btn", onClick (ApproveRegistration reg.id) ] [ text "approve" ]
+            , button [ class "deny-btn", onClick (DenyRegistration reg.id) ] [ text "deny" ]
+            ]
+        ]
+
+
+regSources : Registration -> String
+regSources reg =
+    let
+        parts =
+            List.filterMap identity
+                [ Maybe.map (\u -> "ListenBrainz: " ++ u) reg.listenbrainzUser
+                , Maybe.map (\u -> "Last.fm: " ++ u) reg.lastfmUser
+                ]
+    in
+    if List.isEmpty parts then
+        "no sync sources"
+
+    else
+        String.join " · " parts
