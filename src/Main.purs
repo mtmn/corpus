@@ -16,7 +16,7 @@ import Data.String (Pattern(..), stripPrefix, trim)
 import Data.String.Regex (Regex, regex, replace, parseFlags)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..), fst)
-import Db (Connection, backupDb, connect, fromString, getOrCreateToken, getScrobbles, getStats, getTokenUser, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
+import Db (Connection, backupDb, closeConnection, connect, fromString, getOrCreateToken, getScrobbles, getStats, getTokenUser, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, forkAff, joinFiber, killFiber, launchAff_, try)
 import Effect.Aff.AVar (AVar)
@@ -130,6 +130,16 @@ routeRequest env contexts req url path allUsers res = liftEffect $ case path of
   "/admin/registrations/deny" ->
     if IM.method req == "POST" then
       launchAff_ $ withAdmin env req res (serveDeny env req res)
+    else
+      serveBadRequest res "Method not allowed"
+  "/admin/users" ->
+    if IM.method req == "GET" then
+      launchAff_ $ withAdmin env req res (serveListUsers env res)
+    else
+      serveBadRequest res "Method not allowed"
+  "/admin/users/remove" ->
+    if IM.method req == "POST" then
+      launchAff_ $ withAdmin env req res (serveRemoveUser env req res)
     else
       serveBadRequest res "Method not allowed"
   "/metrics" ->
@@ -386,6 +396,43 @@ serveDeny env req res = do
           Reg.setStatus env.regConn env.regLock id "denied"
           notifyDenied env reg
           liftEffect $ respond "application/json" 200 """{"status":"denied"}""" res
+
+-- Lists the currently-registered (approved) users.
+serveListUsers :: ServerEnv -> Response -> Aff Unit
+serveListUsers env res = do
+  regs <- Reg.listByStatus env.regConn "approved"
+  liftEffect $ respond "application/json" 200 (stringify $ encodeJson (map regToJson regs)) res
+
+serveRemoveUser :: ServerEnv -> Request -> Response -> Aff Unit
+serveRemoveUser env req res = do
+  body <- readableToStringUtf8 (IM.toReadable req)
+  case parseJson body >>= decodeJson of
+    Left _ ->
+      liftEffect $ serveBadRequest res "Invalid JSON"
+    Right ({ id } :: { id :: String }) -> do
+      mReg <- Reg.getById env.regConn id
+      case mReg of
+        Nothing ->
+          liftEffect $ serveNotFound res
+        Just reg ->
+          if reg.status /= "approved" then
+            liftEffect $ serveBadRequest res "User is not active"
+          else do
+            removeUser env reg
+            liftEffect $ respond "application/json" 200 """{"status":"removed"}""" res
+
+-- Removes an approved user: stops its fibers, drops it from the live set,
+-- deletes its database file, and marks the registration 'revoked' (so it stays
+-- gone across restarts and the slug frees up for re-registration).
+removeUser :: ServerEnv -> Reg.Registration -> Aff Unit
+removeUser env reg = do
+  contexts <- liftEffect $ Ref.read env.contextsRef
+  for_ (find (\c -> c.slug == reg.slug) contexts) \ctx -> do
+    cleanupUser ctx
+    liftEffect $ Ref.modify_ (Data.Array.filter (\c -> c.slug /= reg.slug)) env.contextsRef
+    void $ try $ closeConnection ctx.conn
+    void $ try $ FSA.unlink ctx.config.databaseFile
+  Reg.setStatus env.regConn env.regLock reg.id "revoked"
 
 -- Builds a runnable UserEntry from an approved registration (users.json is not touched).
 registrationUserEntry :: Reg.Registration -> Aff UserEntry

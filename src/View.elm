@@ -154,7 +154,7 @@ renderMain model =
                         ]
 
                 AboutTab ->
-                    renderAboutView model.registrationEnabled model.userSlug model.allUsers
+                    renderAboutView model.userSlug model.allUsers
             ]
 
 
@@ -665,8 +665,8 @@ timeAgo mNow mTimestamp =
             "unknown time"
 
 
-renderAboutView : Bool -> String -> List UserInfo -> Html Msg
-renderAboutView registrationEnabled currentSlug allUsers =
+renderAboutView : String -> List UserInfo -> Html Msg
+renderAboutView currentSlug allUsers =
     let
         otherUsers =
             List.filter (\u -> u.slug /= currentSlug) allUsers
@@ -693,11 +693,6 @@ renderAboutView registrationEnabled currentSlug allUsers =
             , text " and "
             , extLink "https://www.last.fm" "Last.fm."
             ]
-        , if registrationEnabled then
-            p [] [ a [ href "/register", class "about-link" ] [ text "request an account" ] ]
-
-          else
-            text ""
         , if List.isEmpty otherUsers then
             text ""
 
@@ -811,12 +806,23 @@ renderAdmin model =
         , if String.isEmpty model.adminToken then
             text ""
 
-          else if List.isEmpty model.registrations then
-            p [] [ text "No pending registrations." ]
-
           else
-            ul [ class "admin-list" ]
-                (List.map renderRegistrationItem model.registrations)
+            div []
+                [ h2 [] [ text "pending" ]
+                , if List.isEmpty model.registrations then
+                    p [] [ text "No pending registrations." ]
+
+                  else
+                    ul [ class "admin-list" ]
+                        (List.map renderRegistrationItem model.registrations)
+                , h2 [] [ text "users" ]
+                , if List.isEmpty model.users then
+                    p [] [ text "No registered users." ]
+
+                  else
+                    ul [ class "admin-list" ]
+                        (List.map (renderUserItem model.confirmingRemoval) model.users)
+                ]
         ]
 
 
@@ -832,6 +838,27 @@ renderRegistrationItem reg =
             [ button [ class "approve-btn", onClick (ApproveRegistration reg.id) ] [ text "approve" ]
             , button [ class "deny-btn", onClick (DenyRegistration reg.id) ] [ text "deny" ]
             ]
+        ]
+
+
+renderUserItem : Maybe String -> Registration -> Html Msg
+renderUserItem confirmingRemoval reg =
+    li [ class "admin-item" ]
+        [ div [ class "admin-item-meta" ]
+            [ div [ class "admin-item-slug" ] [ text reg.slug ]
+            , div [ class "admin-item-sub" ] [ text (reg.name ++ " · " ++ reg.email) ]
+            , div [ class "admin-item-sub" ] [ text (regSources reg) ]
+            ]
+        , if confirmingRemoval == Just reg.id then
+            div [ class "admin-actions" ]
+                [ span [ class "admin-item-sub" ] [ text "delete this account and its data?" ]
+                , button [ class "deny-btn", onClick (RemoveUser reg.id) ] [ text "confirm" ]
+                , button [ class "approve-btn", onClick CancelRemoveUser ] [ text "cancel" ]
+                ]
+
+          else
+            div [ class "admin-actions" ]
+                [ button [ class "deny-btn", onClick (RequestRemoveUser reg.id) ] [ text "remove" ] ]
         ]
 
 

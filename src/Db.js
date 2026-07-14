@@ -26,6 +26,15 @@ export const checkpointImpl = (conn, cb) => () => {
 		.catch((e) => cb(e)());
 };
 
+export const closeConnectionImpl = (conn, cb) => () => {
+	try {
+		conn.closeSync();
+		cb(null)();
+	} catch (e) {
+		cb(e)();
+	}
+};
+
 // DuckDB returns BIGINT as BigInt, which JSON.stringify doesn't support.
 // Pure transformation: produce new row objects rather than mutating in place.
 const convertBigInts = (row) =>

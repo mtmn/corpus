@@ -118,6 +118,12 @@ re-loaded automatically at every startup — `users.json` is **not** modified an
 the manual/static import mechanism (via the `add-user` CLI). If a slug is defined in both
 `users.json` and an approved registration, the `users.json` entry wins.
 
+The `/admin` page also lists registered users under **users**, each with a **remove**
+button (two-click confirm). Removing a user stops its sync fibers, drops it from the live
+set (no restart), **deletes its database file**, and marks the registration `revoked` — so
+it stays gone across restarts and the username frees up for re-registration. Removal only
+applies to self-registered users; root and `users.json`-defined users are managed manually.
+
 ### Per-user configuration
 
 | Field | Default | Description |

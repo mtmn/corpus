@@ -1,6 +1,6 @@
 module State exposing (init, subscriptions, update)
 
-import Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, httpErrorToString, submitRegistration)
+import Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, fetchUsers, httpErrorToString, removeUser, submitRegistration)
 import Browser
 import Browser.Navigation as Nav
 import Dict
@@ -63,6 +63,8 @@ init flags url navKey =
       , adminToken = flags.adminToken
       , adminTokenInput = flags.adminToken
       , registrations = []
+      , users = []
+      , confirmingRemoval = Nothing
       , adminError = Nothing
       , approvedToken = Nothing
       }
@@ -74,7 +76,7 @@ init flags url navKey =
                     Cmd.none
 
                   else
-                    fetchRegistrations flags.adminToken
+                    Cmd.batch [ fetchRegistrations flags.adminToken, fetchUsers flags.adminToken ]
                 ]
 
         RegisterPage ->
@@ -136,12 +138,12 @@ update msg model =
                     ( { model | page = RegisterPage }, Cmd.none )
 
                 AdminPage ->
-                    ( { model | page = AdminPage, approvedToken = Nothing }
+                    ( { model | page = AdminPage, approvedToken = Nothing, confirmingRemoval = Nothing }
                     , if String.isEmpty model.adminToken then
                         Cmd.none
 
                       else
-                        fetchRegistrations model.adminToken
+                        Cmd.batch [ fetchRegistrations model.adminToken, fetchUsers model.adminToken ]
                     )
 
                 MainPage ->
@@ -593,7 +595,7 @@ update msg model =
                     Cmd.none
 
                   else
-                    fetchRegistrations token
+                    Cmd.batch [ fetchRegistrations token, fetchUsers token ]
                 ]
             )
 
@@ -628,7 +630,7 @@ update msg model =
                         Cmd.none
 
                       else
-                        fetchRegistrations model.adminToken
+                        Cmd.batch [ fetchRegistrations model.adminToken, fetchUsers model.adminToken ]
                     )
 
                 Err err ->
@@ -643,6 +645,46 @@ update msg model =
 
                       else
                         fetchRegistrations model.adminToken
+                    )
+
+                Err msg_ ->
+                    ( { model | adminError = Just msg_ }, Cmd.none )
+
+        FetchUsers ->
+            ( { model | adminError = Nothing }
+            , if String.isEmpty model.adminToken then
+                Cmd.none
+
+              else
+                fetchUsers model.adminToken
+            )
+
+        GotUsers result ->
+            case result of
+                Ok users ->
+                    ( { model | users = users, adminError = Nothing }, Cmd.none )
+
+                Err err ->
+                    ( { model | adminError = Just (httpErrorToString err) }, Cmd.none )
+
+        RequestRemoveUser id ->
+            ( { model | confirmingRemoval = Just id }, Cmd.none )
+
+        CancelRemoveUser ->
+            ( { model | confirmingRemoval = Nothing }, Cmd.none )
+
+        RemoveUser id ->
+            ( { model | confirmingRemoval = Nothing }, removeUser model.adminToken id )
+
+        GotRemoveResult result ->
+            case result of
+                Ok () ->
+                    ( model
+                    , if String.isEmpty model.adminToken then
+                        Cmd.none
+
+                      else
+                        fetchUsers model.adminToken
                     )
 
                 Err msg_ ->

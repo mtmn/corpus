@@ -65,6 +65,7 @@ foreign import connectImpl :: Fn2 String (Nullable Error -> Nullable Connection 
 foreign import runImpl :: Fn4 Connection String (Array Foreign) (Nullable Error -> Effect Unit) (Effect Unit)
 foreign import allImpl :: Fn4 Connection String (Array Foreign) (Nullable Error -> Nullable (Array Json) -> Effect Unit) (Effect Unit)
 foreign import checkpointImpl :: Fn2 Connection (Nullable Error -> Effect Unit) (Effect Unit)
+foreign import closeConnectionImpl :: Fn2 Connection (Nullable Error -> Effect Unit) (Effect Unit)
 foreign import sha256 :: String -> String
 
 connect :: String -> Aff Connection
@@ -89,6 +90,16 @@ run conn sql params = makeAff \cb -> do
 checkpoint :: Connection -> Aff Unit
 checkpoint conn = makeAff \cb -> do
   runFn2 checkpointImpl conn \err ->
+    case toMaybe err of
+      Just e -> cb (Left e)
+      Nothing -> cb (Right unit)
+  pure nonCanceler
+
+-- Closes the underlying DuckDB connection, releasing its file lock so the
+-- database file can be deleted.
+closeConnection :: Connection -> Aff Unit
+closeConnection conn = makeAff \cb -> do
+  runFn2 closeConnectionImpl conn \err ->
     case toMaybe err of
       Just e -> cb (Left e)
       Nothing -> cb (Right unit)

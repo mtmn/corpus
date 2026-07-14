@@ -1,4 +1,4 @@
-module Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, httpErrorToString, listensDecoder, sectionEntriesDecoder, similarTracksDecoder, statsDecoder, statsUrl, submitRegistration)
+module Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, fetchUsers, httpErrorToString, listensDecoder, removeUser, sectionEntriesDecoder, similarTracksDecoder, statsDecoder, statsUrl, submitRegistration)
 
 import Http
 import Json.Decode as D exposing (Decoder)
@@ -174,6 +174,32 @@ denyRegistration token id =
         , url = "/admin/registrations/deny"
         , body = Http.jsonBody (E.object [ ( "id", E.string id ) ])
         , expect = expectWhateverWithError GotDenyResult
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+fetchUsers : String -> Cmd Msg
+fetchUsers token =
+    Http.request
+        { method = "GET"
+        , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
+        , url = "/admin/users"
+        , body = Http.emptyBody
+        , expect = Http.expectJson GotUsers (D.list registrationDecoder)
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+removeUser : String -> String -> Cmd Msg
+removeUser token id =
+    Http.request
+        { method = "POST"
+        , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
+        , url = "/admin/users/remove"
+        , body = Http.jsonBody (E.object [ ( "id", E.string id ) ])
+        , expect = expectWhateverWithError GotRemoveResult
         , timeout = Nothing
         , tracker = Nothing
         }

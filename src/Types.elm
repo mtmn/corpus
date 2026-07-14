@@ -168,6 +168,8 @@ type alias Model =
     , adminToken : String
     , adminTokenInput : String
     , registrations : List Registration
+    , users : List Registration
+    , confirmingRemoval : Maybe String
     , adminError : Maybe String
     , approvedToken : Maybe String
     }
@@ -211,6 +213,12 @@ type Msg
     | DenyRegistration String
     | GotApproveResult (Result Http.Error ApproveResponse)
     | GotDenyResult (Result String ())
+    | FetchUsers
+    | GotUsers (Result Http.Error (List Registration))
+    | RequestRemoveUser String
+    | CancelRemoveUser
+    | RemoveUser String
+    | GotRemoveResult (Result String ())
     | UrlRequested Browser.UrlRequest
     | UrlChanged Url.Url
 
