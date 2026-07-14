@@ -73,7 +73,7 @@ renderMain model =
                     ]
                     [ text "stats" ]
                 , if model.registrationEnabled then
-                    a [ class "tab-btn", href "/register" ] [ text "register" ]
+                    a [ class "tab-btn", href "/register" ] [ text "join" ]
 
                   else
                     text ""
