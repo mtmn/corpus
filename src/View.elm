@@ -2,7 +2,7 @@ module View exposing (view)
 
 import Browser
 import Dict exposing (Dict)
-import Html exposing (Html, a, button, div, h2, img, input, li, p, span, strong, text, ul)
+import Html exposing (Html, a, button, div, h1, h2, header, img, input, li, p, span, strong, table, tbody, td, text, th, thead, tr, ul)
 import Html.Attributes as Attr exposing (class, disabled, href, placeholder, src, style, target, type_, value)
 import Html.Events exposing (on, onClick, onInput)
 import Json.Decode as D
@@ -21,175 +21,169 @@ view model =
     { title = "scrobbler"
     , body =
         [ div [ class "container" ]
-            (case model.page of
-                RegisterPage ->
-                    [ renderRegister model ]
+            (header [] [ renderNav model ]
+                :: (case model.page of
+                        RegisterPage ->
+                            [ renderRegister model ]
 
-                AdminPage ->
-                    [ renderAdmin model ]
+                        AdminPage ->
+                            [ renderAdmin model ]
 
-                MainPage ->
-                    [ renderMain model ]
+                        MainPage ->
+                            [ renderMain model ]
+                   )
             )
         ]
     }
 
 
+renderNav : Model -> Html Msg
+renderNav model =
+    let
+        navClass : Bool -> Html.Attribute Msg
+        navClass active =
+            class
+                (if active then
+                    "tab-btn active"
+
+                 else
+                    "tab-btn"
+                )
+
+        navLink : String -> Bool -> String -> Html Msg
+        navLink label active href_ =
+            a [ navClass active, href href_ ] [ text label ]
+
+        navTab : String -> Tab -> Html Msg
+        navTab label tab =
+            if model.page == MainPage then
+                button [ navClass (model.activeTab == tab), onClick (SwitchTab tab) ] [ text label ]
+
+            else
+                navLink label False "/"
+    in
+    div [ class "bar" ]
+        [ navTab "listens" ListensTab
+        , navTab "stats" StatsTab
+        , navTab "about" AboutTab
+        , if model.registrationEnabled then
+            navLink "join" (model.page == RegisterPage) "/register"
+
+          else
+            text ""
+        ]
+
+
 renderMain : Model -> Html Msg
 renderMain model =
     div []
-            [ if model.tabsVisible then
-                div [ class "tabs" ]
-                [ a
-                    [ class
-                        ("tab-btn"
-                            ++ (if model.activeTab == ListensTab then
-                                    " active"
-
-                                else
-                                    ""
-                               )
-                        )
-                    , href
-                        (if model.userSlug == "" then
-                            "/"
-
-                         else
-                            "/u/" ++ model.userSlug
-                        )
-                    ]
-                    [ text "listens" ]
-                , button
-                    [ class
-                        ("tab-btn"
-                            ++ (if model.activeTab == StatsTab then
-                                    " active"
-
-                                else
-                                    ""
-                               )
-                        )
-                    , onClick (SwitchTab StatsTab)
-                    ]
-                    [ text "stats" ]
-                , if model.registrationEnabled then
-                    a [ class "tab-btn", href "/register" ] [ text "join" ]
-
-                  else
-                    text ""
-                , button
-                    [ class
-                        ("tab-btn"
-                            ++ (if model.activeTab == AboutTab then
-                                    " active"
-
-                                else
-                                    ""
-                               )
-                        )
-                    , onClick (SwitchTab AboutTab)
-                    ]
-                    [ text "about" ]
-                ]
-
-              else
-                text ""
-            , case model.activeTab of
-                ListensTab ->
-                    div []
-                        [ div [ class "search-bar" ]
-                            [ input
-                                [ type_ "text"
-                                , class "search-input"
-                                , placeholder "search by track, artist, album or label"
-                                , value model.searchInput
-                                , onInput UpdateSearchInput
-                                , onEnter SubmitSearch
-                                ]
-                                []
-                            , button [ class "search-btn", onClick SubmitSearch ] [ text "search" ]
-                            , case model.activeSearch of
-                                Just _ ->
-                                    button [ class "filter-clear", onClick ClearSearch ] [ text "✕ clear" ]
-
-                                Nothing ->
-                                    text ""
+        [ case model.activeTab of
+            ListensTab ->
+                div []
+                    [ div [ class "bar" ]
+                        [ input
+                            [ type_ "search"
+                            , class "search-input"
+                            , placeholder ""
+                            , value model.searchInput
+                            , onInput UpdateSearchInput
+                            , onEnter SubmitSearch
                             ]
-                        , case model.activeFilter of
+                            []
+                        , button [ class "search-btn", onClick SubmitSearch ] [ text "search" ]
+                        , case model.activeSearch of
+                            Just _ ->
+                                button [ class "filter-clear", onClick ClearSearch ] [ text "✕ clear" ]
+
                             Nothing ->
                                 text ""
+                        ]
+                    , case model.activeFilter of
+                        Nothing ->
+                            text ""
 
-                            Just { field, value } ->
-                                div [ class "filter-banner" ]
-                                    [ span [ class "filter-label" ]
-                                        [ text (field ++ ": ")
-                                        , strong [] [ text value ]
-                                        ]
-                                    , button [ class "filter-clear", onClick ClearFilter ]
-                                        [ text "✕ clear" ]
+                        Just { field, value } ->
+                            div [ class "filter-banner" ]
+                                [ span [ class "filter-label" ]
+                                    [ text (field ++ ": ")
+                                    , strong [] [ text value ]
                                     ]
-                        , renderContent model
-                        , div [ class "pagination" ]
-                            [ button
-                                [ class "page-btn"
-                                , disabled (model.offset == 0 || model.loading)
-                                , onClick PrevPage
+                                , button [ class "filter-clear", onClick ClearFilter ]
+                                    [ text "✕ clear" ]
                                 ]
-                                [ text "Previous" ]
-                            , div [ class "page-indicator" ]
-                                [ text ("Page " ++ String.fromInt (model.offset // model.limit + 1)) ]
-                            , button
-                                [ class "page-btn"
-                                , disabled (List.length model.listens < model.limit || model.loading)
-                                , onClick NextPage
-                                ]
-                                [ text "Next" ]
+                    , renderContent model
+                    , renderCoverOverlay model.hoveredCover
+                    , div [ class "pagination" ]
+                        [ button
+                            [ class "page-btn"
+                            , disabled (model.offset == 0 || model.loading)
+                            , onClick PrevPage
                             ]
+                            [ text "Previous" ]
+                        , div [ class "page-indicator" ]
+                            [ text ("Page " ++ String.fromInt (model.offset // model.limit + 1)) ]
+                        , button
+                            [ class "page-btn"
+                            , disabled (List.length model.listens < model.limit || model.loading)
+                            , onClick NextPage
+                            ]
+                            [ text "Next" ]
                         ]
+                    ]
 
-                StatsTab ->
-                    div []
-                        [ renderPeriodSelector model.statsPeriod model.showCustomInput model.customInput model.customError
-                        , renderStatsView model.expandedSections model.loadedSections model.stats
-                        ]
+            StatsTab ->
+                div []
+                    [ renderPeriodSelector model.statsPeriod model.showCustomInput model.customInput model.customError
+                    , renderStatsView model.expandedSections model.loadedSections model.stats
+                    ]
 
-                AboutTab ->
-                    renderAboutView model.userSlug model.allUsers
-            ]
+            AboutTab ->
+                renderAboutView model.userSlug model.allUsers
+        ]
+
+
+renderCoverOverlay : Maybe Int -> Html Msg
+renderCoverOverlay hovered =
+    case hovered of
+        Nothing ->
+            text ""
+
+        Just _ ->
+            div [ class "cover-overlay", onClick CoverBackgroundClick ] []
 
 
 renderContent : Model -> Html Msg
 renderContent model =
     if model.loading && List.isEmpty model.listens then
-        ul [] [ li [ class "loading" ] [ text "⏳" ] ]
+        div [ class "loading" ] [ text "⏳" ]
 
     else
         case model.error of
             Just err ->
-                ul [] [ li [ class "error" ] [ text err ] ]
+                div [ class "error" ] [ text err ]
 
             Nothing ->
-                div [ class "tracks-with-similar" ]
-                    (List.indexedMap
-                        (\idx listen ->
-                            let
-                                artist =
-                                    Maybe.withDefault "" listen.artistName
+                table []
+                    [ tbody []
+                        (List.indexedMap
+                            (\idx listen ->
+                                let
+                                    artist =
+                                        Maybe.withDefault "" listen.artistName
 
-                                trackName =
-                                    Maybe.withDefault "" listen.trackName
+                                    trackName =
+                                        Maybe.withDefault "" listen.trackName
 
-                                key =
-                                    String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ trackName
-                            in
-                            div [ class "track-with-similar-container" ]
-                                [ ul [ class "track-item" ]
-                                    [ renderListen model.userSlug model.currentTime model.failedCovers model.hoveredCover model.similarStates idx listen ]
-                                , renderSimilarPanel model.similarStates key
-                                ]
+                                    key =
+                                        String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ trackName
+                                in
+                                renderListen model.userSlug model.currentTime model.failedCovers model.hoveredCover model.similarStates idx listen
+                                    :: renderSimilarRow key model.similarStates
+                            )
+                            model.listens
+                            |> List.concat
                         )
-                        model.listens
-                    )
+                    ]
 
 
 renderListen : String -> Maybe Time.Posix -> Set String -> Maybe Int -> Dict String SimilarState -> Int -> Listen -> Html Msg
@@ -236,13 +230,62 @@ renderListen userSlug currentTime failedCovers hoveredCover similarStates idx li
         isActive =
             Dict.member key similarStates
     in
-    li [ class "success" ]
-        [ div [ class "track-info" ]
-            [ div [ class "track-name" ]
-                [ button [ class "track-link", onClick (FilterBy "track" (Maybe.withDefault "Unknown Track" listen.trackName)) ] [ text (Maybe.withDefault "Unknown Track" listen.trackName) ] ]
-            , div [ class "track-artist" ] [ button [ class "artist-link", onClick (FilterBy "artist" artist) ] [ text artist ] ]
-            , div [ class "track-time" ]
-                [ span []
+    tr [ class "listen-row" ]
+        [ td [ class "d" ]
+            [ if Set.member coverUrl failedCovers then
+                text ""
+
+              else
+                div [ class "cover-cell" ]
+                    [ img
+                        [ class
+                            ("track-cover"
+                                ++ (if isZoomed then
+                                        " zoomed"
+
+                                    else
+                                        ""
+                                   )
+                            )
+                        , src coverUrl
+                        , Attr.alt release
+                        , on "error" (D.succeed (ImageError coverUrl))
+                        , onClick
+                            (if isZoomed then
+                                UnhoverCover
+
+                             else
+                                HoverCover idx
+                            )
+                        ]
+                        []
+                    ]
+            ]
+        , td [ class "track-cell" ]
+            [ div [ class "track-line" ]
+                [ if artist /= "" && trackName /= "" then
+                    button
+                        [ class
+                            ("similar-btn"
+                                ++ (if isActive then
+                                        " active"
+
+                                    else
+                                        ""
+                                   )
+                            )
+                        , onClick (FetchSimilar idx artist trackName)
+                        ]
+                        [ text "similar" ]
+
+                  else
+                    text ""
+                , button [ class "track-link", onClick (FilterBy "track" (Maybe.withDefault "Unknown Track" listen.trackName)) ] [ text (Maybe.withDefault "Unknown Track" listen.trackName) ]
+                ]
+            , div [ class "track-artist" ]
+                [ button [ class "artist-link", onClick (FilterBy "artist" artist) ] [ text artist ] ]
+            , div [ class "track-meta" ]
+                [ div [ class "track-release" ]
                     (button [ class "album-link", onClick (FilterBy "album" release) ] [ text release ]
                         :: (case listen.label of
                                 Just l ->
@@ -253,86 +296,86 @@ renderListen userSlug currentTime failedCovers hoveredCover similarStates idx li
                                 Nothing ->
                                     []
                            )
-                        ++ [ text (" • " ++ timeAgo currentTime listen.listenedAt) ]
                     )
+                , case listen.genre of
+                    Just g ->
+                        div [ class "genre-tag" ] [ text g ]
+
+                    Nothing ->
+                        text ""
                 ]
-            ]
-        , div [ class "cover-wrapper" ]
-            [ if Set.member coverUrl failedCovers then
-                text ""
-
-              else
-                img
-                    [ class
-                        ("track-cover"
-                            ++ (if isZoomed then
-                                    " zoomed"
-
-                                else
-                                    ""
-                               )
-                        )
-                    , src coverUrl
-                    , Attr.alt release
-                    , on "error" (D.succeed (ImageError coverUrl))
-                    , onClick
-                        (if isZoomed then
-                            UnhoverCover
-
-                         else
-                            HoverCover idx
-                        )
-                    ]
-                    []
-            , case listen.genre of
-                Just g ->
-                    div [ class "genre-tag" ] [ text g ]
-
-                Nothing ->
+            , div [ class "cover-wrapper" ]
+                [ if Set.member coverUrl failedCovers then
                     text ""
-            , if artist /= "" && trackName /= "" then
-                button
-                    [ class
-                        ("similar-btn"
-                            ++ (if isActive then
-                                    " active"
 
-                                else
-                                    ""
-                               )
-                        )
-                    , onClick (FetchSimilar idx artist trackName)
-                    ]
-                    [ text "similar" ]
+                  else
+                    img
+                        [ class
+                            ("track-cover"
+                                ++ (if isZoomed then
+                                        " zoomed"
 
-              else
-                text ""
+                                    else
+                                        ""
+                                   )
+                            )
+                        , src coverUrl
+                        , Attr.alt release
+                        , on "error" (D.succeed (ImageError coverUrl))
+                        , onClick
+                            (if isZoomed then
+                                UnhoverCover
+
+                             else
+                                HoverCover idx
+                            )
+                        ]
+                        []
+                ]
             ]
         ]
 
 
-renderSimilarPanel : Dict String SimilarState -> String -> Html Msg
-renderSimilarPanel similarStates key =
+renderSimilarRow : String -> Dict String SimilarState -> List (Html Msg)
+renderSimilarRow key similarStates =
     case Dict.get key similarStates of
         Nothing ->
-            text ""
+            []
 
         Just SimilarLoading ->
-            div [ class "similar-panel" ]
-                [ div [ class "similar-loading" ] [ text "⏳" ] ]
+            [ tr [ class "similar-row" ]
+                [ td [ class "d" ] []
+                , td []
+                    [ div [ class "similar-panel" ]
+                        [ div [ class "similar-loading" ] [ text "⏳" ] ]
+                    ]
+                ]
+            ]
 
         Just (SimilarError err) ->
-            div [ class "similar-panel" ]
-                [ div [ class "similar-error" ] [ text err ] ]
+            [ tr [ class "similar-row" ]
+                [ td [ class "d" ] []
+                , td []
+                    [ div [ class "similar-panel" ]
+                        [ div [ class "similar-error" ] [ text err ] ]
+                    ]
+                ]
+            ]
 
         Just (SimilarLoaded tracks) ->
-            div [ class "similar-panel" ]
-                [ if List.isEmpty tracks then
-                    div [ class "similar-empty" ] [ text "no similar songs found" ]
+            [ tr [ class "similar-row" ]
+                [ td [ class "d" ] []
+                , td []
+                    [ div [ class "similar-panel" ]
+                        [ if List.isEmpty tracks then
+                            div [ class "similar-empty" ] [ text "no similar songs found" ]
 
-                  else
-                    div [] (List.map renderSimilarTrack tracks)
+                          else
+                            div [] (List.map renderSimilarTrack tracks)
+                        ]
+                    ]
                 ]
+            ]
 
 
 renderSimilarTrack : SimilarTrack -> Html Msg
@@ -352,7 +395,7 @@ renderSimilarTrack track =
         , case track.videoUri of
             Just link ->
                 a [ class "similar-link", href link, target "_blank" ]
-                    [ text "▶" ]
+                    [ text "play" ]
 
             Nothing ->
                 text ""
@@ -437,7 +480,15 @@ renderStatSection expandedSections loadedSections mField title entries =
             div [ class "stats-empty" ] [ text "beyond here lies nothing" ]
 
           else
-            ul [] (List.map (renderStatEntry maxCount mField) visible)
+            table [ class "stats-table" ]
+                [ thead []
+                    [ tr []
+                        [ th [] [ text "name" ]
+                        , th [ class "stats-count-header" ] [ text "plays" ]
+                        ]
+                    ]
+                , tbody [] (List.map (renderStatEntry maxCount mField) visible)
+                ]
         , footer
         ]
 
@@ -456,10 +507,12 @@ renderStatEntry maxCount mField entry =
                 Nothing ->
                     [ class "stat-row" ]
     in
-    li rowAttrs
-        [ div [ class "stat-bar", style "width" (String.fromInt barPct ++ "%") ] []
-        , span [ class "stat-name" ] [ text entry.name ]
-        , span [ class "stat-count" ] [ text (String.fromInt entry.count) ]
+    tr rowAttrs
+        [ td [ class "stat-name-cell" ]
+            [ div [ class "stat-bar", style "width" (String.fromInt barPct ++ "%") ] []
+            , span [ class "stat-name" ] [ text entry.name ]
+            ]
+        , td [ class "stat-count" ] [ text (String.fromInt entry.count) ]
         ]
 
 

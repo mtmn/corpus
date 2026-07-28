@@ -49,7 +49,6 @@ init flags url navKey =
       , allUsers = flags.allUsers
       , searchInput = ""
       , activeSearch = Nothing
-      , tabsVisible = True
       , page = page
       , registrationEnabled = flags.registrationEnabled
       , regSlug = ""
@@ -127,7 +126,11 @@ update msg model =
         UrlRequested urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
-                    ( model, Nav.pushUrl model.navKey (Url.toString url) )
+                    if String.isEmpty url.path then
+                        ( model, Cmd.none )
+
+                    else
+                        ( model, Nav.pushUrl model.navKey (Url.toString url) )
 
                 Browser.External href ->
                     ( model, Nav.load href )
@@ -190,8 +193,11 @@ update msg model =
 
                             else
                                 targetOffset
+
+                        shouldLoad =
+                            model.page /= MainPage || userChanged || model.offset /= finalOffset || model.activeFilter /= finalFilter || model.activeSearch /= finalSearch
                     in
-                    if model.page /= MainPage || userChanged || model.offset /= finalOffset || model.activeFilter /= finalFilter || model.activeSearch /= finalSearch then
+                    if shouldLoad then
                         let
                             newModel =
                                 { model
@@ -227,7 +233,7 @@ update msg model =
                         )
 
                     else
-                        ( { model | activeTab = ListensTab, page = MainPage }, Cmd.none )
+                        ( { model | page = MainPage }, Cmd.none )
 
         Tick time ->
             if model.page == MainPage && not model.loading then
@@ -338,9 +344,6 @@ update msg model =
                 AboutTab ->
                     Cmd.none
             )
-
-        ToggleTabs ->
-            ( { model | tabsVisible = not model.tabsVisible }, Cmd.none )
 
         SetStatsPeriod period ->
             ( { model
@@ -490,6 +493,9 @@ update msg model =
             ( { model | hoveredCover = Just idx }, Cmd.none )
 
         UnhoverCover ->
+            ( { model | hoveredCover = Nothing }, Cmd.none )
+
+        CoverBackgroundClick ->
             ( { model | hoveredCover = Nothing }, Cmd.none )
 
         ExpandSection section ->

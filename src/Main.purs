@@ -108,6 +108,10 @@ routeRequest env contexts req url path allUsers res = liftEffect $ case path of
     serveAsset "image/png" "assets/favicon.png" res
   "/cover.webp" ->
     serveAsset "image/webp" "assets/cover.webp" res
+  "/gutter-left.webp" ->
+    serveAsset "image/webp" "assets/left.webp" res
+  "/gutter-right.webp" ->
+    serveAsset "image/webp" "assets/right.webp" res
   "/" ->
     serveIndex regEnabled allUsers "" res
   "/register" ->

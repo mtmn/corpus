@@ -150,7 +150,6 @@ type alias Model =
     , allUsers : List UserInfo
     , searchInput : String
     , activeSearch : Maybe String
-    , tabsVisible : Bool
     , page : Page
     , registrationEnabled : Bool
 
@@ -185,7 +184,6 @@ type Msg
     | NextPage
     | PrevPage
     | SwitchTab Tab
-    | ToggleTabs
     | SetStatsPeriod Period
     | OpenCustomInput
     | UpdateCustomInput String
@@ -194,6 +192,7 @@ type Msg
     | ClearFilter
     | HoverCover Int
     | UnhoverCover
+    | CoverBackgroundClick
     | ExpandSection String
     | ShowAllSection String
     | CollapseSection String

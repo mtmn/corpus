@@ -48,6 +48,8 @@ reservedSlugs =
   , "client.js"
   , "favicon.png"
   , "cover.webp"
+  , "gutter-left.webp"
+  , "gutter-right.webp"
   , "cover"
   , "metrics"
   , "proxy"
