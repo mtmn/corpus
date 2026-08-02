@@ -58,7 +58,7 @@
         name = "corpus-pnpm-source";
       };
       pname = "corpus";
-      hash = "sha256-OFwbchn99xlSUym2wh11TrYMJmLyGAe4atkRp863xzs=";
+      hash = "sha256-ziqh0zZ2w3KgvmGrwxpm5JHTrPpX6BRb/LhCsSC0q2A=";
       fetcherVersion = 4;
     };
 

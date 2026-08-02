@@ -112,7 +112,7 @@ renderMain model =
                                 ]
                     , renderContent model
                     , renderCoverOverlay model.hoveredCover
-                    , div [ class "pagination" ]
+                    , Html.node "nav" [ class "pagination", Attr.attribute "aria-label" "Pagination" ]
                         [ button
                             [ class "page-btn"
                             , disabled (model.offset == 0 || model.loading)

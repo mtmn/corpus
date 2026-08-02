@@ -454,6 +454,7 @@ indexHtml registrationEnabled userSlug allUsers =
             flex-wrap: wrap;
             gap: var(--space-sm);
             align-items: center;
+            justify-content: center;
             margin: var(--space-md) 0;
         }
 
