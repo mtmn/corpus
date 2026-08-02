@@ -53,5 +53,5 @@ package:
       - node-process
 workspace:
   packageSet:
-    registry: 77.13.0
+    registry: 80.2.1
   extraPackages: {}

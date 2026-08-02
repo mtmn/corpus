@@ -26,15 +26,15 @@
     spagoRegistry = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry";
-      rev = "f45e502e1948f502fca991fc064aa47b75b6eb75";
-      hash = "sha256-+HEfqZv2z4eRjTqrbL0P8HF7VVOdbrQSR66mtJTing8=";
+      rev = "04712d0c709778081fe0a56bf7caffa96327e783";
+      hash = "sha256-ZK4drz1JP9VopVdEjUXjalmc11SP6ZUDZOuXC0GYXek=";
     };
 
     spagoRegistryIndex = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry-index";
-      rev = "74d03082985d2e167f66b360153810edf3278fe1";
-      hash = "sha256-wX19WiY9rE/C0KsMFLchnqpMfjL2QXUIXPD1wpNwDdU=";
+      rev = "7464d7fc6dfd3a5ffcded879bebfbc9f5dc14849";
+      hash = "sha256-OrWdGWAk38RqmtzYt0iuyzC83KW4bnzoXYrVAmD2Hso=";
     };
 
     registryDat = generateRegistryDat {elmLock = ./elm.lock;};
