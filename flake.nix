@@ -193,6 +193,7 @@
         pkgs.elmPackages.elm-json
         pkgs.pnpm
         pkgs.statix
+        pkgs.git-cliff
       ];
     };
 
