@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.0] - 2026-08-02
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v3.0.0..v3.1.0)
+
+### Features
+
+- Redo ui and add background ([`20f66d3`](https://git.sr.ht/~mtmn/corpus/commit/20f66d3e663eca1889354da880458264430f4296))
+
 ## [3.0.0] - 2026-07-14
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v2.23.1..v3.0.0)
@@ -18,6 +26,7 @@
 
 - Update nixpkgs, set pnpm fetcherVersion to 4 ([`b655a69`](https://git.sr.ht/~mtmn/corpus/commit/b655a69f221b4c5bb45b9f957c5cd043f313aa22))
 - Release v2.23.2 ([`53d48ea`](https://git.sr.ht/~mtmn/corpus/commit/53d48eae03076a0f08cea6c78b5e85807e2406b9))
+- Release v3.0.0 ([`1f11edf`](https://git.sr.ht/~mtmn/corpus/commit/1f11edf54013c82402ffbc058de59e9668c52d10))
 
 ## [2.23.1] - 2026-07-06
 
