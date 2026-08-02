@@ -4,7 +4,7 @@ Corpus uses [DuckDB](https://duckdb.org/) as its primary analytical database. Du
 
 ## Database Schema
 
-The database consists of two main tables:
+Each user has an independent DuckDB database file. That database consists of three main tables:
 
 ### `scrobbles`
 Stores the raw listening history synced from ListenBrainz and/or Last.fm.
@@ -36,6 +36,8 @@ Stores hashed user API tokens for scrobble submission.
 | :--- | :--- | :--- |
 | `slug` | VARCHAR | User slug (Primary Key) |
 | `hashed_token` | VARCHAR | SHA-256 hash of the API token (Unique) |
+
+Self-registration state is intentionally kept outside the per-user databases in the shared `registrations.db` file. It is managed by the server rather than by the listening-history schema.
 
 ## Application Usage
 

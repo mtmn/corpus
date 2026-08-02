@@ -65,13 +65,3 @@ export const getPresignedUrlImpl = (cfg, key, cb) => () => {
 		.then((url) => cb(null)(url)())
 		.catch((err) => cb(err)("")());
 };
-
-export const getS3UrlImpl = (cfg, key) => {
-	const endpoint = cfg.endpointUrl || "";
-	const bucket = cfg.bucket || "";
-	if (cfg.addressingStyle === "path") {
-		return `${endpoint}/${bucket}/${key}`;
-	} else {
-		return `${endpoint.replace("://", `://${bucket}.`)}/${key}`;
-	}
-};

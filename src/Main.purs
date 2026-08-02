@@ -18,7 +18,7 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..), fst)
 import Db (Connection, backupDb, closeConnection, connect, fromString, getOrCreateToken, getScrobbles, getStats, getTokenUser, initDb, initReleaseMetadata, ping, upsertScrobble, withTransaction)
 import Effect (Effect)
-import Effect.Aff (Aff, Fiber, forkAff, joinFiber, killFiber, launchAff_, try)
+import Effect.Aff (Aff, Fiber, forkAff, killFiber, launchAff_, try)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
@@ -58,6 +58,8 @@ type UserContext =
   , config :: UserConfig
   , slug :: String
   , displayName :: String
+  , isRegistered :: Boolean
+  , initialSyncFibers :: Array (Fiber Unit)
   , enrichMetadataFiber :: Maybe (Fiber Unit)
   , backupFiber :: Maybe (Fiber Unit)
   , syncFibers :: Array (Fiber Unit)
@@ -396,16 +398,21 @@ serveDeny env req res = do
       case mReg of
         Nothing ->
           liftEffect $ serveNotFound res
-        Just reg -> do
-          Reg.setStatus env.regConn env.regLock id "denied"
-          notifyDenied env reg
-          liftEffect $ respond "application/json" 200 """{"status":"denied"}""" res
+        Just reg ->
+          if reg.status /= "pending" then
+            liftEffect $ serveBadRequest res "Registration is not pending"
+          else do
+            Reg.setStatus env.regConn env.regLock id "denied"
+            notifyDenied env reg
+            liftEffect $ respond "application/json" 200 """{"status":"denied"}""" res
 
 -- Lists the currently-registered (approved) users.
 serveListUsers :: ServerEnv -> Response -> Aff Unit
 serveListUsers env res = do
   regs <- Reg.listByStatus env.regConn "approved"
-  liftEffect $ respond "application/json" 200 (stringify $ encodeJson (map regToJson regs)) res
+  contexts <- liftEffect $ Ref.read env.contextsRef
+  let isLiveRegistered reg = any (\ctx -> ctx.slug == reg.slug && ctx.isRegistered) contexts
+  liftEffect $ respond "application/json" 200 (stringify $ encodeJson (map regToJson $ Data.Array.filter isLiveRegistered regs)) res
 
 serveRemoveUser :: ServerEnv -> Request -> Response -> Aff Unit
 serveRemoveUser env req res = do
@@ -422,21 +429,28 @@ serveRemoveUser env req res = do
           if reg.status /= "approved" then
             liftEffect $ serveBadRequest res "User is not active"
           else do
-            removeUser env reg
-            liftEffect $ respond "application/json" 200 """{"status":"removed"}""" res
+            removed <- removeUser env reg
+            if removed then
+              liftEffect $ respond "application/json" 200 """{"status":"removed"}""" res
+            else
+              liftEffect $ serveBadRequest res "User is not an active self-registered user"
 
 -- Removes an approved user: stops its fibers, drops it from the live set,
 -- deletes its database file, and marks the registration 'revoked' (so it stays
 -- gone across restarts and the slug frees up for re-registration).
-removeUser :: ServerEnv -> Reg.Registration -> Aff Unit
+removeUser :: ServerEnv -> Reg.Registration -> Aff Boolean
 removeUser env reg = do
   contexts <- liftEffect $ Ref.read env.contextsRef
-  for_ (find (\c -> c.slug == reg.slug) contexts) \ctx -> do
-    cleanupUser ctx
-    liftEffect $ Ref.modify_ (Data.Array.filter (\c -> c.slug /= reg.slug)) env.contextsRef
-    void $ try $ closeConnection ctx.conn
-    void $ try $ FSA.unlink ctx.config.databaseFile
-  Reg.setStatus env.regConn env.regLock reg.id "revoked"
+  case find (\ctx -> ctx.slug == reg.slug && ctx.isRegistered) contexts of
+    Nothing ->
+      pure false
+    Just ctx -> do
+      cleanupUser ctx
+      liftEffect $ Ref.modify_ (Data.Array.filter (\c -> c.slug /= reg.slug || not c.isRegistered)) env.contextsRef
+      void $ try $ closeConnection ctx.conn
+      void $ try $ FSA.unlink ctx.config.databaseFile
+      Reg.setStatus env.regConn env.regLock reg.id "revoked"
+      pure true
 
 -- Builds a runnable UserEntry from an approved registration (users.json is not touched).
 registrationUserEntry :: Reg.Registration -> Aff UserEntry
@@ -449,7 +463,7 @@ registrationUserEntry reg = do
 provisionUser :: ServerEnv -> Reg.Registration -> Aff (Maybe String)
 provisionUser env reg = do
   entry <- registrationUserEntry reg
-  Tuple ctx mToken <- startUser entry
+  Tuple ctx mToken <- startUser true entry
   liftEffect $ Ref.modify_ (\cs -> snoc cs ctx) env.contextsRef
   pure mToken
 
@@ -664,8 +678,8 @@ submitTrackMetadataToTrackMetadata (ListenBrainzSubmitTrackMetadata { trackName,
           }
     }
 
-startUser :: UserEntry -> Aff (Tuple UserContext (Maybe String))
-startUser { slug, name, config } = do
+startUser :: Boolean -> UserEntry -> Aff (Tuple UserContext (Maybe String))
+startUser isRegistered { slug, name, config } = do
   Log.info $ "Starting user: " <> if slug == "" then "(root)" else slug
   conn <- connect config.databaseFile
   initDb conn
@@ -680,17 +694,15 @@ startUser { slug, name, config } = do
     Just _, Nothing -> Log.warn $ "User '" <> slug <> "': Last.fm sync disabled (missing API key)"
     _, _ -> pure unit
 
-  lbFiber <- case config.listenbrainzUser of
-    Just username -> Just <$> forkAff (lbSync conn username slug writeLock)
-    Nothing -> pure Nothing
-  lfFiber <- case config.lastfmUser, config.lastfmApiKey of
-    Just lfmUser, Just apiKey -> Just <$> forkAff (lfSync conn apiKey lfmUser slug writeLock)
-    _, _ -> pure Nothing
-
-  -- Join the initial sync fibers so their completion is logged before loops start.
-  void $ forkAff do
-    for_ lbFiber joinFiber
-    for_ lfFiber joinFiber
+  initialSyncFibers <- traverse forkAff
+    $
+      [ case config.listenbrainzUser of
+          Just username -> Just $ lbSync conn username slug writeLock
+          Nothing -> Nothing
+      , case config.lastfmUser, config.lastfmApiKey of
+          Just lfmUser, Just apiKey -> Just $ lfSync conn apiKey lfmUser slug writeLock
+          _, _ -> Nothing
+      ] # Data.Array.mapMaybe identity
 
   -- Spawn the recurring sync loops eagerly; each starts with a 60s delay so
   -- they won't race with the initial sync above. Track them so cleanupUser
@@ -712,13 +724,15 @@ startUser { slug, name, config } = do
 
   let displayName = fromMaybe (if slug == "" then "root" else slug) name
   pure $ Tuple
-    { conn, writeLock, config, slug, displayName, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber, syncFibers: loopFibers }
+    { conn, writeLock, config, slug, displayName, isRegistered, initialSyncFibers, enrichMetadataFiber: Just enrichMetadataFiber, backupFiber, syncFibers: loopFibers }
     mToken
 
 cleanupUser :: UserContext -> Aff Unit
 cleanupUser ctx = do
   let label = if ctx.slug == "" then "(root)" else ctx.slug
   Log.info $ "Shutting down user: " <> label
+  for_ ctx.initialSyncFibers \fiber ->
+    void $ try $ killFiber (Exception.error "Server shutting down") fiber
   for_ ctx.enrichMetadataFiber \fiber ->
     void $ try $ killFiber (Exception.error "Server shutting down") fiber
   for_ ctx.backupFiber \fiber ->
@@ -747,7 +761,7 @@ main = do
             liftEffect $ Exception.throwException err
           Right (appConfig :: AppConfig) -> do
             Log.info $ "Loaded " <> show (length appConfig.users) <> " user(s) from " <> configFile
-            results <- traverse startUser appConfig.users
+            results <- traverse (startUser false) appConfig.users
             let jsonContexts = map fst results
             -- Also start approved registrations, skipping slugs already in users.json.
             regConn <- connect appConfig.registrationsDb
@@ -759,7 +773,7 @@ main = do
               $ Log.info
               $ "Starting " <> show (length toStart) <> " approved registered user(s)"
             approvedEntries <- traverse registrationUserEntry toStart
-            approvedResults <- traverse startUser approvedEntries
+            approvedResults <- traverse (startUser true) approvedEntries
             let contexts = jsonContexts <> map fst approvedResults
             contextsRef <- liftEffect $ Ref.new contexts
             regLock <- Avar.new unit

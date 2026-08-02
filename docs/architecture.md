@@ -10,8 +10,9 @@ The server is built with PureScript running on Node.js. It handles several core 
 - **ListenBrainz Sync**: A background process that polls the ListenBrainz API every 60 seconds to fetch new scrobbles.
 - **Last.fm Sync**: A background process that polls the Last.fm API every 60 seconds to fetch new scrobbles. Both syncs write to the same `scrobbles` table; duplicate timestamps are silently ignored.
 - **Metadata Enrichment**: A background process that identifies scrobbles with missing metadata (genres, labels, release years) and fetches information from MusicBrainz, Last.fm, and Discogs.
-- **Cover Art Proxy**: A specialized endpoint that fetches, caches, and serves cover art, utilizing a multi-source fallback strategy (CAA → Last.fm → Discogs).
-- **Observability**: Prometheus metrics exposed at `/metrics`.
+- **Cover Art Proxy**: A specialized endpoint that redirects to cover art and caches it in the background, using the fallback strategy Cover Art Archive → Discogs → Last.fm.
+- **Registration and administration**: An optional public registration flow with authenticated approval, user provisioning, and SMTP notifications.
+- **Observability**: Optional Prometheus metrics exposed at `/metrics`.
 
 ### Frontend
 A Single Page Application (SPA) built with [Elm](https://elm-lang.org).
@@ -31,8 +32,10 @@ Corpus uses **DuckDB** for its primary data storage. Each user has their own dat
 - **Performance**: DuckDB's columnar storage allows for extremely fast analytical queries across large listening histories.
 
 ### Storage
-Uses an S3-compatible bucket to cache cover art images.
-- **Caching Strategy**: Images are fetched once from external APIs and stored in S3 to reduce latency and avoid rate-limiting on external services.
+Uses an S3-compatible bucket for cover art and optional database backups.
+- **Cover cache**: Cached images are converted to AVIF and stored in S3. Cache hits redirect to a presigned S3 URL; cache misses redirect to the upstream image and populate the cache in the background.
+- **Backups**: When enabled per user, the server checkpoints that user's DuckDB database and uploads timestamped snapshots to S3.
+- **Registration data**: Pending, approved, denied, and revoked self-registration requests are stored separately in the shared `registrations.db` database.
 
 ## Multi-User Support
 
@@ -40,9 +43,11 @@ Corpus runs as a single server process serving multiple users. User configuratio
 
 ### Routing
 - `/` and `/u/<slug>` — serve the Elm SPA for the root user and named users respectively
-- `/proxy?user=<slug>`, `/stats?user=<slug>`, `/cover?user=<slug>` — shared API endpoints, user selected via query parameter
+- `/proxy?user=<slug>`, `/stats?user=<slug>`, `/cover?user=<slug>`, `/similar?user=<slug>` — shared API endpoints, user selected via query parameter
 - `/healthz?user=<slug>` — liveness check; pings the user's DuckDB connection
+- `/1/validate-token` — ListenBrainz-compatible token validation endpoint
 - `/1/submit-listens` — ListenBrainz-compatible scrobble submission endpoint (requires `Authorization: Token <token>` header)
+- `/register` and `/admin` — registration and administration UI; registration is enabled with `REGISTRATION_ENABLED=true`, while admin API routes additionally require `ADMIN_TOKEN`
 - `/metrics` — Prometheus metrics (no user parameter; covers all users; only available when `METRICS_ENABLED=true`)
 
 ### User Management
@@ -75,15 +80,11 @@ User configuration is split into two layers:
 
 Each user gets their own `UserContext` with an independent DuckDB connection, sync loop, and write lock (`AVar Unit`). The write lock serializes all sync transactions — if a user has both ListenBrainz and Last.fm configured, their transactions are queued rather than run concurrently. HTTP reads do not acquire the lock; DuckDB's MVCC provides consistent snapshots.
 
-### Graceful Shutdown
+Approved self-registered users are provisioned immediately and loaded at startup from `registrations.db`; `users.json` is not changed. A user defined in `users.json` takes precedence over an approved registration with the same slug.
 
-The server implements graceful shutdown handling to ensure clean termination of all background processes. When the server receives a shutdown signal, it:
+### Removing Registered Users
 
-1. **Kills background fibers**: Terminates all running background tasks (metadata enrichment, database backups) for each user
-2. **Closes database connections**: Properly closes all DuckDB connections
-3. **Logs cleanup progress**: Provides detailed logging during the shutdown process
-
-This prevents data corruption and ensures that any in-progress operations are completed or safely aborted before the server exits.
+An administrator can remove a self-registered user without restarting the server. Corpus stops that user's recurring sync, enrichment, and backup fibers; removes the live user context; closes and deletes the user's DuckDB file; and marks the registration as revoked. Users defined in `users.json` are managed manually and cannot be removed through this flow.
 
 ## Configuration Reference
 
@@ -103,7 +104,18 @@ This prevents data corruption and ensures that any in-progress operations are co
 | `AWS_S3_ADDRESSING_STYLE` | — | `virtual` or `path` |
 | `COSINE_API_KEY` | — | [cosine.club](https://cosine.club) API key for similar tracks |
 | `PORT` | `8000` | HTTP listen port |
+| `HOST` | `127.0.0.1` | HTTP listen host |
 | `METRICS_ENABLED` | `false` | Set to `true` to enable the Prometheus `/metrics` endpoint |
+| `CORS_ORIGIN` | `*` | Value of `Access-Control-Allow-Origin` on `/proxy` responses |
+| `REGISTRATION_ENABLED` | `false` | Set to `true` to enable public registration at `/register` |
+| `ADMIN_TOKEN` | — | Bearer token required by `/admin/*` API routes; when unset, they return 404 |
+| `ADMIN_EMAIL` | — | Address notified of new registration requests |
+| `CORPUS_REGISTRATIONS_DB` | `registrations.db` | Shared DuckDB file for registration state |
+| `SMTP_HOST` | — | SMTP server host; email is skipped when unset |
+| `SMTP_PORT` | `587` | SMTP port (STARTTLS) |
+| `SMTP_USER` | — | SMTP username |
+| `SMTP_PASS` | — | SMTP password |
+| `SMTP_FROM` | — | Sender address |
 
 ### users.json Fields
 
@@ -147,9 +159,9 @@ When a cover is requested:
 1. Check S3 cache.
 2. If not found:
     - Try **Cover Art Archive (CAA)** using the Release MBID.
-    - Fallback to **Last.fm** using Artist/Album name.
-    - Final fallback to **Discogs** search API.
-3. If found in any source, the image is proxied to the client and uploaded to S3 in the background.
+    - Fallback to **Discogs** using Artist/Album name.
+    - Final fallback to **Last.fm** using Artist/Album name.
+3. The client is redirected to the selected source immediately. If caching is enabled, Corpus fetches, converts, and uploads the image to S3 in the background.
 
 ## Observability
 
@@ -167,6 +179,7 @@ Prometheus metrics are **disabled by default**. Set `METRICS_ENABLED=true` to en
 | `corpus_enrichment_fetches_total` | Counter | `user`, `source`, `result` | Metadata enrichment API calls |
 | `corpus_enrichment_queue_size` | Gauge | `user`, `type` | Releases pending enrichment |
 | `corpus_cover_requests_total` | Counter | `user`, `source`, `result` | Cover art requests |
+| `corpus_cosine_requests_total` | Counter | `user`, `result` | Similar-track lookup requests |
 | `corpus_db_backup_runs_total` | Counter | `user`, `result` | Database backup runs |
 | `corpus_db_backup_last_success_seconds` | Gauge | `user` | Timestamp of last successful backup |
 

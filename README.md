@@ -1,138 +1,52 @@
 # corpus
+
 [![builds.sr.ht status](https://builds.sr.ht/~mtmn/corpus.svg)](https://builds.sr.ht/~mtmn/corpus?)
 
-A self-hosted [ListenBrainz](https://listenbrainz.org) and [Last.fm](https://last.fm) frontend that stores metadata and cover images.
-
-It stores scrobbles, enriches track metadata and provides an interactive [Elm](https://elm-lang.org) interface.
+A self-hosted ListenBrainz and Last.fm listening-history dashboard. Corpus stores scrobbles in DuckDB, enriches release metadata, caches cover art, and serves an Elm web interface.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) — Deep dive into the system components, data flow, and FFI usage.
-- [DuckDB](docs/duckdb.md) — Schema details, analytical queries, and tools for data exploration.
+- [Architecture](docs/architecture.md) — components, routing, data flows, configuration, and operations.
+- [DuckDB](docs/duckdb.md) — schema and analytical queries.
 
-## Usage
+## Quick start
 
-This project uses [just](https://github.com/casey/just) and [Nix](https://nixos.org) for development and deployment.
+With Nix:
 
-### Development
-
-```bash
-# Enter the development shell
+```sh
 just shell
-
-# Build
 just nix build
-
-# Run the binary built by Nix
 just nix run
 ```
 
-### Build
+Or build locally with pnpm:
 
-This project uses [pnpm](https://pnpm.io) for dependency management.
-
-```bash
-# Install dependencies
+```sh
 pnpm install
 pnpm spago install
-
-# Build the project
 pnpm run build
-
-# Run tests
 pnpm test
-
-# Build an optimized release
-pnpm run release
-
-# Run the application
 pnpm spago run
 ```
 
-### Scrobbling API
+## Scrobbling API
 
-Corpus provides a [ListenBrainz-compatible](https://listenbrainz.readthedocs.io/en/latest) endpoint for submitting scrobbles directly. This allows you to use any scrobbler that supports custom ListenBrainz endpoints.
+Corpus accepts ListenBrainz-compatible submissions at `POST /1/submit-listens`. Send `Authorization: Token <token>` and a standard ListenBrainz payload. Clients may first validate a token with `GET /1/validate-token` using the same header.
 
-#### Endpoint
+Tokens are shown once when a user is created, reset, or approved through self-registration. Store them securely.
 
-`POST /1/submit-listens`
+## Configuration
 
-#### Authentication
+`users.json` defines each static user's slug, source usernames, DuckDB filename, and cover/backup settings. Shared secrets and integrations are supplied by environment variables.
 
-The API uses token-based authentication. A unique API token is automatically generated for each user when they first start the application. You can find your token in the server logs on startup:
+| Variable | Purpose |
+|---|---|
+| `CORPUS_USERS_FILE` | Static user configuration (default: `users.json`) |
+| `DATABASE_PATH` | Directory containing user databases |
+| `LASTFM_API_KEY`, `DISCOGS_TOKEN` | Last.fm sync and metadata/cover fallbacks |
+| `S3_BUCKET` and `AWS_*` | Cover cache and optional database backups |
+| `COSINE_API_KEY` | Similar-track lookup |
+| `PORT`, `HOST` | HTTP listener (defaults: `8000`, `127.0.0.1`) |
+| `METRICS_ENABLED` | Enable Prometheus metrics at `/metrics` |
 
-```text
-[INFO] User 'mtmn' token: 550e8400-e29b-41d4-a716-446655440000
-```
-
-Include the token in the `Authorization` header of your requests:
-
-```text
-Authorization: Token <your-token>
-```
-
-#### Payload Format
-
-The endpoint accepts standard ListenBrainz JSON payloads. See the [ListenBrainz API documentation](https://listenbrainz.readthedocs.io/en/latest/users/api/core.html#post--1-submit-listens) for details.
-
-### Environment variables
-
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `CORPUS_USERS_FILE` | `users.json` | Path to the multi-user config file |
-| `DATABASE_PATH` | _(cwd)_ | Root directory for all user database files |
-| `PORT` | `8000` | HTTP port to listen on |
-| `LASTFM_API_KEY` | — | Last.fm API key (required when any user has `lastfmUser` set; also used for genre and cover art fallback) |
-| `DISCOGS_TOKEN` | — | Discogs token for cover art and genre fallback |
-| `S3_BUCKET` | — | S3 bucket name for cover art caching and backups |
-| `S3_REGION` | `us-east-1` | S3 region |
-| `AWS_ACCESS_KEY_ID` | — | S3 credentials |
-| `AWS_SECRET_ACCESS_KEY` | — | S3 credentials |
-| `AWS_ENDPOINT_URL` | — | S3-compatible endpoint (e.g. for MinIO) |
-| `AWS_S3_ADDRESSING_STYLE` | — | Set to `path` for path-style S3 URLs |
-| `COSINE_API_KEY` | — | [cosine.club](https://cosine.club) API key for similar tracks |
-| `METRICS_ENABLED` | `false` | Set to `true` to expose Prometheus metrics at `/metrics` |
-| `CORS_ORIGIN` | `*` | Value for the `Access-Control-Allow-Origin` header on `/proxy` responses (e.g. `https://mtmn.name`) |
-| `REGISTRATION_ENABLED` | `false` | Set to `true` to allow public self-registration at `/register` |
-| `ADMIN_TOKEN` | — | Secret for the admin approval page at `/admin`; when unset, all admin routes 404 |
-| `ADMIN_EMAIL` | — | Address notified by email when a new registration arrives |
-| `CORPUS_REGISTRATIONS_DB` | `registrations.db` | Shared DuckDB file holding pending/approved/denied registrations |
-| `SMTP_HOST` | — | SMTP server host for notification email (email is skipped if unset) |
-| `SMTP_PORT` | `587` | SMTP port (STARTTLS) |
-| `SMTP_USER` | — | SMTP username |
-| `SMTP_PASS` | — | SMTP password |
-| `SMTP_FROM` | — | From address for notification email |
-
-### User self-registration & admin approval
-
-When `REGISTRATION_ENABLED=true`, visitors can request an account at `/register`
-(username, name, email, and optional ListenBrainz/Last.fm usernames). Requests are
-stored as _pending_ in the shared registrations database. Set `ADMIN_TOKEN` and visit
-`/admin` to review them: enter the token (remembered in `localStorage`), then **approve**
-(provisions the user live — no restart — and emails them their API token) or **deny**
-(emails the requester). Set `ADMIN_EMAIL` + `SMTP_*` to receive/send the notifications;
-without SMTP the flow still works and the token is shown in the admin UI on approval.
-
-Approved users persist as `approved` rows in the registrations database and are
-re-loaded automatically at every startup — `users.json` is **not** modified and remains
-the manual/static import mechanism (via the `add-user` CLI). If a slug is defined in both
-`users.json` and an approved registration, the `users.json` entry wins.
-
-The `/admin` page also lists registered users under **users**, each with a **remove**
-button (two-click confirm). Removing a user stops its sync fibers, drops it from the live
-set (no restart), **deletes its database file**, and marks the registration `revoked` — so
-it stays gone across restarts and the username frees up for re-registration. Removal only
-applies to self-registered users; root and `users.json`-defined users are managed manually.
-
-### Per-user configuration
-
-| Field | Default | Description |
-| :--- | :--- | :--- |
-| `slug` | — | URL slug (`""` for root user, `"filip"` for `/u/filip`) |
-| `name` | — | Display name for the user (defaults to slug if not provided) |
-| `listenbrainzUser` | — | ListenBrainz username to sync scrobbles from |
-| `lastfmUser` | — | Last.fm username to sync scrobbles from |
-| `databaseFile` | `corpus.db` | Path to the user's DuckDB database file |
-| `coverCacheEnabled` | `true` | Enable cover art caching to S3 |
-| `backupEnabled` | `false` | Enable database backups to S3 |
-| `backupIntervalHours` | `24` | Backup frequency in hours |
+Set `REGISTRATION_ENABLED=true` to allow public registration at `/register`; `ADMIN_TOKEN` enables approval at `/admin`. See the [architecture guide](docs/architecture.md#configuration-reference) for every setting and the full registration workflow.
