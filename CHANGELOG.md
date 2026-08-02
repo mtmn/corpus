@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.1.1] - 2026-08-02
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v3.1.0..v3.1.1)
+
+### Bug Fixes
+
+- Update arch diagram, deps and format ([`63ef4f6`](https://git.sr.ht/~mtmn/corpus/commit/63ef4f6f40c424687fa97f144c97d2f16cb88177))
+- Harden user lifecycle, remove dead S3 tests ([`7893c97`](https://git.sr.ht/~mtmn/corpus/commit/7893c97ef1f7ca031f7d0a23f7cddeaec3f23452))
+- Center page navigation, flake hashes ([`2fd6d79`](https://git.sr.ht/~mtmn/corpus/commit/2fd6d79901f66fd87e01490969f057e8ab56c7c8))
+
+### Housekeeping
+
+- Update spago deps ([`95b4202`](https://git.sr.ht/~mtmn/corpus/commit/95b4202f3aa9884483f4ec27297ff38b583103f5))
+- Install git-cliff in devshell ([`0dc501b`](https://git.sr.ht/~mtmn/corpus/commit/0dc501bbaf7f4e7f9eb79a3960e120417a3a41bd))
+
 ## [3.1.0] - 2026-08-02
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v3.0.0..v3.1.0)
@@ -7,6 +22,10 @@
 ### Features
 
 - Redo ui and add background ([`20f66d3`](https://git.sr.ht/~mtmn/corpus/commit/20f66d3e663eca1889354da880458264430f4296))
+
+### Housekeeping
+
+- Release v3.1.0 ([`9f9520a`](https://git.sr.ht/~mtmn/corpus/commit/9f9520a342c61bdd9e1a1c83f2450df405a0c5dc))
 
 ## [3.0.0] - 2026-07-14
 
