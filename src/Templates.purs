@@ -711,11 +711,16 @@ indexHtml registrationEnabled userSlug allUsers =
     <div id="app"></div>
     <script src="/client.js"></script>
     <script>
-        var userSlug = '""" <> userSlug <>
+        var userSlug = '""" <> userSlug
+      <>
         """';
-        var allUsers = """ <> usersJson <>
+        var allUsers = """
+      <> usersJson
+      <>
         """;
-        var registrationEnabled = """ <> registrationEnabledJson <>
+        var registrationEnabled = """
+      <> registrationEnabledJson
+      <>
         """;
         var adminToken = window.localStorage.getItem('corpusAdminToken') || '';
         var app = Elm.Client.init({

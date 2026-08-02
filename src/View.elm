@@ -2,12 +2,11 @@ module View exposing (view)
 
 import Browser
 import Dict exposing (Dict)
-import Html exposing (Html, a, button, div, h1, h2, header, img, input, li, p, span, strong, table, tbody, td, text, th, thead, tr, ul)
+import Html exposing (Html, a, button, div, h2, header, img, input, li, p, span, strong, table, tbody, td, text, th, thead, tr, ul)
 import Html.Attributes as Attr exposing (class, disabled, href, placeholder, src, style, target, type_, value)
 import Html.Events exposing (on, onClick, onInput)
 import Json.Decode as D
 import Set exposing (Set)
-import Time
 import Types exposing (Listen, Model, Msg(..), Page(..), Period(..), RegField(..), Registration, SimilarState(..), SimilarTrack, Stats, StatsEntry, Tab(..), UserInfo)
 import Url
 
@@ -177,7 +176,7 @@ renderContent model =
                                     key =
                                         String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ trackName
                                 in
-                                renderListen model.userSlug model.currentTime model.failedCovers model.hoveredCover model.similarStates idx listen
+                                renderListen model.userSlug model.failedCovers model.hoveredCover model.similarStates idx listen
                                     :: renderSimilarRow key model.similarStates
                             )
                             model.listens
@@ -186,8 +185,8 @@ renderContent model =
                     ]
 
 
-renderListen : String -> Maybe Time.Posix -> Set String -> Maybe Int -> Dict String SimilarState -> Int -> Listen -> Html Msg
-renderListen userSlug currentTime failedCovers hoveredCover similarStates idx listen =
+renderListen : String -> Set String -> Maybe Int -> Dict String SimilarState -> Int -> Listen -> Html Msg
+renderListen userSlug failedCovers hoveredCover similarStates idx listen =
     let
         artist =
             Maybe.withDefault "" listen.artistName
@@ -649,73 +648,6 @@ onEnter msg =
                         D.fail "not enter"
                 )
         )
-
-
-
--- HELPERS
-
-
-timeAgo : Maybe Time.Posix -> Maybe Int -> String
-timeAgo mNow mTimestamp =
-    case ( mNow, mTimestamp ) of
-        ( Just now, Just ts ) ->
-            let
-                nowSecs =
-                    Time.posixToMillis now // 1000
-
-                diff =
-                    nowSecs - ts
-            in
-            if diff < 60 then
-                "just now"
-
-            else if diff < 3600 then
-                let
-                    mins =
-                        diff // 60
-                in
-                String.fromInt mins
-                    ++ " minute"
-                    ++ (if mins > 1 then
-                            "s"
-
-                        else
-                            ""
-                       )
-                    ++ " ago"
-
-            else if diff < 86400 then
-                let
-                    hours =
-                        diff // 3600
-                in
-                String.fromInt hours
-                    ++ " hour"
-                    ++ (if hours > 1 then
-                            "s"
-
-                        else
-                            ""
-                       )
-                    ++ " ago"
-
-            else
-                let
-                    days =
-                        diff // 86400
-                in
-                String.fromInt days
-                    ++ " day"
-                    ++ (if days > 1 then
-                            "s"
-
-                        else
-                            ""
-                       )
-                    ++ " ago"
-
-        _ ->
-            "unknown time"
 
 
 renderAboutView : String -> List UserInfo -> Html Msg

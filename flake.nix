@@ -188,9 +188,11 @@
         elm2nix.packages.${system}.default
         pkgs.nodejs
         pkgs.elmPackages.elm
+        pkgs.elmPackages.elm-analyse
         pkgs.elmPackages.elm-format
         pkgs.elmPackages.elm-json
         pkgs.pnpm
+        pkgs.statix
       ];
     };
 

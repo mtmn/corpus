@@ -1,91 +1,86 @@
 digraph corpus {
-    rankdir=LR
-    compound=true
-    splines=ortho
-    concentrate=true
-    nodesep=0.7
-    ranksep=1.6
-    bgcolor=transparent
-
-    node [fontname="Atkinson Hyperlegible Mono", fontsize=11, shape=box, style="rounded,filled", fontcolor=white]
-    edge [fontname="Atkinson Hyperlegible Mono", fontsize=9, color="#aaaaaa", fontcolor="#aaaaaa", arrowhead=vee, arrowsize=0.8, penwidth=1.4]
-
-    subgraph cluster_frontend {
-        label="Frontend"
-        style="rounded,filled"
-        fillcolor="#1e1533"
-        color="#9b7de8"
-        fontcolor=white
+    graph [
+        rankdir=LR
+        bgcolor="transparent"
+        nodesep=0.7
+        ranksep=1.0
+        pad=0.2
         fontname="Atkinson Hyperlegible Mono"
-        UI     [label="Elm SPA\n?user=slug",             fillcolor="#2d2050"]
-        Client [label="Scrobble Client\n(LB-compatible)", fillcolor="#2d2050"]
+        fontcolor="#e8edf5"
+    ]
+
+    node [
+        fontname="Atkinson Hyperlegible Mono"
+        fontsize=10
+        shape=box
+        style="rounded,filled"
+        color="#8b97a8"
+        fontcolor="#ffffff"
+        margin="0.18,0.12"
+    ]
+    edge [
+        fontname="Atkinson Hyperlegible Mono"
+        fontsize=8
+        color="#aeb8c7"
+        fontcolor="#d5dce7"
+        arrowhead=vee
+        arrowsize=0.7
+        penwidth=1.25
+    ]
+
+    subgraph cluster_clients {
+        label="People and clients"
+        style="rounded,filled"
+        fillcolor="#201a35"
+        color="#9879dc"
+        fontcolor="#ffffff"
+        Clients [
+            label="Browser\nElm SPA\n\nScrobbler\nListenBrainz-compatible\n\nAdministrator · Prometheus (optional)"
+            fillcolor="#302550"
+        ]
     }
 
     subgraph cluster_server {
-        label="Corpus Server"
+        label="Corpus server  ·  PureScript on Node.js"
         style="rounded,filled"
-        fillcolor="#112611"
-        color="#5aaa5a"
-        fontcolor=white
-        fontname="Atkinson Hyperlegible Mono"
-        API    [label="Web API",           fillcolor="#1c3e1c"]
-        Proxy  [label="Cover Proxy",       fillcolor="#1c3e1c"]
-        LBSync [label="ListenBrainz Sync", fillcolor="#1c3e1c"]
-        LFSync [label="Last.fm Sync",      fillcolor="#1c3e1c"]
-        Enrich [label="Enrichment Task",   fillcolor="#1c3e1c"]
+        fillcolor="#11291d"
+        color="#59aa76"
+        fontcolor="#ffffff"
+        Corpus [
+            label="HTTP server and API\nSPA · proxy · stats · cover · similar\n\nPer-user background work\nListenBrainz and Last.fm sync\nmetadata enrichment · cover cache · database backup\n\nRegistration/admin workflow · optional metrics"
+            fillcolor="#1b422d"
+        ]
     }
 
     subgraph cluster_storage {
-        label="Storage"
+        label="Persistent storage"
         style="rounded,filled"
-        fillcolor="#272000"
-        color="#d4a80c"
-        fontcolor=white
-        fontname="Atkinson Hyperlegible Mono"
-        DB [label="DuckDB",    shape=cylinder, fillcolor="#3d3100"]
-        S3 [label="S3 Bucket", shape=box3d,    fillcolor="#3d3100"]
+        fillcolor="#302a10"
+        color="#d2aa35"
+        fontcolor="#ffffff"
+        Storage [
+            label="DuckDB files — one per user\nscrobbles · release metadata · API tokens\n\nregistrations.db — shared registration state\n\nS3-compatible bucket\ncover cache · database backups"
+            shape=cylinder
+            fillcolor="#473d15"
+        ]
     }
 
     subgraph cluster_external {
-        label="External APIs"
+        label="External services"
         style="rounded,filled"
-        fillcolor="#0e1e38"
-        color="#5a8de0"
-        fontcolor=white
-        fontname="Atkinson Hyperlegible Mono"
-        LB  [label="ListenBrainz",      fillcolor="#162d52"]
-        LF  [label="Last.fm",           fillcolor="#162d52"]
-        MB  [label="MusicBrainz",       fillcolor="#162d52"]
-        DC  [label="Discogs",           fillcolor="#162d52"]
-        CAA [label="Cover Art Archive", fillcolor="#162d52"]
+        fillcolor="#11243e"
+        color="#6396e7"
+        fontcolor="#ffffff"
+        External [
+            label="ListenBrainz · Last.fm\nMusicBrainz · Discogs\nCover Art Archive\ncosine.club\nSMTP server (optional)"
+            fillcolor="#19365d"
+        ]
     }
 
-    // Scrobble Sync
-    LB     -> LBSync
-    LF     -> LFSync
-    LBSync -> DB
-    LFSync -> DB
-
-    // Enrichment
-    DB     -> Enrich
-    Enrich -> MB
-    Enrich -> LF
-    Enrich -> DC
-    Enrich -> DB [constraint=false]
-
-    // Scrobble Submission
-    Client -> API [label="POST /1/submit-listens\n(token auth)"]
-    API    -> DB  [constraint=false]
-
-    // Web UI
-    UI  -> API
-    API -> DB
-
-    // Cover Art
-    UI    -> Proxy
-    Proxy -> S3
-    Proxy -> CAA
-    Proxy -> LF
-    Proxy -> DC
-    Proxy -> S3 [constraint=false]
+    Clients -> Corpus [label="SPA, listen submission, admin, /metrics"]
+    Corpus -> Storage [label="per-user data, registrations, cached covers, backups"]
+    Corpus -> External [
+        dir=both
+        label="sync · enrichment · cover lookup\nCAA → Discogs → Last.fm · similar tracks · email"
+    ]
 }
