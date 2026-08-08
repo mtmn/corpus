@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.2.0] - 2026-08-08
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v3.1.1..v3.2.0)
+
+### Features
+
+- Add scrobbles count in stats ([`df106a5`](https://git.sr.ht/~mtmn/corpus/commit/df106a5888e1d45cf0206200ede3e2fc79b51579))
+
 ## [3.1.1] - 2026-08-02
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v3.1.0..v3.1.1)
@@ -14,6 +22,7 @@
 
 - Update spago deps ([`95b4202`](https://git.sr.ht/~mtmn/corpus/commit/95b4202f3aa9884483f4ec27297ff38b583103f5))
 - Install git-cliff in devshell ([`0dc501b`](https://git.sr.ht/~mtmn/corpus/commit/0dc501bbaf7f4e7f9eb79a3960e120417a3a41bd))
+- Release v3.1.1 ([`2c3db42`](https://git.sr.ht/~mtmn/corpus/commit/2c3db42a0ce9dd86b70286ddf644e0c5efbc2190))
 
 ## [3.1.0] - 2026-08-02
 
