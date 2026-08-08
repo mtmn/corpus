@@ -132,7 +132,7 @@ renderMain model =
 
             StatsTab ->
                 div []
-                    [ renderPeriodSelector model.statsPeriod model.showCustomInput model.customInput model.customError
+                    [ renderPeriodSelector model.statsPeriod model.showCustomInput model.customInput model.customError model.stats
                     , renderStatsView model.expandedSections model.loadedSections model.stats
                     ]
 
@@ -515,8 +515,8 @@ renderStatEntry maxCount mField entry =
         ]
 
 
-renderPeriodSelector : Period -> Bool -> String -> Maybe String -> Html Msg
-renderPeriodSelector current showInput customVal mError =
+renderPeriodSelector : Period -> Bool -> String -> Maybe String -> Maybe Stats -> Html Msg
+renderPeriodSelector current showInput customVal mError mStats =
     let
         isCustom =
             case current of
@@ -596,10 +596,19 @@ renderPeriodSelector current showInput customVal mError =
                 [ text label ]
     in
     div []
-        [ div [ class "period-selector" ]
-            ([ namedBtn AllTime "all time", customBtn ]
-                ++ List.map daysBtn [ 7, 14, 30, 90, 180, 365 ]
-            )
+        [ div [ class "period-picker-bar" ]
+            [ div [ class "period-selector" ]
+                ([ namedBtn AllTime "all time", customBtn ]
+                    ++ List.map daysBtn [ 7, 14, 30, 90, 180, 365 ]
+                )
+            , case mStats of
+                Just stats ->
+                    div [ class "stats-total" ]
+                        [ text (formatScrobbleCount stats.totalScrobbles ++ if stats.totalScrobbles == 1 then " scrobble" else " scrobbles") ]
+
+                Nothing ->
+                    text ""
+            ]
         , if showInput || isCustom then
             div []
                 [ div [ class "custom-range" ]
@@ -688,6 +697,24 @@ renderAboutView currentSlug allUsers =
                     (List.map userLink otherUsers)
                 ]
         ]
+
+
+formatScrobbleCount : Int -> String
+formatScrobbleCount count =
+    String.fromList <|
+        Tuple.second <|
+            String.foldr
+                (\digit ( index, formatted ) ->
+                    ( index + 1
+                    , if index > 0 && modBy 3 index == 0 then
+                        digit :: ',' :: formatted
+
+                      else
+                        digit :: formatted
+                    )
+                )
+                ( 0, [] )
+                (String.fromInt count)
 
 
 

@@ -100,7 +100,8 @@ type alias StatsEntry =
 
 
 type alias Stats =
-    { genres : List StatsEntry
+    { totalScrobbles : Int
+    , genres : List StatsEntry
     , labels : List StatsEntry
     , years : List StatsEntry
     , artists : List StatsEntry

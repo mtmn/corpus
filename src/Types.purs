@@ -364,7 +364,8 @@ instance EncodeJson StatsEntry where
       ~> jsonEmptyObject
 
 newtype Stats = Stats
-  { genres :: Array StatsEntry
+  { totalScrobbles :: Int
+  , genres :: Array StatsEntry
   , labels :: Array StatsEntry
   , years :: Array StatsEntry
   , artists :: Array StatsEntry
@@ -379,16 +380,18 @@ instance showStats :: Show Stats where
 instance DecodeJson Stats where
   decodeJson json = do
     obj <- decodeJson json
+    totalScrobbles <- obj .: "totalScrobbles"
     genres <- obj .: "genres"
     labels <- obj .: "labels"
     years <- obj .: "years"
     artists <- obj .: "artists"
     tracks <- obj .: "tracks"
-    pure $ Stats { genres, labels, years, artists, tracks }
+    pure $ Stats { totalScrobbles, genres, labels, years, artists, tracks }
 
 instance EncodeJson Stats where
-  encodeJson (Stats { genres, labels, years, artists, tracks }) =
-    "genres" := encodeJson genres
+  encodeJson (Stats { totalScrobbles, genres, labels, years, artists, tracks }) =
+    "totalScrobbles" := encodeJson totalScrobbles
+      ~> "genres" := encodeJson genres
       ~> "labels" := encodeJson labels
       ~> "years" := encodeJson years
       ~> "artists" := encodeJson artists

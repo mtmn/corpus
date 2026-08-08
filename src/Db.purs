@@ -322,7 +322,7 @@ getStats conn mPeriod mFrom mTo mSection = do
     buildTimeFilterAndParams :: { timeFilter :: String, params :: Array Foreign }
     buildTimeFilterAndParams = case mFrom, mTo of
       Just from, Just to ->
-        { timeFilter: " AND s.listened_at >= CAST(epoch(TIMESTAMP ? || ' 00:00:00') AS INTEGER) AND s.listened_at < CAST(epoch(TIMESTAMP ? || ' 00:00:00') AS INTEGER) + 86400"
+        { timeFilter: " AND s.listened_at >= CAST(epoch(CAST(? || ' 00:00:00' AS TIMESTAMP)) AS INTEGER) AND s.listened_at < CAST(epoch(CAST(? || ' 00:00:00' AS TIMESTAMP)) AS INTEGER) + 86400"
         , params: [ toParam from, toParam to ]
         }
       _, _ -> case mPeriod >>= Int.fromString of
@@ -342,8 +342,10 @@ getStats conn mPeriod mFrom mTo mSection = do
   yearRows <- fetch "year" ("SELECT CAST(rm.release_year AS VARCHAR) as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.release_year IS NOT NULL" <> timeFilter <> " GROUP BY rm.release_year ORDER BY rm.release_year DESC") []
   artistRows <- fetch "artist" ("SELECT s.artist_name as name, COUNT(*) as count FROM scrobbles s WHERE s.artist_name != ''" <> timeFilter <> " GROUP BY s.artist_name ORDER BY count DESC") []
   trackRows <- fetch "track" ("SELECT s.artist_name || ' — ' || s.track_name as name, COUNT(*) as count FROM scrobbles s WHERE s.track_name != '' AND s.artist_name != ''" <> timeFilter <> " GROUP BY s.artist_name, s.track_name ORDER BY count DESC") []
+  totalRows <- queryAll conn ("SELECT COUNT(*) as count FROM scrobbles s WHERE 1 = 1" <> timeFilter) buildTimeParams
   pure $ Stats
-    { genres: mapMaybe rowToEntry genreRows
+    { totalScrobbles: fromMaybe 0 (totalRows !! 0 >>= rowToCount)
+    , genres: mapMaybe rowToEntry genreRows
     , labels: mapMaybe rowToEntry labelRows
     , years: mapMaybe rowToEntry yearRows
     , artists: mapMaybe rowToEntry artistRows
@@ -356,6 +358,11 @@ rowToEntry json = do
   name <- Object.lookup "name" obj >>= toString
   count <- map Int.round $ Object.lookup "count" obj >>= toNumber
   pure $ StatsEntry { name, count }
+
+rowToCount :: Json -> Maybe Int
+rowToCount json = do
+  obj <- toObject json
+  map Int.round $ Object.lookup "count" obj >>= toNumber
 
 getArtistReleasesByMbids :: Connection -> Array String -> Aff (Object.Object { artist :: String, release :: String })
 getArtistReleasesByMbids _ mbids | null mbids = pure Object.empty

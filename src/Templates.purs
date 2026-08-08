@@ -527,11 +527,24 @@ indexHtml registrationEnabled userSlug allUsers =
             padding: var(--space-sm) 0;
         }
 
+        .period-picker-bar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-md);
+        }
+
         .period-selector {
             display: flex;
             flex-wrap: wrap;
             gap: var(--space-sm);
-            margin-bottom: var(--space-md);
+        }
+
+        .stats-total {
+            color: var(--fg-alt);
+            white-space: nowrap;
         }
 
         .custom-range {

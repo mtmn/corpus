@@ -328,7 +328,8 @@ main = runSpecAndExitProcess [ consoleReporter ] do
       it "should roundtrip Stats" do
         let
           stats = Stats
-            { genres: [ StatsEntry { name: "Rock", count: 10 } ]
+            { totalScrobbles: 42
+            , genres: [ StatsEntry { name: "Rock", count: 10 } ]
             , labels: [ StatsEntry { name: "Label", count: 5 } ]
             , years: [ StatsEntry { name: "2023", count: 15 } ]
             , artists: [ StatsEntry { name: "Artist", count: 7 } ]
@@ -403,12 +404,28 @@ main = runSpecAndExitProcess [ consoleReporter ] do
         [ Listen { trackMetadata: TrackMetadata m } ] -> m.genre `shouldEqual` Just "Rock"
         _ -> fail "Expected 1 listen"
 
+      upsertScrobble conn $ Listen
+        { trackMetadata: TrackMetadata
+            { trackName: Just "Unenriched Song"
+            , artistName: Just "Artist"
+            , releaseName: Nothing
+            , mbidMapping: Nothing
+            , genre: Nothing
+            , label: Nothing
+            }
+        , listenedAt: Just 12346
+        }
+
       Stats s <- getStats conn Nothing Nothing Nothing Nothing
+      s.totalScrobbles `shouldEqual` 2
       length s.genres `shouldEqual` 1
       length s.labels `shouldEqual` 1
       length s.years `shouldEqual` 1
       length s.artists `shouldEqual` 1
-      length s.tracks `shouldEqual` 1
+      length s.tracks `shouldEqual` 2
+
+      Stats customRangeStats <- getStats conn Nothing (Just "1970-01-01") (Just "1970-01-01") Nothing
+      customRangeStats.totalScrobbles `shouldEqual` 2
 
       -- Test Filtering (as mentioned in architecture.md)
       listensFiltered <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Rock" }) Nothing

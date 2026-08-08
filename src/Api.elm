@@ -276,7 +276,8 @@ trackMetaDecoder =
 
 statsDecoder : Decoder Stats
 statsDecoder =
-    D.map5 Stats
+    D.map6 Stats
+        (D.field "totalScrobbles" D.int)
         (D.field "genres" (D.list entryDecoder))
         (D.field "labels" (D.list entryDecoder))
         (D.field "years" (D.list entryDecoder))
