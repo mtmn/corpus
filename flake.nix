@@ -12,8 +12,12 @@
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
 
+    elm2nixLib = pkgs.callPackage (elm2nix + "/nix") {
+      elmVersion = "0.19.2";
+    };
+
     inherit
-      (elm2nix.lib.elm2nix pkgs)
+      (elm2nixLib)
       generateRegistryDat
       prepareElmHomeScript
       ;
@@ -71,7 +75,7 @@
         name = "corpus-pnpm-source";
       };
       pname = "corpus";
-      hash = "";
+      hash = "sha256-SeTg/ccTki9R9sNZGFPPu6lzBAmwrHABcTU12Z554JQ=";
       fetcherVersion = 4;
     };
 
@@ -79,7 +83,7 @@
       name = "corpus-spago-deps";
       outputHashAlgo = "sha256";
       outputHashMode = "recursive";
-      outputHash = "";
+      outputHash = "sha256-Roj/G7HhLjA6PKNBt7YA9LIxP0jLc6BdnIpKDgSJvPo=";
 
       src = pkgs.lib.cleanSourceWith {
         src = self;
