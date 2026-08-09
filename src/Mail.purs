@@ -1,4 +1,4 @@
-module Mail where
+module Mail (Mail, isConfigured, sendMail) where
 
 import Prelude
 
@@ -19,6 +19,7 @@ type SmtpConfigJs =
   , from :: Nullable String
   }
 
+-- | A plaintext email to be delivered through SMTP.
 type Mail =
   { to :: String
   , subject :: String

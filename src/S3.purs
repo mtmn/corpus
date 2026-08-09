@@ -1,4 +1,4 @@
-module S3 where
+module S3 (existsInS3, getPresignedUrl, uploadToS3) where
 
 import Prelude
 
@@ -32,14 +32,18 @@ toJs cfg =
   }
 
 foreign import uploadToS3Impl
-  :: Fn5 S3ConfigJs String Buffer String (Nullable Error -> Effect Unit) (Effect Unit)
+  :: Fn5 S3ConfigJs String Buffer String (Nullable Error -> Effect Unit)
+       (Effect Unit)
 
 foreign import existsInS3Impl
-  :: Fn3 S3ConfigJs String (Nullable Error -> Boolean -> Effect Unit) (Effect Unit)
+  :: Fn3 S3ConfigJs String (Nullable Error -> Boolean -> Effect Unit)
+       (Effect Unit)
 
 foreign import getPresignedUrlImpl
-  :: Fn3 S3ConfigJs String (Nullable Error -> String -> Effect Unit) (Effect Unit)
+  :: Fn3 S3ConfigJs String (Nullable Error -> String -> Effect Unit)
+       (Effect Unit)
 
+-- | Upload a buffer to S3-compatible object storage.
 uploadToS3 :: S3Config -> String -> Buffer -> String -> Aff Unit
 uploadToS3 cfg key body contentType = makeAff \cb -> do
   runFn5 uploadToS3Impl (toJs cfg) key body contentType \err ->
@@ -48,6 +52,7 @@ uploadToS3 cfg key body contentType = makeAff \cb -> do
       Nothing -> cb (Right unit)
   pure nonCanceler
 
+-- | Check whether an S3 object exists.
 existsInS3 :: S3Config -> String -> Aff Boolean
 existsInS3 cfg key = makeAff \cb -> do
   runFn3 existsInS3Impl (toJs cfg) key \err exists ->
@@ -56,6 +61,7 @@ existsInS3 cfg key = makeAff \cb -> do
       Nothing -> cb (Right exists)
   pure nonCanceler
 
+-- | Generate a one-day presigned GET URL for an S3 object.
 getPresignedUrl :: S3Config -> String -> Aff String
 getPresignedUrl cfg key = makeAff \cb -> do
   runFn3 getPresignedUrlImpl (toJs cfg) key \err url ->

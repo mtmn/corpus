@@ -7,19 +7,19 @@ import Prelude
 
 import Config (UserConfig)
 import Control.Monad.Error.Class (throwError)
-import Data.Array ((!!))
-import Data.Either (Either(..), hush)
 import Data.Argonaut (parseJson)
 import Data.Argonaut.Core (toArray, toObject, toString)
+import Data.Array ((!!))
+import Data.Either (Either(..), hush)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff_, try)
 import Effect.Class (liftEffect)
 import Effect.Exception as Exception
-import Fetch (fetch, Method(GET))
+import Fetch (Method(GET), fetch)
 import Foreign.Object as Object
-import JSURI (encodeURIComponent)
 import Http (apiTimeout, withTimeout)
+import JSURI (encodeURIComponent)
 import Log as Log
 import Metrics as Metrics
 import Node.Encoding (Encoding(UTF8))
@@ -28,14 +28,15 @@ import Node.HTTP.ServerResponse (setStatusCode, toOutgoingMessage)
 import Node.HTTP.Types (ServerResponse)
 import Node.Stream (end, writeString)
 import Web.URL (URL)
-import Web.URL.URLSearchParams as URLSearchParams
 import Web.URL as URL
+import Web.URL.URLSearchParams as URLSearchParams
 
 type Response = ServerResponse
 
 getQueryParam :: String -> URL -> Maybe String
 getQueryParam key url = URLSearchParams.get key (URL.searchParams url)
 
+-- | Fetch similar tracks from Cosine Club or return an empty result when disabled.
 fetchCosineSimilar :: String -> UserConfig -> String -> Aff String
 fetchCosineSimilar slug cfg query = do
   let apiKey = fromMaybe "" cfg.cosineApiKey
@@ -44,10 +45,19 @@ fetchCosineSimilar slug cfg query = do
     liftEffect $ Metrics.incCosineRequest slug "not_configured"
     pure "{\"data\":{\"similar_tracks\":[]},\"success\":true}"
   else do
-    let headers = { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus", "Authorization": "Bearer " <> apiKey }
-    let searchUrl = "https://cosine.club/api/v1/search?q=" <> (fromMaybe "" $ encodeURIComponent query) <> "&limit=1"
+    let
+      headers =
+        { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus"
+        , "Authorization": "Bearer " <> apiKey
+        }
+    let
+      searchUrl = "https://cosine.club/api/v1/search?q="
+        <> (fromMaybe "" $ encodeURIComponent query)
+        <> "&limit=1"
     Log.info $ "Cosine Club: searching for: " <> query
-    searchResult <- try $ withTimeout apiTimeout "Cosine Club search" $ fetch searchUrl { method: GET, headers: headers }
+    searchResult <- try $ withTimeout apiTimeout "Cosine Club search" $ fetch
+      searchUrl
+      { method: GET, headers: headers }
     case searchResult of
       Left err -> do
         liftEffect $ Metrics.incCosineRequest slug "error"
@@ -62,7 +72,8 @@ fetchCosineSimilar slug cfg query = do
           liftEffect $ Metrics.incCosineRequest slug "error"
           throwError (Exception.error "Search API error")
         else do
-          searchBody <- withTimeout apiTimeout "Cosine Club search response" searchRes.text
+          searchBody <- withTimeout apiTimeout "Cosine Club search response"
+            searchRes.text
           let
             mTrackId = do
               json <- hush $ parseJson searchBody
@@ -77,9 +88,13 @@ fetchCosineSimilar slug cfg query = do
               liftEffect $ Metrics.incCosineRequest slug "not_indexed"
               pure "{\"data\":{\"similar_tracks\":[]},\"success\":true}"
             Just trackId -> do
-              let similarUrl = "https://cosine.club/api/v1/tracks/" <> trackId <> "/similar?limit=10"
+              let
+                similarUrl = "https://cosine.club/api/v1/tracks/" <> trackId <>
+                  "/similar?limit=10"
               Log.info $ "Cosine Club: fetching similar for ID " <> trackId
-              similarResult <- try $ withTimeout apiTimeout "Cosine Club similar lookup" $ fetch similarUrl { method: GET, headers: headers }
+              similarResult <- try
+                $ withTimeout apiTimeout "Cosine Club similar lookup"
+                $ fetch similarUrl { method: GET, headers: headers }
               case similarResult of
                 Left err -> do
                   liftEffect $ Metrics.incCosineRequest slug "error"
@@ -90,13 +105,16 @@ fetchCosineSimilar slug cfg query = do
                     liftEffect $ Metrics.incCosineRequest slug "rate_limited"
                     throwError (Exception.error "Rate limit exceeded")
                   else if similarRes.status /= 200 then do
-                    Log.warn $ "Cosine Club: similar API returned " <> show similarRes.status
+                    Log.warn $ "Cosine Club: similar API returned " <> show
+                      similarRes.status
                     liftEffect $ Metrics.incCosineRequest slug "error"
                     throwError (Exception.error "Similar API error")
                   else do
                     liftEffect $ Metrics.incCosineRequest slug "success"
-                    withTimeout apiTimeout "Cosine Club similar response" similarRes.text
+                    withTimeout apiTimeout "Cosine Club similar response"
+                      similarRes.text
 
+-- | Serve the similar-track JSON endpoint.
 serveSimilar
   :: (Response -> String -> Effect Unit)
   -> (Response -> Int -> String -> String -> Effect Unit)
@@ -111,14 +129,16 @@ serveSimilar serveBadRequest serveError slug cfg url res = do
     let artist = fromMaybe "" (getQueryParam "artist" url)
     let track = fromMaybe "" (getQueryParam "track" url)
     if artist == "" || track == "" then
-      liftEffect $ serveBadRequest res "Artist and track parameters are required"
+      liftEffect $ serveBadRequest res
+        "Artist and track parameters are required"
     else do
       let query = artist <> " - " <> track
       result <- try $ fetchCosineSimilar slug cfg query
       case result of
         Left err -> do
           Log.error $ "Cosine Club API error: " <> Exception.message err
-          liftEffect $ serveError res 502 "Bad Gateway" "Failed to fetch similar tracks"
+          liftEffect $ serveError res 502 "Bad Gateway"
+            "Failed to fetch similar tracks"
         Right responseBody ->
           liftEffect $ do
             setStatusCode 200 res

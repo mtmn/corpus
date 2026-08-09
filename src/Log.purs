@@ -9,7 +9,7 @@ import Prelude
 import Data.DateTime (DateTime)
 import Data.Formatter.DateTime (FormatterCommand(..), format)
 import Data.List (fromFoldable)
-import Data.String (replaceAll, Pattern(..), Replacement(..))
+import Data.String (Pattern(..), Replacement(..), replaceAll)
 import Effect (Effect)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console as Console
@@ -54,11 +54,14 @@ logMessage level message = do
       # replaceAll (Pattern "\r") (Replacement " ")
   Console.log $ "[" <> ts <> "] [" <> show level <> "] " <> sanitized
 
+-- | Log an informational message.
 info :: forall m. MonadEffect m => String -> m Unit
 info msg = liftEffect $ logMessage INFO msg
 
+-- | Log a warning message.
 warn :: forall m. MonadEffect m => String -> m Unit
 warn msg = liftEffect $ logMessage WARN msg
 
+-- | Log an error message.
 error :: forall m. MonadEffect m => String -> m Unit
 error msg = liftEffect $ logMessage ERROR msg

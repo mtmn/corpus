@@ -2,42 +2,97 @@ module Test.Main where
 
 import Prelude
 
+import Cover
+  ( cacheJobKey
+  , coverSources
+  , finishCacheFill
+  , sanitizeKey
+  , tryStartCacheFill
+  )
 import Data.Argonaut (decodeJson, encodeJson, parseJson)
+import Data.Argonaut.Core (Json, toBoolean, toNumber, toString)
 import Data.Array (length)
 import Data.Either (Either(..), isRight)
 import Data.Maybe (Maybe(..))
+import Data.String.Regex (parseFlags, regex)
+import Data.Time.Duration (Milliseconds(..))
+import Db
+  ( FilterField(..)
+  , checkExists
+  , connect
+  , dbBaseName
+  , fromString
+  , getArtistReleasesByMbids
+  , getEmptyGenreMbids
+  , getOldestTs
+  , getOrCreateToken
+  , getScrobbles
+  , getStats
+  , getTokenUser
+  , getUnenrichedMbids
+  , initDb
+  , initReleaseMetadata
+  , touchGenreCheckedAt
+  , upsertReleaseMetadata
+  , upsertScrobble
+  )
 import Effect (Effect)
 import Effect.Aff (delay, try)
 import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
 import Effect.Exception (message)
-import Data.Time.Duration (Milliseconds(..))
+import Foreign.Object as Object
+import Http (withTimeout)
+import Main
+  ( findUserByToken
+  , parseAuthToken
+  , parseBearer
+  , sanitizeDate
+  , submitListenToListen
+  , validateTokenJson
+  )
+import Registrations
+  ( getById
+  , initRegistrations
+  , insertRegistration
+  , isReservedSlug
+  , listByStatus
+  , setStatus
+  , slugTaken
+  , validSlugFormat
+  )
+import Sync (lastfmTrackToListen, listenBrainzUrl, parseLastfmResponse)
 import Test.Spec (describe, it)
-import Test.Spec.Assertions (shouldEqual, fail)
-import Data.String.Regex (regex, parseFlags)
+import Test.Spec.Assertions (fail, shouldEqual)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
-import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), Stats(..), StatsEntry(..), TrackMetadata(..), ListenBrainzSubmitPayload(..), ListenBrainzSubmitListen(..), ListenBrainzSubmitTrackMetadata(..), ListenBrainzAdditionalInfo(..))
-import Db (FilterField(..), connect, initDb, checkExists, upsertScrobble, getScrobbles, initReleaseMetadata, upsertReleaseMetadata, getStats, dbBaseName, getOldestTs, getUnenrichedMbids, getEmptyGenreMbids, getArtistReleasesByMbids, touchGenreCheckedAt, getOrCreateToken, getTokenUser, fromString)
-import Data.Argonaut.Core (Json, toBoolean, toNumber, toString)
-import Foreign.Object as Object
-import Main (submitListenToListen, findUserByToken, sanitizeDate, parseAuthToken, parseBearer, validateTokenJson)
-import Registrations (getById, initRegistrations, insertRegistration, isReservedSlug, listByStatus, setStatus, slugTaken, validSlugFormat)
-import Cover (sanitizeKey, cacheJobKey, coverSources, finishCacheFill, tryStartCacheFill)
-import Sync (listenBrainzUrl, lastfmTrackToListen, parseLastfmResponse)
-import Http (withTimeout)
+import Types
+  ( Listen(..)
+  , ListenBrainzAdditionalInfo(..)
+  , ListenBrainzResponse(..)
+  , ListenBrainzSubmitListen(..)
+  , ListenBrainzSubmitPayload(..)
+  , ListenBrainzSubmitTrackMetadata(..)
+  , MbidMapping(..)
+  , Payload(..)
+  , Stats(..)
+  , StatsEntry(..)
+  , TrackMetadata(..)
+  )
 
 main :: Effect Unit
 main = runSpecAndExitProcess [ consoleReporter ] do
   describe "Corpus Main Utils" do
     it "cancels operations that exceed their fetch timeout" do
-      result <- try $ withTimeout (Milliseconds 1.0) "test request" (delay (Milliseconds 20.0))
+      result <- try $ withTimeout (Milliseconds 1.0) "test request"
+        (delay (Milliseconds 20.0))
       case result of
         Left err -> message err `shouldEqual` "test request timed out"
         Right _ -> fail "Expected timeout"
 
     it "should build ListenBrainz URLs correctly" do
-      listenBrainzUrl "user1" `shouldEqual` "https://api.listenbrainz.org/1/user/user1/listens"
+      listenBrainzUrl "user1" `shouldEqual`
+        "https://api.listenbrainz.org/1/user/user1/listens"
 
     it "regex patterns should compile successfully" do
       let re1 = regex "[^a-z0-9.-]" (parseFlags "gi")
@@ -61,19 +116,23 @@ main = runSpecAndExitProcess [ consoleReporter ] do
       sanitizeKey "UPPER lower" `shouldEqual` "UPPER_lower"
 
     it "scopes concurrent cover-cache jobs to their S3 bucket and key" do
-      cacheJobKey "covers-a" "covers/caa/release.avif" `shouldEqual` "covers-a:covers/caa/release.avif"
-      cacheJobKey "covers-b" "covers/caa/release.avif" `shouldEqual` "covers-b:covers/caa/release.avif"
+      cacheJobKey "covers-a" "covers/caa/release.avif" `shouldEqual`
+        "covers-a:covers/caa/release.avif"
+      cacheJobKey "covers-b" "covers/caa/release.avif" `shouldEqual`
+        "covers-b:covers/caa/release.avif"
 
-    it "coalesces duplicate cover-cache jobs and releases their key on completion" do
-      let key = cacheJobKey "test-bucket" "covers/caa/release.avif"
-      first <- liftEffect $ tryStartCacheFill key
-      second <- liftEffect $ tryStartCacheFill key
-      liftEffect $ finishCacheFill key
-      third <- liftEffect $ tryStartCacheFill key
-      liftEffect $ finishCacheFill key
-      first `shouldEqual` true
-      second `shouldEqual` false
-      third `shouldEqual` true
+    it
+      "coalesces duplicate cover-cache jobs and releases their key on completion"
+      do
+        let key = cacheJobKey "test-bucket" "covers/caa/release.avif"
+        first <- liftEffect $ tryStartCacheFill key
+        second <- liftEffect $ tryStartCacheFill key
+        liftEffect $ finishCacheFill key
+        third <- liftEffect $ tryStartCacheFill key
+        liftEffect $ finishCacheFill key
+        first `shouldEqual` true
+        second `shouldEqual` false
+        third `shouldEqual` true
 
     it "limits background cover-cache fills across distinct keys" do
       one <- liftEffect $ tryStartCacheFill "capacity-1"
@@ -112,7 +171,9 @@ main = runSpecAndExitProcess [ consoleReporter ] do
           }
 
       it "prefers CAA and uses source-specific cache keys" do
-        let sources = coverSources "release/id" "The Artist" "The Release" coverConfig
+        let
+          sources = coverSources "release/id" "The Artist" "The Release"
+            coverConfig
         map _.name sources `shouldEqual` [ "caa", "discogs", "lastfm" ]
         map _.s3Key sources `shouldEqual`
           [ "covers/caa/release_id.avif"
@@ -179,7 +240,9 @@ main = runSpecAndExitProcess [ consoleReporter ] do
           listenType `shouldEqual` "single"
           length payload `shouldEqual` 1
           case payload of
-            [ ListenBrainzSubmitListen { listenedAt, trackMetadata: ListenBrainzSubmitTrackMetadata m } ] -> do
+            [ ListenBrainzSubmitListen
+                { listenedAt, trackMetadata: ListenBrainzSubmitTrackMetadata m }
+            ] -> do
               listenedAt `shouldEqual` Just 123456789
               m.trackName `shouldEqual` "Song Name"
               m.artistName `shouldEqual` "Artist Name"
@@ -217,7 +280,12 @@ main = runSpecAndExitProcess [ consoleReporter ] do
           m.trackName `shouldEqual` Just "Song Name"
           m.artistName `shouldEqual` Just "Artist Name"
           m.releaseName `shouldEqual` Just "Album Name"
-          m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Just "rel-mbid", caaReleaseMbid: Just "rel-mbid" })
+          m.mbidMapping `shouldEqual` Just
+            ( MbidMapping
+                { releaseMbid: Just "rel-mbid"
+                , caaReleaseMbid: Just "rel-mbid"
+                }
+            )
         Nothing -> do
           fail "Conversion failed"
 
@@ -284,7 +352,8 @@ main = runSpecAndExitProcess [ consoleReporter ] do
       case result of
         Right obj -> do
           (Object.lookup "valid" obj >>= toBoolean) `shouldEqual` Just true
-          (Object.lookup "user_name" obj >>= toString) `shouldEqual` Just "User One"
+          (Object.lookup "user_name" obj >>= toString) `shouldEqual` Just
+            "User One"
           (Object.lookup "code" obj >>= toNumber) `shouldEqual` Just 200.0
         Left _ ->
           fail "validateTokenJson did not produce valid JSON"
@@ -346,8 +415,30 @@ main = runSpecAndExitProcess [ consoleReporter ] do
           lock1 <- Avar.new unit
           lock2 <- Avar.new unit
           let
-            ctx1 = { conn: conn1, writeLock: lock1, config: dummyConfig, slug: "user1", displayName: "User 1", isRegistered: false, initialSyncFibers: [], enrichMetadataFiber: Nothing, backupFiber: Nothing, syncFibers: [] }
-            ctx2 = { conn: conn2, writeLock: lock2, config: dummyConfig, slug: "user2", displayName: "User 2", isRegistered: false, initialSyncFibers: [], enrichMetadataFiber: Nothing, backupFiber: Nothing, syncFibers: [] }
+            ctx1 =
+              { conn: conn1
+              , writeLock: lock1
+              , config: dummyConfig
+              , slug: "user1"
+              , displayName: "User 1"
+              , isRegistered: false
+              , initialSyncFibers: []
+              , enrichMetadataFiber: Nothing
+              , backupFiber: Nothing
+              , syncFibers: []
+              }
+            ctx2 =
+              { conn: conn2
+              , writeLock: lock2
+              , config: dummyConfig
+              , slug: "user2"
+              , displayName: "User 2"
+              , isRegistered: false
+              , initialSyncFibers: []
+              , enrichMetadataFiber: Nothing
+              , backupFiber: Nothing
+              , syncFibers: []
+              }
             contexts = [ ctx1, ctx2 ]
 
           res1 <- findUserByToken contexts token1
@@ -364,12 +455,16 @@ main = runSpecAndExitProcess [ consoleReporter ] do
   describe "Corpus Types" do
     describe "MbidMapping Codecs" do
       it "should roundtrip MbidMapping" do
-        let mbid = MbidMapping { releaseMbid: Just "release-123", caaReleaseMbid: Just "caa-456" }
+        let
+          mbid = MbidMapping
+            { releaseMbid: Just "release-123", caaReleaseMbid: Just "caa-456" }
         decodeJson (encodeJson mbid) `shouldEqual` Right mbid
 
       it "should decode MbidMapping with missing fields" do
         let jsonStr = "{\"release_mbid\": \"abc\"}"
-        let expected = MbidMapping { releaseMbid: Just "abc", caaReleaseMbid: Nothing }
+        let
+          expected = MbidMapping
+            { releaseMbid: Just "abc", caaReleaseMbid: Nothing }
         (parseJson jsonStr >>= decodeJson) `shouldEqual` Right expected
 
     describe "TrackMetadata Codecs" do
@@ -379,7 +474,10 @@ main = runSpecAndExitProcess [ consoleReporter ] do
             { trackName: Just "Song"
             , artistName: Just "Artist"
             , releaseName: Just "Album"
-            , mbidMapping: Just (MbidMapping { releaseMbid: Just "rb", caaReleaseMbid: Nothing })
+            , mbidMapping: Just
+                ( MbidMapping
+                    { releaseMbid: Just "rb", caaReleaseMbid: Nothing }
+                )
             , genre: Just "Rock"
             , label: Nothing
             }
@@ -460,7 +558,10 @@ main = runSpecAndExitProcess [ consoleReporter ] do
               { trackName: Just "Song"
               , artistName: Just "Artist"
               , releaseName: Just "Album"
-              , mbidMapping: Just (MbidMapping { releaseMbid: Just "rb1", caaReleaseMbid: Nothing })
+              , mbidMapping: Just
+                  ( MbidMapping
+                      { releaseMbid: Just "rb1", caaReleaseMbid: Nothing }
+                  )
               , genre: Nothing
               , label: Nothing
               }
@@ -478,7 +579,8 @@ main = runSpecAndExitProcess [ consoleReporter ] do
 
       listensWithGenre <- getScrobbles conn 10 0 Nothing Nothing
       case listensWithGenre of
-        [ Listen { trackMetadata: TrackMetadata m } ] -> m.genre `shouldEqual` Just "Rock"
+        [ Listen { trackMetadata: TrackMetadata m } ] -> m.genre `shouldEqual`
+          Just "Rock"
         _ -> fail "Expected 1 listen"
 
       upsertScrobble conn $ Listen
@@ -501,14 +603,20 @@ main = runSpecAndExitProcess [ consoleReporter ] do
       length s.artists `shouldEqual` 1
       length s.tracks `shouldEqual` 2
 
-      Stats customRangeStats <- getStats conn Nothing (Just "1970-01-01") (Just "1970-01-01") Nothing
+      Stats customRangeStats <- getStats conn Nothing (Just "1970-01-01")
+        (Just "1970-01-01")
+        Nothing
       customRangeStats.totalScrobbles `shouldEqual` 2
 
       -- Test Filtering (as mentioned in architecture.md)
-      listensFiltered <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Rock" }) Nothing
+      listensFiltered <- getScrobbles conn 10 0
+        (Just { field: FilterGenre, value: "Rock" })
+        Nothing
       length listensFiltered `shouldEqual` 1
 
-      listensEmpty <- getScrobbles conn 10 0 (Just { field: FilterGenre, value: "Jazz" }) Nothing
+      listensEmpty <- getScrobbles conn 10 0
+        (Just { field: FilterGenre, value: "Jazz" })
+        Nothing
       length listensEmpty `shouldEqual` 0
 
     it "upsertScrobble is idempotent" do
@@ -522,7 +630,10 @@ main = runSpecAndExitProcess [ consoleReporter ] do
               { trackName: Just "Song"
               , artistName: Just "Artist"
               , releaseName: Just "Album"
-              , mbidMapping: Just (MbidMapping { releaseMbid: Just "mb1", caaReleaseMbid: Nothing })
+              , mbidMapping: Just
+                  ( MbidMapping
+                      { releaseMbid: Just "mb1", caaReleaseMbid: Nothing }
+                  )
               , genre: Nothing
               , label: Nothing
               }
@@ -551,9 +662,13 @@ main = runSpecAndExitProcess [ consoleReporter ] do
             }
         upsertScrobble conn (mkListen 1 "Alpha")
         upsertScrobble conn (mkListen 2 "Beta")
-        listens <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Alpha" }) Nothing
+        listens <- getScrobbles conn 10 0
+          (Just { field: FilterArtist, value: "Alpha" })
+          Nothing
         length listens `shouldEqual` 1
-        listensNone <- getScrobbles conn 10 0 (Just { field: FilterArtist, value: "Gamma" }) Nothing
+        listensNone <- getScrobbles conn 10 0
+          (Just { field: FilterArtist, value: "Gamma" })
+          Nothing
         length listensNone `shouldEqual` 0
 
       it "filters by album" do
@@ -574,9 +689,13 @@ main = runSpecAndExitProcess [ consoleReporter ] do
             }
         upsertScrobble conn (mkListen "Artist" "Album A")
         upsertScrobble conn (mkListen "Artist" "Album B")
-        listens <- getScrobbles conn 10 0 (Just { field: FilterAlbum, value: "Album A" }) Nothing
+        listens <- getScrobbles conn 10 0
+          (Just { field: FilterAlbum, value: "Album A" })
+          Nothing
         length listens `shouldEqual` 1
-        listensNone <- getScrobbles conn 10 0 (Just { field: FilterAlbum, value: "Album C" }) Nothing
+        listensNone <- getScrobbles conn 10 0
+          (Just { field: FilterAlbum, value: "Album C" })
+          Nothing
         length listensNone `shouldEqual` 0
 
       it "filters by label" do
@@ -590,16 +709,25 @@ main = runSpecAndExitProcess [ consoleReporter ] do
                   { trackName: Just "Song"
                   , artistName: Just "Artist"
                   , releaseName: Just "Album"
-                  , mbidMapping: Just (MbidMapping { releaseMbid: Just "mb-label", caaReleaseMbid: Nothing })
+                  , mbidMapping: Just
+                      ( MbidMapping
+                          { releaseMbid: Just "mb-label"
+                          , caaReleaseMbid: Nothing
+                          }
+                      )
                   , genre: Nothing
                   , label: Nothing
                   }
               }
           )
         upsertReleaseMetadata conn "mb-label" Nothing (Just "Warp") (Just 2000)
-        listens <- getScrobbles conn 10 0 (Just { field: FilterLabel, value: "Warp" }) Nothing
+        listens <- getScrobbles conn 10 0
+          (Just { field: FilterLabel, value: "Warp" })
+          Nothing
         length listens `shouldEqual` 1
-        listensNone <- getScrobbles conn 10 0 (Just { field: FilterLabel, value: "Columbia" }) Nothing
+        listensNone <- getScrobbles conn 10 0
+          (Just { field: FilterLabel, value: "Columbia" })
+          Nothing
         length listensNone `shouldEqual` 0
 
       it "filters by year" do
@@ -613,44 +741,63 @@ main = runSpecAndExitProcess [ consoleReporter ] do
                   { trackName: Just "Song"
                   , artistName: Just "Artist"
                   , releaseName: Just "Album"
-                  , mbidMapping: Just (MbidMapping { releaseMbid: Just "mb-year", caaReleaseMbid: Nothing })
+                  , mbidMapping: Just
+                      ( MbidMapping
+                          { releaseMbid: Just "mb-year"
+                          , caaReleaseMbid: Nothing
+                          }
+                      )
                   , genre: Nothing
                   , label: Nothing
                   }
               }
           )
         upsertReleaseMetadata conn "mb-year" Nothing Nothing (Just 1994)
-        listens <- getScrobbles conn 10 0 (Just { field: FilterYear, value: "1994" }) Nothing
+        listens <- getScrobbles conn 10 0
+          (Just { field: FilterYear, value: "1994" })
+          Nothing
         length listens `shouldEqual` 1
-        listensNone <- getScrobbles conn 10 0 (Just { field: FilterYear, value: "1999" }) Nothing
+        listensNone <- getScrobbles conn 10 0
+          (Just { field: FilterYear, value: "1999" })
+          Nothing
         length listensNone `shouldEqual` 0
 
-      it "filters by track and searches across track, artist, release, and label" do
-        conn <- connect ":memory:"
-        initDb conn
-        initReleaseMetadata conn
-        upsertScrobble conn
-          ( Listen
-              { listenedAt: Just 300
-              , trackMetadata: TrackMetadata
-                  { trackName: Just "Neon Skyline"
-                  , artistName: Just "Andy Shauf"
-                  , releaseName: Just "The Neon Skyline"
-                  , mbidMapping: Just (MbidMapping { releaseMbid: Just "search-mbid", caaReleaseMbid: Nothing })
-                  , genre: Nothing
-                  , label: Nothing
-                  }
-              }
-          )
-        upsertReleaseMetadata conn "search-mbid" Nothing (Just "Anti-") (Just 2020)
-        exact <- getScrobbles conn 10 0 (Just { field: FilterTrack, value: "Neon Skyline" }) Nothing
-        byArtist <- getScrobbles conn 10 0 Nothing (Just "andy")
-        byRelease <- getScrobbles conn 10 0 Nothing (Just "the neon")
-        byLabel <- getScrobbles conn 10 0 Nothing (Just "anti-")
-        length exact `shouldEqual` 1
-        length byArtist `shouldEqual` 1
-        length byRelease `shouldEqual` 1
-        length byLabel `shouldEqual` 1
+      it
+        "filters by track and searches across track, artist, release, and label"
+        do
+          conn <- connect ":memory:"
+          initDb conn
+          initReleaseMetadata conn
+          upsertScrobble conn
+            ( Listen
+                { listenedAt: Just 300
+                , trackMetadata: TrackMetadata
+                    { trackName: Just "Neon Skyline"
+                    , artistName: Just "Andy Shauf"
+                    , releaseName: Just "The Neon Skyline"
+                    , mbidMapping: Just
+                        ( MbidMapping
+                            { releaseMbid: Just "search-mbid"
+                            , caaReleaseMbid: Nothing
+                            }
+                        )
+                    , genre: Nothing
+                    , label: Nothing
+                    }
+                }
+            )
+          upsertReleaseMetadata conn "search-mbid" Nothing (Just "Anti-")
+            (Just 2020)
+          exact <- getScrobbles conn 10 0
+            (Just { field: FilterTrack, value: "Neon Skyline" })
+            Nothing
+          byArtist <- getScrobbles conn 10 0 Nothing (Just "andy")
+          byRelease <- getScrobbles conn 10 0 Nothing (Just "the neon")
+          byLabel <- getScrobbles conn 10 0 Nothing (Just "anti-")
+          length exact `shouldEqual` 1
+          length byArtist `shouldEqual` 1
+          length byRelease `shouldEqual` 1
+          length byLabel `shouldEqual` 1
 
     describe "getOldestTs" do
       let
@@ -688,7 +835,10 @@ main = runSpecAndExitProcess [ consoleReporter ] do
               { trackName: Just "T"
               , artistName: Just "A"
               , releaseName: Just "R"
-              , mbidMapping: Just (MbidMapping { releaseMbid: Just mbid, caaReleaseMbid: Nothing })
+              , mbidMapping: Just
+                  ( MbidMapping
+                      { releaseMbid: Just mbid, caaReleaseMbid: Nothing }
+                  )
               , genre: Nothing
               , label: Nothing
               }
@@ -706,7 +856,8 @@ main = runSpecAndExitProcess [ consoleReporter ] do
         initDb conn
         initReleaseMetadata conn
         upsertScrobble conn (listenWith 2000 "enriched")
-        upsertReleaseMetadata conn "enriched" (Just "Rock") (Just "Label") (Just 2020)
+        upsertReleaseMetadata conn "enriched" (Just "Rock") (Just "Label")
+          (Just 2020)
         mbids <- getUnenrichedMbids conn 10
         mbids `shouldEqual` []
 
@@ -738,7 +889,10 @@ main = runSpecAndExitProcess [ consoleReporter ] do
               { trackName: Just "T"
               , artistName: Just "A"
               , releaseName: Just "R"
-              , mbidMapping: Just (MbidMapping { releaseMbid: Just mbid, caaReleaseMbid: Nothing })
+              , mbidMapping: Just
+                  ( MbidMapping
+                      { releaseMbid: Just mbid, caaReleaseMbid: Nothing }
+                  )
               , genre: Nothing
               , label: Nothing
               }
@@ -779,14 +933,20 @@ main = runSpecAndExitProcess [ consoleReporter ] do
                   { trackName: Just "Song"
                   , artistName: Just "My Artist"
                   , releaseName: Just "My Album"
-                  , mbidMapping: Just (MbidMapping { releaseMbid: Just "ar-mbid", caaReleaseMbid: Nothing })
+                  , mbidMapping: Just
+                      ( MbidMapping
+                          { releaseMbid: Just "ar-mbid"
+                          , caaReleaseMbid: Nothing
+                          }
+                      )
                   , genre: Nothing
                   , label: Nothing
                   }
               }
           )
         result <- getArtistReleasesByMbids conn [ "ar-mbid" ]
-        Object.lookup "ar-mbid" result `shouldEqual` Just { artist: "My Artist", release: "My Album" }
+        Object.lookup "ar-mbid" result `shouldEqual` Just
+          { artist: "My Artist", release: "My Album" }
 
   describe "Corpus Backup" do
     describe "dbBaseName" do
@@ -903,7 +1063,12 @@ main = runSpecAndExitProcess [ consoleReporter ] do
             m.trackName `shouldEqual` Just "Test Track"
             m.artistName `shouldEqual` Just "Test Artist"
             m.releaseName `shouldEqual` Just "Test Album"
-            m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Just "album-mbid-123", caaReleaseMbid: Just "album-mbid-123" })
+            m.mbidMapping `shouldEqual` Just
+              ( MbidMapping
+                  { releaseMbid: Just "album-mbid-123"
+                  , caaReleaseMbid: Just "album-mbid-123"
+                  }
+              )
 
       it "treats empty album MBID as Nothing" do
         let
@@ -920,7 +1085,8 @@ main = runSpecAndExitProcess [ consoleReporter ] do
           Nothing ->
             fail "Expected Just Listen, got Nothing"
           Just (Listen { trackMetadata: TrackMetadata m }) ->
-            m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Nothing, caaReleaseMbid: Nothing })
+            m.mbidMapping `shouldEqual` Just
+              (MbidMapping { releaseMbid: Nothing, caaReleaseMbid: Nothing })
 
       it "skips nowplaying tracks (no date field)" do
         let
@@ -975,7 +1141,12 @@ main = runSpecAndExitProcess [ consoleReporter ] do
           Nothing ->
             fail "Expected Just Listen, got Nothing"
           Just (Listen { trackMetadata: TrackMetadata m }) ->
-            m.mbidMapping `shouldEqual` Just (MbidMapping { releaseMbid: Just "mbid-xyz", caaReleaseMbid: Just "mbid-xyz" })
+            m.mbidMapping `shouldEqual` Just
+              ( MbidMapping
+                  { releaseMbid: Just "mbid-xyz"
+                  , caaReleaseMbid: Just "mbid-xyz"
+                  }
+              )
 
       it "inserts and retrieves a Last.fm-style listen from the database" do
         conn <- connect ":memory:"

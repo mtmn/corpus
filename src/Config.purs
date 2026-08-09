@@ -1,22 +1,33 @@
-module Config where
+module Config
+  ( AppConfig
+  , S3Config
+  , SmtpConfig
+  , UserConfig
+  , UserEntry
+  , defaultUserConfig
+  , fillUserConfigFromEnv
+  , loadConfig
+  , s3ConfigFromUser
+  ) where
 
 import Prelude
 
-import Data.Argonaut.Core (Json)
-import Data.Function.Uncurried (Fn3, runFn3)
+import Control.Monad.Error.Class (throwError)
 import Data.Argonaut (decodeJson, (.:), (.:?))
+import Data.Argonaut.Core (Json)
 import Data.Either (Either(..))
+import Data.Function.Uncurried (Fn3, runFn3)
 import Data.Int (fromString) as Data.Int
 import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing)
 import Data.String (joinWith)
 import Data.Traversable (traverse)
 import Effect (Effect)
-import Control.Monad.Error.Class (throwError)
 import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Node.Process (cwd, lookupEnv)
 
+-- | Per-user runtime configuration after environment values are resolved.
 type UserConfig =
   { listenbrainzUser :: Maybe String
   , lastfmUser :: Maybe String
@@ -35,12 +46,14 @@ type UserConfig =
   , backupIntervalHours :: Int
   }
 
+-- | A configured user and their URL slug.
 type UserEntry =
   { slug :: String
   , name :: Maybe String
   , config :: UserConfig
   }
 
+-- | Process-wide configuration and configured users.
 type AppConfig =
   { port :: Int
   , host :: String
@@ -54,7 +67,7 @@ type AppConfig =
   , users :: Array UserEntry
   }
 
--- SMTP settings for notification email (SMTP_* env vars).
+-- | SMTP settings for notification email.
 type SmtpConfig =
   { host :: Maybe String
   , port :: Int
@@ -63,6 +76,7 @@ type SmtpConfig =
   , from :: Maybe String
   }
 
+-- | S3-compatible object storage settings.
 type S3Config =
   { bucket :: Maybe String
   , region :: String
@@ -72,6 +86,7 @@ type S3Config =
   , addressingStyle :: Maybe String
   }
 
+-- | Extract object-storage settings from a user configuration.
 s3ConfigFromUser :: UserConfig -> S3Config
 s3ConfigFromUser cfg =
   { bucket: cfg.s3Bucket
@@ -83,6 +98,7 @@ s3ConfigFromUser cfg =
   }
 
 -- Defaults for a self-registered user; creds and DB path are filled by fillUserConfigFromEnv.
+-- | Create defaults for a newly self-registered user.
 defaultUserConfig :: String -> Maybe String -> Maybe String -> UserConfig
 defaultUserConfig databaseFile listenbrainzUser lastfmUser =
   { listenbrainzUser
@@ -105,6 +121,7 @@ defaultUserConfig databaseFile listenbrainzUser lastfmUser =
 foreign import loadConfigImpl
   :: Fn3 String (String -> Effect Unit) (Json -> Effect Unit) (Effect Unit)
 
+-- | Load, resolve, and validate application configuration.
 loadConfig :: String -> Aff AppConfig
 loadConfig path = do
   json <- makeAff \cb ->
@@ -145,7 +162,8 @@ loadConfig path = do
     metricsEnabled = metricsEnabledStr == Just "true"
     corsOrigin = fromMaybe "*" corsOriginStr
     registrationEnabled = registrationEnabledStr == Just "true"
-    registrationsDb = resolvePath (fromMaybe "registrations.db" registrationsDbEnv)
+    registrationsDb = resolvePath
+      (fromMaybe "registrations.db" registrationsDbEnv)
     smtp =
       { host: smtpHost
       , port: fromMaybe 587 (smtpPortStr >>= Data.Int.fromString)
@@ -170,6 +188,7 @@ loadConfig path = do
     Right cfg -> pure cfg
 
 -- Fills shared credentials and resolves the database path from the environment.
+-- | Fill shared credentials and resolve the database path from the environment.
 fillUserConfigFromEnv :: UserConfig -> Aff UserConfig
 fillUserConfigFromEnv cfg = do
   lastfmApiKey <- liftEffect $ lookupEnv "LASTFM_API_KEY"
@@ -211,19 +230,27 @@ validateUserEntry entry =
     c = entry.config
     label = if entry.slug == "" then "root" else entry.slug
     lfmMissing =
-      if isJust c.lastfmUser && isNothing c.lastfmApiKey then [ "LASTFM_API_KEY" ]
+      if isJust c.lastfmUser && isNothing c.lastfmApiKey then
+        [ "LASTFM_API_KEY" ]
       else []
     s3Missing =
       if c.coverCacheEnabled || c.backupEnabled then
         (if isNothing c.s3Bucket then [ "S3_BUCKET" ] else [])
-          <> (if isNothing c.awsAccessKeyId then [ "AWS_ACCESS_KEY_ID" ] else [])
-          <> (if isNothing c.awsSecretAccessKey then [ "AWS_SECRET_ACCESS_KEY" ] else [])
+          <>
+            (if isNothing c.awsAccessKeyId then [ "AWS_ACCESS_KEY_ID" ] else [])
+          <>
+            ( if isNothing c.awsSecretAccessKey then [ "AWS_SECRET_ACCESS_KEY" ]
+              else []
+            )
           <> (if isNothing c.awsEndpointUrl then [ "AWS_ENDPOINT_URL" ] else [])
       else []
     missing = lfmMissing <> s3Missing
   in
     if missing == [] then Right entry
-    else Left ("User '" <> label <> "': missing required env vars: " <> joinWith ", " missing)
+    else Left
+      ( "User '" <> label <> "': missing required env vars: " <> joinWith ", "
+          missing
+      )
 
 mapLeft :: forall a b c. (a -> c) -> Either a b -> Either c b
 mapLeft f (Left a) = Left (f a)

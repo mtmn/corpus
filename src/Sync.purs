@@ -20,19 +20,44 @@ import Data.Foldable (foldM, for_)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (Pattern(..), stripPrefix)
 import Data.Time.Duration (Milliseconds(..))
-import Db (Connection, checkExists, getOldestTs, upsertScrobble, withTransaction)
+import Db
+  ( Connection
+  , checkExists
+  , getOldestTs
+  , upsertScrobble
+  , withTransaction
+  )
 import Effect.Aff (Aff, delay, throwError, try)
 import Effect.Aff.AVar (AVar)
-import Effect.Aff.Retry (RetryStatus(..), exponentialBackoff, limitRetries, recovering)
+import Effect.Aff.Retry
+  ( RetryStatus(..)
+  , exponentialBackoff
+  , limitRetries
+  , recovering
+  )
 import Effect.Class (liftEffect)
 import Effect.Exception (error, message)
-import Fetch (fetch, Method(GET))
+import Fetch (Method(GET), fetch)
 import Fetch.Argonaut.Json (fromJson)
-import JSURI (encodeURIComponent)
 import Http (apiTimeout, withTimeout)
+import JSURI (encodeURIComponent)
 import Log as Log
 import Metrics as Metrics
-import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..), LastfmResponse(..), LastfmRecentTracks(..), LastfmAttr(..), LastfmTracks(..), LastfmArtist(..), LastfmAlbum(..), LastfmDate(..), LastfmTrack(..))
+import Types
+  ( LastfmAlbum(..)
+  , LastfmArtist(..)
+  , LastfmAttr(..)
+  , LastfmDate(..)
+  , LastfmRecentTracks(..)
+  , LastfmResponse(..)
+  , LastfmTrack(..)
+  , LastfmTracks(..)
+  , Listen(..)
+  , ListenBrainzResponse(..)
+  , MbidMapping(..)
+  , Payload(..)
+  , TrackMetadata(..)
+  )
 
 -- | Result of processing a batch of listens/scrobbles.
 type SyncResult =
@@ -61,17 +86,21 @@ processTracks conn listens trackMinTs = do
     Log.warn "Skipping scrobble without timestamp"
     pure s
 
+-- | Build the ListenBrainz listens endpoint for a username.
 listenBrainzUrl :: String -> String
-listenBrainzUrl username = "https://api.listenbrainz.org/1/user/" <> username <> "/listens"
+listenBrainzUrl username = "https://api.listenbrainz.org/1/user/" <> username <>
+  "/listens"
 
 -- | Retry an action with exponential backoff, but only for transient errors.
 -- | Parse errors and other permanent failures are not retried.
 withRetry :: forall a. String -> Aff a -> Aff a
-withRetry label action = recovering policy [ \_ err -> pure $ isTransientError err ] \(RetryStatus status) -> do
-  when (status.iterNumber > 0)
-    $ Log.warn
-    $ label <> " failed, retry attempt " <> show status.iterNumber
-  action
+withRetry label action = recovering policy
+  [ \_ err -> pure $ isTransientError err ]
+  \(RetryStatus status) -> do
+    when (status.iterNumber > 0)
+      $ Log.warn
+      $ label <> " failed, retry attempt " <> show status.iterNumber
+    action
   where
   policy = exponentialBackoff (Milliseconds 1000.0) <> limitRetries 5
   isTransientError err = not isPermanent
@@ -88,26 +117,35 @@ withRetry label action = recovering policy [ \_ err -> pure $ isTransientError e
 fetchListenBrainzUrl :: String -> Aff String
 fetchListenBrainzUrl url = withRetry "ListenBrainz fetch" do
   let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
-  fr <- withTimeout apiTimeout "ListenBrainz fetch" $ fetch url { method: GET, headers }
+  fr <- withTimeout apiTimeout "ListenBrainz fetch" $ fetch url
+    { method: GET, headers }
   if fr.status == 200 then
     withTimeout apiTimeout "ListenBrainz response" fr.text
   else
     throwError $ error $ "ListenBrainz API returned status " <> show fr.status
 
-fetchLastfmPage :: String -> String -> Int -> Maybe Int -> Aff { tracks :: Array Json, totalPages :: Int }
+-- | Fetch and decode one Last.fm recent-tracks page.
+fetchLastfmPage
+  :: String
+  -> String
+  -> Int
+  -> Maybe Int
+  -> Aff { tracks :: Array Json, totalPages :: Int }
 fetchLastfmPage apiKey lfmUser page mTo = withRetry "Last.fm fetch" do
   let
     toParam = case mTo of
       Just ts -> "&to=" <> show ts
       Nothing -> ""
-    baseUrl = "https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user="
-      <> (fromMaybe lfmUser $ encodeURIComponent lfmUser)
-      <> "&format=json&limit=200&page="
-      <> show page
-      <> toParam
+    baseUrl =
+      "https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user="
+        <> (fromMaybe lfmUser $ encodeURIComponent lfmUser)
+        <> "&format=json&limit=200&page="
+        <> show page
+        <> toParam
     url = baseUrl <> "&api_key=" <> apiKey
   let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
-  fr <- withTimeout apiTimeout "Last.fm sync fetch" $ fetch url { method: GET, headers }
+  fr <- withTimeout apiTimeout "Last.fm sync fetch" $ fetch url
+    { method: GET, headers }
   if fr.status == 200 then do
     json <- fromJson fr.json
     case parseLastfmResponse json of
@@ -119,9 +157,15 @@ fetchLastfmPage apiKey lfmUser page mTo = withRetry "Last.fm fetch" do
   else do
     throwError $ error ("Last.fm API returned status " <> show fr.status)
 
+-- | Parse a Last.fm page into tracks and its total-page count.
 parseLastfmResponse :: Json -> Maybe { tracks :: Array Json, totalPages :: Int }
 parseLastfmResponse json = case decodeJson json of
-  Right (LastfmResponse { recenttracks: LastfmRecentTracks { track, attr: LastfmAttr { totalPages } } }) ->
+  Right
+    ( LastfmResponse
+        { recenttracks: LastfmRecentTracks
+            { track, attr: LastfmAttr { totalPages } }
+        }
+    ) ->
     let
       tracks = case track of
         LastfmTrackArray' ts -> ts
@@ -131,13 +175,18 @@ parseLastfmResponse json = case decodeJson json of
   Left _ ->
     Nothing
 
+-- | Convert a Last.fm track JSON value into a listen when it has a timestamp.
 lastfmTrackToListen :: Json -> Maybe Listen
 lastfmTrackToListen json = case decodeJson json of
-  Right (LastfmTrack { name, artist: LastfmArtist { text: artistName }, album, date }) -> do
+  Right
+    ( LastfmTrack
+        { name, artist: LastfmArtist { text: artistName }, album, date }
+    ) -> do
     ts <- date >>= \(LastfmDate { uts }) -> Just uts
     let
       releaseName = album >>= \(LastfmAlbum { text }) -> text
-      releaseMbid = album >>= \(LastfmAlbum { mbid }) -> if mbid == "" then Nothing else Just mbid
+      releaseMbid = album >>= \(LastfmAlbum { mbid }) ->
+        if mbid == "" then Nothing else Just mbid
     pure $ Listen
       { listenedAt: Just ts
       , trackMetadata: TrackMetadata
@@ -161,10 +210,12 @@ recordSyncSuccess slug source n = do
   when (n > 0) $ liftEffect $ Metrics.incSyncScrobbles slug source n
   liftEffect $ Metrics.setSyncLastSuccess slug source
 
+-- | Perform one ListenBrainz synchronization pass.
 lbSync :: Connection -> String -> String -> AVar Unit -> Aff Unit
 lbSync conn username slug writeLock = void do
   Log.info $ "Starting ListenBrainz sync for " <> username
-  result <- try $ fetchListenBrainzUrl (listenBrainzUrl username <> "?count=100")
+  result <- try $ fetchListenBrainzUrl
+    (listenBrainzUrl username <> "?count=100")
   case result of
     Left err -> do
       Log.error $ "Sync fetch error: " <> message err
@@ -180,22 +231,30 @@ lbSync conn username slug writeLock = void do
             added = syncResult.added
             minTs = syncResult.minTs
             hitCount = syncResult.hitCount
-          Log.info $ "ListenBrainz batch 1: added " <> show added <> ", " <> show hitCount <> " already present."
+          Log.info $ "ListenBrainz batch 1: added " <> show added <> ", "
+            <> show hitCount
+            <> " already present."
           let allExist = hitCount == length listens && not (null listens)
           if allExist || null listens then do
-            when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added " <> show added <> " new scrobbles."
+            when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added "
+              <> show added
+              <> " new scrobbles."
             recordSyncSuccess slug "listenbrainz" added
           else do
             total <- paginateUntilDone 2 minTs added
-            Log.info $ "ListenBrainz sync complete. Added " <> show total <> " new scrobbles."
+            Log.info $ "ListenBrainz sync complete. Added " <> show total <>
+              " new scrobbles."
             recordSyncSuccess slug "listenbrainz" total
   where
   paginateUntilDone batchNum minTs acc = case minTs of
     Nothing ->
       pure acc
     Just ts -> do
-      Log.info $ "Fetching ListenBrainz batch " <> show batchNum <> " (before " <> show ts <> ")..."
-      result <- try $ fetchListenBrainzUrl (listenBrainzUrl username <> "?count=100&max_ts=" <> show ts)
+      Log.info $ "Fetching ListenBrainz batch " <> show batchNum <> " (before "
+        <> show ts
+        <> ")..."
+      result <- try $ fetchListenBrainzUrl
+        (listenBrainzUrl username <> "?count=100&max_ts=" <> show ts)
       case result of
         Left err -> do
           Log.error $ "Sync fetch error: " <> message err
@@ -206,12 +265,17 @@ lbSync conn username slug writeLock = void do
               Log.error $ "Sync parse error: " <> show err
               pure acc
             Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
-              syncResult <- withTransaction conn writeLock (processListens listens)
+              syncResult <- withTransaction conn writeLock
+                (processListens listens)
               let
                 added = syncResult.added
                 newMinTs = syncResult.minTs
                 hitCount = syncResult.hitCount
-              Log.info $ "ListenBrainz batch " <> show batchNum <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+              Log.info $ "ListenBrainz batch " <> show batchNum <> ": added "
+                <> show added
+                <> ", "
+                <> show hitCount
+                <> " already present."
               let allExist = hitCount == length listens && not (null listens)
               if allExist || null listens then
                 pure (acc + added)
@@ -220,11 +284,13 @@ lbSync conn username slug writeLock = void do
 
   processListens listens = processTracks conn listens true
 
+-- | Run ListenBrainz synchronization every minute.
 lbSyncLoop :: Connection -> String -> String -> AVar Unit -> Aff Unit
 lbSyncLoop conn username slug writeLock = forever do
   delay (Milliseconds 60000.0)
   lbSync conn username slug writeLock
 
+-- | Perform one Last.fm synchronization and optional history backfill.
 lfSync :: Connection -> String -> String -> String -> AVar Unit -> Aff Unit
 lfSync conn apiKey lfmUser slug writeLock = do
   void performLastfmSync
@@ -242,43 +308,60 @@ lfSync conn apiKey lfmUser slug writeLock = do
         let
           added = result.added
           hitCount = result.hitCount
-        Log.info $ "Last.fm page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+        Log.info $ "Last.fm page 1/" <> show totalPages <> ": added "
+          <> show added
+          <> ", "
+          <> show hitCount
+          <> " already present."
         let
           validTracks = mapMaybe lastfmTrackToListen tracks
           allExist = hitCount == length validTracks && not (null validTracks)
         if allExist || totalPages <= 1 then do
-          when (added > 0) $ Log.info $ "Last.fm sync complete. Added " <> show added <> " new scrobbles."
+          when (added > 0) $ Log.info $ "Last.fm sync complete. Added "
+            <> show added
+            <> " new scrobbles."
           recordSyncSuccess slug "lastfm" added
         else do
           total <- paginateLastfmUntilDone 2 totalPages Nothing added
-          Log.info $ "Last.fm sync complete. Added " <> show total <> " new scrobbles."
+          Log.info $ "Last.fm sync complete. Added " <> show total <>
+            " new scrobbles."
           recordSyncSuccess slug "lastfm" total
 
   paginateLastfmUntilDone page totalPages mTo acc
     | page > totalPages = pure acc
     | otherwise = do
-        Log.info $ "Fetching Last.fm page " <> show page <> "/" <> show totalPages <> "..."
+        Log.info $ "Fetching Last.fm page " <> show page <> "/"
+          <> show totalPages
+          <> "..."
         res <- try $ fetchLastfmPage apiKey lfmUser page mTo
         case res of
           Left err -> do
             Log.error $ "Last.fm sync fetch error: " <> message err
             pure acc
           Right { tracks } -> do
-            result <- withTransaction conn writeLock (processLastfmTracks tracks)
+            result <- withTransaction conn writeLock
+              (processLastfmTracks tracks)
             let
               added = result.added
               hitCount = result.hitCount
-            Log.info $ "Last.fm page" <> show page <> "/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
+            Log.info $ "Last.fm page" <> show page <> "/" <> show totalPages
+              <> ": added "
+              <> show added
+              <> ", "
+              <> show hitCount
+              <> " already present."
             let
               validTracks = mapMaybe lastfmTrackToListen tracks
-              allExist = hitCount == length validTracks && not (null validTracks)
+              allExist = hitCount == length validTracks && not
+                (null validTracks)
             if allExist || null tracks then pure (acc + added)
             else paginateLastfmUntilDone (page + 1) totalPages mTo (acc + added)
 
   performLastfmBackfill = do
     mOldest <- getOldestTs conn
     for_ mOldest \oldestTs -> do
-      Log.info $ "Checking for Last.fm history before " <> show oldestTs <> "..."
+      Log.info $ "Checking for Last.fm history before " <> show oldestTs <>
+        "..."
       res <- try $ fetchLastfmPage apiKey lfmUser 1 (Just (oldestTs - 1))
       case res of
         Left err ->
@@ -287,17 +370,30 @@ lfSync conn apiKey lfmUser slug writeLock = do
           if null tracks then
             Log.info "No older Last.fm history found."
           else do
-            Log.info $ "Backfilling " <> show totalPages <> " pages of Last.fm history before " <> show oldestTs
-            result <- withTransaction conn writeLock (processLastfmTracks tracks)
+            Log.info $ "Backfilling " <> show totalPages
+              <> " pages of Last.fm history before "
+              <> show oldestTs
+            result <- withTransaction conn writeLock
+              (processLastfmTracks tracks)
             let
               added = result.added
               hitCount = result.hitCount
-            Log.info $ "Last.fm backfill page 1/" <> show totalPages <> ": added " <> show added <> ", " <> show hitCount <> " already present."
-            total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1)) added
-            Log.info $ "Last.fm backfill complete. Added " <> show total <> " older scrobbles."
+            Log.info $ "Last.fm backfill page 1/" <> show totalPages
+              <> ": added "
+              <> show added
+              <> ", "
+              <> show hitCount
+              <> " already present."
+            total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1))
+              added
+            Log.info $ "Last.fm backfill complete. Added " <> show total <>
+              " older scrobbles."
 
-  processLastfmTracks tracks = processTracks conn (mapMaybe lastfmTrackToListen tracks) false
+  processLastfmTracks tracks = processTracks conn
+    (mapMaybe lastfmTrackToListen tracks)
+    false
 
+-- | Run Last.fm synchronization every minute.
 lfSyncLoop :: Connection -> String -> String -> String -> AVar Unit -> Aff Unit
 lfSyncLoop conn apiKey lfmUser slug writeLock = forever do
   delay (Milliseconds 60000.0)

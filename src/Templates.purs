@@ -1,12 +1,17 @@
-module Templates where
+module Templates (indexHtml) where
 
 import Prelude
+
 import Data.String.Common (joinWith)
 
-indexHtml :: Boolean -> String -> Array { slug :: String, name :: String } -> String
+-- | Render the HTML shell and embed the initial frontend configuration.
+indexHtml
+  :: Boolean -> String -> Array { slug :: String, name :: String } -> String
 indexHtml registrationEnabled userSlug allUsers =
   let
-    encodeUser { slug, name } = "{\"slug\":\"" <> slug <> "\",\"name\":\"" <> name <> "\"}"
+    encodeUser { slug, name } = "{\"slug\":\"" <> slug <> "\",\"name\":\""
+      <> name
+      <> "\"}"
     usersJson = "[" <> joinWith "," (map encodeUser allUsers) <> "]"
     registrationEnabledJson = if registrationEnabled then "true" else "false"
   in

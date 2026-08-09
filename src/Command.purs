@@ -1,10 +1,20 @@
-module Command where
+module Command (run) where
 
 import Prelude
 
 import Control.Monad.Error.Class (throwError)
 import Data.Argonaut (parseJson)
-import Data.Argonaut.Core (Json, fromArray, fromBoolean, fromNumber, fromObject, fromString, toArray, toObject, toString)
+import Data.Argonaut.Core
+  ( Json
+  , fromArray
+  , fromBoolean
+  , fromNumber
+  , fromObject
+  , fromString
+  , toArray
+  , toObject
+  , toString
+  )
 import Data.Array (catMaybes, find, snoc)
 import Data.Array as Array
 import Data.Either (Either(..))
@@ -35,7 +45,12 @@ resolvePath defaultDir mDbPath file = case mDbPath of
   Just dir -> dir <> "/" <> file
 
 encodeUserEntry
-  :: { slug :: String, name :: Maybe String, dbFile :: String, lbUser :: Maybe String, lfUser :: Maybe String }
+  :: { slug :: String
+     , name :: Maybe String
+     , dbFile :: String
+     , lbUser :: Maybe String
+     , lfUser :: Maybe String
+     }
   -> Json
 encodeUserEntry e = fromObject $ Object.fromFoldable $ catMaybes
   [ Just $ Tuple "slug" (fromString e.slug)
@@ -54,10 +69,12 @@ readUsersJson :: String -> Aff (Array Json)
 readUsersJson configFile = do
   raw <- FSA.readTextFile UTF8 configFile
   json <- case parseJson raw of
-    Left e -> throwError (error $ "Failed to parse " <> configFile <> ": " <> show e)
+    Left e -> throwError
+      (error $ "Failed to parse " <> configFile <> ": " <> show e)
     Right j -> pure j
   case toObject json >>= Object.lookup "users" >>= toArray of
-    Nothing -> throwError (error "Invalid users.json: expected { users: [...] }")
+    Nothing -> throwError
+      (error "Invalid users.json: expected { users: [...] }")
     Just arr -> pure arr
 
 writeUsersJson :: String -> Array Json -> Aff Unit
@@ -70,11 +87,13 @@ writeUsersJson configFile users =
 printUsage :: Aff Unit
 printUsage = liftEffect do
   log "Usage:"
-  log "  add-user --slug <slug> --db <file> [--name <name>] [--listenbrainz-user <user>] [--lastfm-user <user>]"
+  log
+    "  add-user --slug <slug> --db <file> [--name <name>] [--listenbrainz-user <user>] [--lastfm-user <user>]"
   log "  reset-token --slug <slug>"
   log "  list-users"
   exit' 1
 
+-- | Run the administrative command selected by the process arguments.
 run :: String -> Array String -> Aff Unit
 run configFile args = do
   case Array.uncons args of
@@ -90,13 +109,21 @@ addUser configFile args = do
     mName = getFlag "--name" args
     mLbUser = getFlag "--listenbrainz-user" args
     mLfUser = getFlag "--lastfm-user" args
-  slug <- maybe (liftEffect $ log "Error: --slug is required" *> exit' 1) pure (getFlag "--slug" args)
-  dbFile <- maybe (liftEffect $ log "Error: --db is required" *> exit' 1) pure (getFlag "--db" args)
+  slug <- maybe (liftEffect $ log "Error: --slug is required" *> exit' 1) pure
+    (getFlag "--slug" args)
+  dbFile <- maybe (liftEffect $ log "Error: --db is required" *> exit' 1) pure
+    (getFlag "--db" args)
   users <- readUsersJson configFile
-  when (isJust $ find (\u -> (toObject u >>= Object.lookup "slug" >>= toString) == Just slug) users)
+  when
+    ( isJust $ find
+        (\u -> (toObject u >>= Object.lookup "slug" >>= toString) == Just slug)
+        users
+    )
     $ liftEffect
     $ log ("Error: user '" <> slug <> "' already exists") *> exit' 1
-  let newEntry = encodeUserEntry { slug, name: mName, dbFile, lbUser: mLbUser, lfUser: mLfUser }
+  let
+    newEntry = encodeUserEntry
+      { slug, name: mName, dbFile, lbUser: mLbUser, lfUser: mLfUser }
   writeUsersJson configFile (snoc users newEntry)
   conn <- Db.connect dbFile
   Db.initDb conn
@@ -107,12 +134,27 @@ addUser configFile args = do
 
 resetToken :: String -> Array String -> Aff Unit
 resetToken configFile args = do
-  slug <- maybe (liftEffect $ log "Error: --slug is required" *> exit' 1) pure (getFlag "--slug" args)
+  slug <- maybe (liftEffect $ log "Error: --slug is required" *> exit' 1) pure
+    (getFlag "--slug" args)
   users <- readUsersJson configFile
-  userJson <- maybe (liftEffect $ log ("Error: user '" <> slug <> "' not found") *> exit' 1) pure
-    $ find (\u -> (toObject u >>= Object.lookup "slug" >>= toString) == Just slug) users
-  dbFile <- maybe (throwError $ error $ "Cannot read databaseFile for user '" <> slug <> "'") pure
-    $ toObject userJson >>= Object.lookup "config" >>= toObject >>= Object.lookup "databaseFile" >>= toString
+  userJson <-
+    maybe
+      (liftEffect $ log ("Error: user '" <> slug <> "' not found") *> exit' 1)
+      pure
+      $ find
+          ( \u -> (toObject u >>= Object.lookup "slug" >>= toString) == Just
+              slug
+          )
+          users
+  dbFile <-
+    maybe
+      ( throwError $ error $ "Cannot read databaseFile for user '" <> slug <>
+          "'"
+      )
+      pure
+      $ toObject userJson >>= Object.lookup "config" >>= toObject
+          >>= Object.lookup "databaseFile"
+          >>= toString
   defaultDir <- liftEffect cwd
   mDbPath <- liftEffect $ lookupEnv "DATABASE_PATH"
   let fullPath = resolvePath defaultDir mDbPath dbFile
@@ -126,7 +168,9 @@ listUsers :: String -> Aff Unit
 listUsers configFile = do
   users <- readUsersJson configFile
   liftEffect $ for_ users \u -> do
-    let slug = fromMaybe "(root)" (toObject u >>= Object.lookup "slug" >>= toString)
+    let
+      slug = fromMaybe "(root)"
+        (toObject u >>= Object.lookup "slug" >>= toString)
     let mName = toObject u >>= Object.lookup "name" >>= toString
     log $ case mName of
       Just name -> slug <> " (" <> name <> ")"

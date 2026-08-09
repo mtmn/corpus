@@ -2,22 +2,34 @@ module Types where
 
 import Prelude
 
-import Data.Argonaut (class DecodeJson, class EncodeJson, decodeJson, encodeJson, (.:), (.:?), (:=), (~>))
+import Data.Argonaut
+  ( class DecodeJson
+  , class EncodeJson
+  , decodeJson
+  , encodeJson
+  , (.:)
+  , (.:?)
+  , (:=)
+  , (~>)
+  )
+import Data.Argonaut.Core (Json, jsonEmptyObject, toArray, toNumber, toString)
 import Data.Argonaut.Decode.Error (JsonDecodeError(..))
 import Data.Either (Either(..))
-import Data.Argonaut.Core (Json, toArray, jsonEmptyObject, toNumber, toString)
-import Data.Int (fromString, fromNumber)
-import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Generic.Rep (class Generic)
+import Data.Int (fromNumber, fromString)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Show.Generic (genericShow)
 
+-- | A ListenBrainz submission request body.
 newtype ListenBrainzSubmitPayload = ListenBrainzSubmitPayload
   { listenType :: String
   , payload :: Array ListenBrainzSubmitListen
   }
 
 derive instance eqListenBrainzSubmitPayload :: Eq ListenBrainzSubmitPayload
-derive instance genericListenBrainzSubmitPayload :: Generic ListenBrainzSubmitPayload _
+derive instance genericListenBrainzSubmitPayload ::
+  Generic ListenBrainzSubmitPayload _
+
 instance showListenBrainzSubmitPayload :: Show ListenBrainzSubmitPayload where
   show = genericShow
 
@@ -28,13 +40,16 @@ instance DecodeJson ListenBrainzSubmitPayload where
     payload <- obj .: "payload"
     pure $ ListenBrainzSubmitPayload { listenType, payload }
 
+-- | One listen submitted to ListenBrainz.
 newtype ListenBrainzSubmitListen = ListenBrainzSubmitListen
   { listenedAt :: Maybe Int
   , trackMetadata :: ListenBrainzSubmitTrackMetadata
   }
 
 derive instance eqListenBrainzSubmitListen :: Eq ListenBrainzSubmitListen
-derive instance genericListenBrainzSubmitListen :: Generic ListenBrainzSubmitListen _
+derive instance genericListenBrainzSubmitListen ::
+  Generic ListenBrainzSubmitListen _
+
 instance showListenBrainzSubmitListen :: Show ListenBrainzSubmitListen where
   show = genericShow
 
@@ -45,6 +60,7 @@ instance DecodeJson ListenBrainzSubmitListen where
     trackMetadata <- obj .: "track_metadata"
     pure $ ListenBrainzSubmitListen { listenedAt, trackMetadata }
 
+-- | Track metadata nested in a ListenBrainz submission.
 newtype ListenBrainzSubmitTrackMetadata = ListenBrainzSubmitTrackMetadata
   { trackName :: String
   , artistName :: String
@@ -52,9 +68,14 @@ newtype ListenBrainzSubmitTrackMetadata = ListenBrainzSubmitTrackMetadata
   , additionalInfo :: Maybe ListenBrainzAdditionalInfo
   }
 
-derive instance eqListenBrainzSubmitTrackMetadata :: Eq ListenBrainzSubmitTrackMetadata
-derive instance genericListenBrainzSubmitTrackMetadata :: Generic ListenBrainzSubmitTrackMetadata _
-instance showListenBrainzSubmitTrackMetadata :: Show ListenBrainzSubmitTrackMetadata where
+derive instance eqListenBrainzSubmitTrackMetadata ::
+  Eq ListenBrainzSubmitTrackMetadata
+
+derive instance genericListenBrainzSubmitTrackMetadata ::
+  Generic ListenBrainzSubmitTrackMetadata _
+
+instance showListenBrainzSubmitTrackMetadata ::
+  Show ListenBrainzSubmitTrackMetadata where
   show = genericShow
 
 instance DecodeJson ListenBrainzSubmitTrackMetadata where
@@ -64,8 +85,10 @@ instance DecodeJson ListenBrainzSubmitTrackMetadata where
     artistName <- obj .: "artist_name"
     releaseName <- obj .:? "release_name"
     additionalInfo <- obj .:? "additional_info"
-    pure $ ListenBrainzSubmitTrackMetadata { trackName, artistName, releaseName, additionalInfo }
+    pure $ ListenBrainzSubmitTrackMetadata
+      { trackName, artistName, releaseName, additionalInfo }
 
+-- | Optional provider identifiers attached to submitted track metadata.
 newtype ListenBrainzAdditionalInfo = ListenBrainzAdditionalInfo
   { releaseMbid :: Maybe String
   , artistMbids :: Maybe (Array String)
@@ -73,7 +96,9 @@ newtype ListenBrainzAdditionalInfo = ListenBrainzAdditionalInfo
   }
 
 derive instance eqListenBrainzAdditionalInfo :: Eq ListenBrainzAdditionalInfo
-derive instance genericListenBrainzAdditionalInfo :: Generic ListenBrainzAdditionalInfo _
+derive instance genericListenBrainzAdditionalInfo ::
+  Generic ListenBrainzAdditionalInfo _
+
 instance showListenBrainzAdditionalInfo :: Show ListenBrainzAdditionalInfo where
   show = genericShow
 
@@ -83,8 +108,10 @@ instance DecodeJson ListenBrainzAdditionalInfo where
     releaseMbid <- obj .:? "release_mbid"
     artistMbids <- obj .:? "artist_mbids"
     recordingMbid <- obj .:? "recording_mbid"
-    pure $ ListenBrainzAdditionalInfo { releaseMbid, artistMbids, recordingMbid }
+    pure $ ListenBrainzAdditionalInfo
+      { releaseMbid, artistMbids, recordingMbid }
 
+-- | A paged ListenBrainz listen response.
 newtype ListenBrainzResponse = ListenBrainzResponse
   { payload :: Payload
   }
@@ -105,6 +132,7 @@ instance EncodeJson ListenBrainzResponse where
     "payload" := encodeJson payload
       ~> jsonEmptyObject
 
+-- | The listen array contained in a ListenBrainz response.
 newtype Payload = Payload
   { listens :: Array Listen
   }
@@ -125,6 +153,7 @@ instance EncodeJson Payload where
     "listens" := encodeJson listens
       ~> jsonEmptyObject
 
+-- | Corpus's normalized representation of a scrobble.
 newtype Listen = Listen
   { trackMetadata :: TrackMetadata
   , listenedAt :: Maybe Int
@@ -148,6 +177,7 @@ instance EncodeJson Listen where
       ~> "listened_at" := encodeJson listenedAt
       ~> jsonEmptyObject
 
+-- | Metadata for a listen returned by ListenBrainz.
 newtype TrackMetadata = TrackMetadata
   { trackName :: Maybe String
   , artistName :: Maybe String
@@ -171,10 +201,14 @@ instance DecodeJson TrackMetadata where
     mbidMapping <- obj .:? "mbid_mapping"
     genre <- obj .:? "genre"
     label <- obj .:? "label"
-    pure $ TrackMetadata { trackName, artistName, releaseName, mbidMapping, genre, label }
+    pure $ TrackMetadata
+      { trackName, artistName, releaseName, mbidMapping, genre, label }
 
 instance EncodeJson TrackMetadata where
-  encodeJson (TrackMetadata { trackName, artistName, releaseName, mbidMapping, genre, label }) =
+  encodeJson
+    ( TrackMetadata
+        { trackName, artistName, releaseName, mbidMapping, genre, label }
+    ) =
     "track_name" := encodeJson trackName
       ~> "artist_name" := encodeJson artistName
       ~> "release_name" := encodeJson releaseName
@@ -183,6 +217,7 @@ instance EncodeJson TrackMetadata where
       ~> "label" := encodeJson label
       ~> jsonEmptyObject
 
+-- | MusicBrainz identifiers associated with a track.
 newtype MbidMapping = MbidMapping
   { releaseMbid :: Maybe String
   , caaReleaseMbid :: Maybe String
@@ -208,6 +243,7 @@ instance EncodeJson MbidMapping where
 
 -- Last.fm API types
 
+-- | Pagination attributes from a Last.fm recent-tracks response.
 newtype LastfmAttr = LastfmAttr
   { totalPages :: Int
   }
@@ -230,15 +266,19 @@ instance decodeJsonLastfmAttr :: DecodeJson LastfmAttr where
       Just n -> pure $ LastfmAttr { totalPages: n }
       Nothing -> Left $ TypeMismatch "Invalid totalPages"
 
+-- | A Last.fm track collection represented as an array.
 newtype LastfmTrackArray = LastfmTrackArray (Array Json)
+-- | A Last.fm track collection represented as a single JSON object.
 newtype LastfmTrackSingle = LastfmTrackSingle Json
 
+-- | The two shapes Last.fm uses for recent-track results.
 data LastfmTracks = LastfmTrackArray' (Array Json) | LastfmTrackSingle' Json
 
 instance showLastfmTracks :: Show LastfmTracks where
   show (LastfmTrackArray' _) = "LastfmTrackArray' _"
   show (LastfmTrackSingle' _) = "LastfmTrackSingle' _"
 
+-- | The recent-tracks object in a Last.fm API response.
 newtype LastfmRecentTracks = LastfmRecentTracks
   { track :: LastfmTracks
   , attr :: LastfmAttr
@@ -264,6 +304,7 @@ instance decodeJsonLastfmRecentTracks :: DecodeJson LastfmRecentTracks where
             pure $ LastfmTrackSingle' trackJson
     pure $ LastfmRecentTracks { track: tracks, attr }
 
+-- | A decoded Last.fm recent-tracks response.
 newtype LastfmResponse = LastfmResponse
   { recenttracks :: LastfmRecentTracks
   }
@@ -278,6 +319,7 @@ instance decodeJsonLastfmResponse :: DecodeJson LastfmResponse where
     recenttracks <- obj .: "recenttracks"
     pure $ LastfmResponse { recenttracks }
 
+-- | The artist field returned by Last.fm.
 newtype LastfmArtist = LastfmArtist { text :: String }
 
 derive instance genericLastfmArtist :: Generic LastfmArtist _
@@ -290,6 +332,7 @@ instance decodeJsonLastfmArtist :: DecodeJson LastfmArtist where
     text <- obj .: "#text"
     pure $ LastfmArtist { text }
 
+-- | The album field returned by Last.fm.
 newtype LastfmAlbum = LastfmAlbum
   { text :: Maybe String
   , mbid :: String
@@ -306,6 +349,7 @@ instance decodeJsonLastfmAlbum :: DecodeJson LastfmAlbum where
     mbid <- fromMaybe "" <$> obj .:? "mbid"
     pure $ LastfmAlbum { text, mbid }
 
+-- | A Last.fm Unix timestamp wrapper.
 newtype LastfmDate = LastfmDate { uts :: Int }
 
 derive instance genericLastfmDate :: Generic LastfmDate _
@@ -320,6 +364,7 @@ instance decodeJsonLastfmDate :: DecodeJson LastfmDate where
       Just n -> pure $ LastfmDate { uts: n }
       Nothing -> Left $ TypeMismatch $ "Invalid uts: " <> utsStr
 
+-- | One track in a Last.fm recent-tracks response.
 newtype LastfmTrack = LastfmTrack
   { name :: String
   , artist :: LastfmArtist
@@ -340,6 +385,7 @@ instance decodeJsonLastfmTrack :: DecodeJson LastfmTrack where
     date <- obj .:? "date"
     pure $ LastfmTrack { name, artist, album, date }
 
+-- | One named aggregate in the statistics response.
 newtype StatsEntry = StatsEntry
   { name :: String
   , count :: Int
@@ -363,6 +409,7 @@ instance EncodeJson StatsEntry where
       ~> "count" := encodeJson count
       ~> jsonEmptyObject
 
+-- | Aggregated listening statistics returned by the API.
 newtype Stats = Stats
   { totalScrobbles :: Int
   , genres :: Array StatsEntry

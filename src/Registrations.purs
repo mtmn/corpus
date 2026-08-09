@@ -1,4 +1,15 @@
-module Registrations where
+module Registrations
+  ( NewRegistration
+  , Registration
+  , getById
+  , initRegistrations
+  , insertRegistration
+  , isReservedSlug
+  , listByStatus
+  , setStatus
+  , slugTaken
+  , validSlugFormat
+  ) where
 
 import Prelude
 
@@ -20,7 +31,7 @@ import Effect.Class (liftEffect)
 import Effect.Now (now)
 import Foreign.Object as Object
 
--- A registration request. status is 'pending' | 'approved' | 'denied'; createdAt is unix seconds.
+-- | A registration request; timestamps are Unix seconds.
 type Registration =
   { id :: String
   , slug :: String
@@ -32,7 +43,7 @@ type Registration =
   , createdAt :: Int
   }
 
--- Fields supplied by the public registration form.
+-- | Fields supplied by the public registration form.
 type NewRegistration =
   { slug :: String
   , displayName :: String
@@ -65,15 +76,17 @@ reservedSlugs =
 slugRegex :: Maybe Regex
 slugRegex = hush $ regex "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" noFlags
 
--- Slug must be lowercase alphanumeric/dashes (not starting/ending with a dash).
+-- | Test whether a slug is lowercase alphanumeric/dashes and has valid edges.
 validSlugFormat :: String -> Boolean
 validSlugFormat slug = case slugRegex of
   Nothing -> false
   Just re -> test re slug
 
+-- | Test whether a slug collides with a built-in route.
 isReservedSlug :: String -> Boolean
 isReservedSlug slug = elem slug reservedSlugs
 
+-- | Create the registrations table when necessary.
 initRegistrations :: Connection -> Aff Unit
 initRegistrations conn =
   run conn
@@ -86,6 +99,7 @@ nowSeconds = do
   pure $ Int.round (ms / 1000.0)
 
 -- True if a pending or approved registration already claims this slug (denied ones don't).
+-- | Test whether a pending or approved registration owns a slug.
 slugTaken :: Connection -> String -> Aff Boolean
 slugTaken conn slug = do
   rows <- queryAll conn
@@ -93,6 +107,7 @@ slugTaken conn slug = do
     [ toParam slug ]
   pure $ not (null rows)
 
+-- | Insert a pending registration under the shared write lock.
 insertRegistration :: Connection -> AVar Unit -> NewRegistration -> Aff Unit
 insertRegistration conn lock r = do
   id <- liftEffect $ map UUID.toString UUID.genUUID
@@ -109,6 +124,7 @@ insertRegistration conn lock r = do
       , toParam createdAt
       ]
 
+-- | List registrations with a given status.
 listByStatus :: Connection -> String -> Aff (Array Registration)
 listByStatus conn status = do
   rows <- queryAll conn
@@ -116,6 +132,7 @@ listByStatus conn status = do
     [ toParam status ]
   pure $ mapMaybe decodeRow rows
 
+-- | Retrieve a registration by its generated ID.
 getById :: Connection -> String -> Aff (Maybe Registration)
 getById conn id = do
   rows <- queryAll conn
@@ -125,6 +142,7 @@ getById conn id = do
     [ r ] -> Just r
     _ -> Nothing
 
+-- | Update a registration status under the shared write lock.
 setStatus :: Connection -> AVar Unit -> String -> String -> Aff Unit
 setStatus conn lock id status = do
   decidedAt <- liftEffect nowSeconds
@@ -143,7 +161,9 @@ decodeRow json = do
   id <- str "id"
   slug <- str "slug"
   status <- str "status"
-  let createdAt = fromMaybe 0 $ Int.fromNumber =<< (Object.lookup "created_at" obj >>= toNumber)
+  let
+    createdAt = fromMaybe 0 $ Int.fromNumber =<<
+      (Object.lookup "created_at" obj >>= toNumber)
   pure
     { id
     , slug
