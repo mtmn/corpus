@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.3.0] - 2026-08-09
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v3.2.0..v3.3.0)
+
+### Bug Fixes
+
+- Add api docs, reformat and update .tidyrc ([`bfaf5c8`](https://git.sr.ht/~mtmn/corpus/commit/bfaf5c8ea21f19c303e9fb6101d9e75079d5be23))
+- Rewrite elm2nix cache dir ([`73778ad`](https://git.sr.ht/~mtmn/corpus/commit/73778ad38992db73749030e65790cfd17bad48b1))
+
+### Features
+
+- Add timeouts and metadata improvements ([`a160446`](https://git.sr.ht/~mtmn/corpus/commit/a160446c6caa0bf12a69c4f70ee3e0f6e140f45c))
+
+### Housekeeping
+
+- Update elm to 0.19.2, bump deps ([`577c9ee`](https://git.sr.ht/~mtmn/corpus/commit/577c9eec7965171905c73384070f08d10f3fcc7a))
+
 ## [3.2.0] - 2026-08-08
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v3.1.1..v3.2.0)
@@ -7,6 +24,10 @@
 ### Features
 
 - Add scrobbles count in stats ([`df106a5`](https://git.sr.ht/~mtmn/corpus/commit/df106a5888e1d45cf0206200ede3e2fc79b51579))
+
+### Housekeeping
+
+- Release v3.2.0 ([`38217ef`](https://git.sr.ht/~mtmn/corpus/commit/38217ef3c221c9f7763be487075f91ec7d3755f0))
 
 ## [3.1.1] - 2026-08-02
 
