@@ -23,18 +23,31 @@
       sha256 = "056c0ea133e54e1c74b21a09f1cf3fe1f6c497644e2c7dd6ecac4ae612fa0b5c";
     };
 
+    elm = pkgs.stdenvNoCC.mkDerivation {
+      pname = "elm";
+      version = "0.19.2";
+      src = pkgs.fetchurl {
+        url = "https://github.com/elm/compiler/releases/download/0.19.2/elm-0.19.2-linux-x64.gz";
+        hash = "sha256-ZjINJ3AWVPoRvQ6NhL35gpaU1XcMjc7i3t5hYPrVhzc=";
+      };
+      dontUnpack = true;
+      nativeBuildInputs = [pkgs.gzip];
+      buildPhase = "gzip -dc $src > elm";
+      installPhase = "install -Dm755 elm $out/bin/elm";
+    };
+
     spagoRegistry = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry";
-      rev = "04712d0c709778081fe0a56bf7caffa96327e783";
-      hash = "sha256-ZK4drz1JP9VopVdEjUXjalmc11SP6ZUDZOuXC0GYXek=";
+      rev = "454a785222d3b1135e9f7cf9b728e7dbb90b2567";
+      hash = "sha256-vhjAOKl7smLtsez/BQmek3LEJGYqxdxAWBPGwx2cycI=";
     };
 
     spagoRegistryIndex = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry-index";
-      rev = "7464d7fc6dfd3a5ffcded879bebfbc9f5dc14849";
-      hash = "sha256-OrWdGWAk38RqmtzYt0iuyzC83KW4bnzoXYrVAmD2Hso=";
+      rev = "4e9cfafc36f5319f0864ba818754412ce5740b49";
+      hash = "sha256-lu+uwoXeQjtQfB/92J+Un+EDoCPAkixRKcKnDgTAQkE=";
     };
 
     registryDat = generateRegistryDat {elmLock = ./elm.lock;};
@@ -58,7 +71,7 @@
         name = "corpus-pnpm-source";
       };
       pname = "corpus";
-      hash = "sha256-ziqh0zZ2w3KgvmGrwxpm5JHTrPpX6BRb/LhCsSC0q2A=";
+      hash = "";
       fetcherVersion = 4;
     };
 
@@ -66,7 +79,7 @@
       name = "corpus-spago-deps";
       outputHashAlgo = "sha256";
       outputHashMode = "recursive";
-      outputHash = "sha256-Roj/G7HhLjA6PKNBt7YA9LIxP0jLc6BdnIpKDgSJvPo=";
+      outputHash = "";
 
       src = pkgs.lib.cleanSourceWith {
         src = self;
@@ -139,7 +152,7 @@
         makeWrapper
         nodejs
         git
-        elmPackages.elm
+        elm
         purescript
         pnpm
         pnpmConfigHook
@@ -187,7 +200,7 @@
       packages = [
         elm2nix.packages.${system}.default
         pkgs.nodejs
-        pkgs.elmPackages.elm
+        elm
         pkgs.elmPackages.elm-analyse
         pkgs.elmPackages.elm-format
         pkgs.elmPackages.elm-json

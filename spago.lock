@@ -62,7 +62,7 @@
     },
     "package_set": {
       "address": {
-        "registry": "80.2.1"
+        "registry": "80.3.1"
       },
       "compiler": ">=0.15.15 <0.16.0",
       "content": {
@@ -264,7 +264,7 @@
         "halogen-use-trigger-hooks": "1.0.0",
         "halogen-vdom": "8.0.0",
         "halogen-vdom-string-renderer": "0.5.0",
-        "halogen-widgets": "0.2.1",
+        "halogen-widgets": "0.3.1",
         "halogen-xterm": "2.0.0",
         "harmonia": "0.2.0",
         "heckin": "2.0.1",

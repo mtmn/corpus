@@ -67,7 +67,6 @@ docs:
 
 # Run quality and security checks
 check:
-    # pnpm exec whine
     pnpm spago build --strict
     pnpm exec purs-tidy check "src/**/*.purs"
     elm-analyse
