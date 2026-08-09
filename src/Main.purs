@@ -234,7 +234,9 @@ serveValidateToken contextsParam reqParam resParam = do
 
 -- Extract a ListenBrainz API token from an `Authorization: Token <token>` header value.
 parseAuthToken :: Maybe String -> Maybe String
-parseAuthToken mAuth = mAuth >>= stripPrefix (Pattern "Token ")
+parseAuthToken mAuth = do
+  token <- mAuth >>= stripPrefix (Pattern "Token ")
+  if token == "" then Nothing else Just token
 
 -- Build the `validate-token` response body. `Just displayName` means the token
 -- resolved to a user (valid); `Nothing` means the token is unknown (invalid).
@@ -276,7 +278,9 @@ serveConflict res message = respond "text/plain" 409 message res
 
 -- Extract an admin secret from an `Authorization: Bearer <token>` header value.
 parseBearer :: Maybe String -> Maybe String
-parseBearer mAuth = mAuth >>= stripPrefix (Pattern "Bearer ")
+parseBearer mAuth = do
+  token <- mAuth >>= stripPrefix (Pattern "Bearer ")
+  if token == "" then Nothing else Just token
 
 -- Gates admin endpoints behind ADMIN_TOKEN: unset -> 404 (disabled), mismatch -> 401.
 withAdmin :: ServerEnv -> Request -> Response -> Aff Unit -> Aff Unit

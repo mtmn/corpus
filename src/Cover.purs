@@ -1,6 +1,9 @@
 module Cover
   ( CoverSource
   , sanitizeKey
+  , cacheJobKey
+  , tryStartCacheFill
+  , finishCacheFill
   , fetchLastfmCoverUrl
   , fetchDiscogsCoverUrl
   , coverSources
@@ -14,9 +17,9 @@ import Config (UserConfig, s3ConfigFromUser)
 import S3 (existsInS3, getPresignedUrl, uploadToS3)
 import Data.Array ((!!), find)
 import Data.Either (Either(..), hush)
-import Data.Foldable (foldM)
+import Data.Foldable (foldM, for_)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.String.CaseInsensitive (CaseInsensitiveString(..))
 import Data.String.Regex (Regex, regex, replace, parseFlags)
 import Effect (Effect)
@@ -27,7 +30,8 @@ import Fetch (fetch, Method(GET))
 import Fetch.Argonaut.Json (fromJson)
 import Foreign.Object as Object
 import Data.Argonaut.Core (toArray, toObject, toString, toBoolean)
-import Image (convertToAvif)
+import Image (arrayBufferByteLength, convertToAvif)
+import Http (apiTimeout, imageTimeout, withTimeout)
 import JSURI (encodeURIComponent)
 import Log as Log
 import Metrics as Metrics
@@ -39,6 +43,15 @@ import Node.Stream (end)
 import Web.URL (URL)
 import Web.URL as URL
 import Web.URL.URLSearchParams as URLSearchParams
+
+foreign import tryStartCacheFillImpl :: String -> Effect Boolean
+foreign import finishCacheFillImpl :: String -> Effect Unit
+
+tryStartCacheFill :: String -> Effect Boolean
+tryStartCacheFill = tryStartCacheFillImpl
+
+finishCacheFill :: String -> Effect Unit
+finishCacheFill = finishCacheFillImpl
 
 type Response = ServerResponse
 
@@ -62,6 +75,12 @@ sanitizeKeyRe1 = hush $ regex "[^a-z0-9.-]" (parseFlags "gi")
 sanitizeKeyRe2 :: Maybe Regex
 sanitizeKeyRe2 = hush $ regex "_{2,}" (parseFlags "g")
 
+cacheJobKey :: String -> String -> String
+cacheJobKey bucket s3Key = bucket <> ":" <> s3Key
+
+maxCoverBytes :: Number
+maxCoverBytes = 10_000_000.0
+
 getQueryParam :: String -> URL -> Maybe String
 getQueryParam key url = URLSearchParams.get key (URL.searchParams url)
 
@@ -69,7 +88,7 @@ fetchCaaCoverUrl :: String -> Aff (Maybe String)
 fetchCaaCoverUrl mbid = do
   let url = "https://coverartarchive.org/release/" <> mbid
   let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
-  result <- try $ fetch url { method: GET, headers }
+  result <- try $ withTimeout apiTimeout "Cover Art Archive lookup" $ fetch url { method: GET, headers }
   case result of
     Right fr | fr.status == 200 -> do
       json <- fromJson fr.json
@@ -104,7 +123,7 @@ fetchLastfmCoverUrl cfg artist release = case cfg.lastfmApiKey of
         <> k
     Log.info $ "Searching Last.fm for: " <> artist <> " - " <> release
     let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
-    result <- try $ fetch searchUrl { method: GET, headers }
+    result <- try $ withTimeout apiTimeout "Last.fm cover lookup" $ fetch searchUrl { method: GET, headers }
     case result of
       Right fr | fr.status == 200 -> do
         json <- fromJson fr.json
@@ -129,7 +148,7 @@ fetchDiscogsCoverUrl cfg artist release = case cfg.discogsToken of
         <> (fromMaybe "" $ encodeURIComponent queryStr)
         <> "&type=release&per_page=1"
     Log.info $ "Searching Discogs for: " <> queryStr
-    result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)", "Authorization": "Discogs token=" <> t } }
+    result <- try $ withTimeout apiTimeout "Discogs cover lookup" $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)", "Authorization": "Discogs token=" <> t } }
     case result of
       Right fr | fr.status == 200 -> do
         json <- fromJson fr.json
@@ -177,71 +196,93 @@ serveCover serveNotFound cfg slug url res = do
     artist = fromMaybe "" (getQueryParam "artist" url)
     release = fromMaybe "" (getQueryParam "release" url)
     s3cfg = s3ConfigFromUser cfg
+    cacheEnabled = cfg.coverCacheEnabled && isJust s3cfg.bucket
 
-  served <- foldM (trySource s3cfg) false (coverSources mbid artist release cfg)
+  served <- foldM (trySource s3cfg cacheEnabled) false (coverSources mbid artist release cfg)
   unless served $ liftEffect $ serveNotFound res
 
   where
-  trySource _ true _ = pure true
-  trySource s3cfg false { name, s3Key, findUrl } = do
-    cached <- checkS3 s3cfg s3Key
+  trySource _ _ true _ = pure true
+  trySource s3cfg canCache false { name, s3Key, findUrl } = do
+    cached <- checkS3 canCache s3cfg s3Key
     if cached then do
       Log.info $ "Serving " <> name <> " cover from cache: " <> s3Key
       liftEffect $ Metrics.incCoverRequest slug name "s3_hit"
-      serveS3Redirect s3cfg s3Key res
-      pure true
+      presigned <- try $ getPresignedUrl s3cfg s3Key
+      case presigned of
+        Right presignedUrl -> do
+          serveRedirect presignedUrl Nothing res
+          pure true
+        Left err -> do
+          Log.warn $ "Failed to sign cached cover " <> s3Key <> ": " <> Exception.message err
+          tryUpstream false
     else do
-      mUrl <- findUrl
-      case mUrl of
-        Nothing ->
+      tryUpstream canCache
+
+    where
+    tryUpstream shouldCache = do
+      found <- try findUrl
+      case found of
+        Left err -> do
+          Log.warn $ "Cover lookup failed for " <> name <> ": " <> Exception.message err
           pure false
-        Just urlStr -> do
-          redirectAndCache s3cfg urlStr s3Key res
+        Right Nothing ->
+          pure false
+        Right (Just urlStr) -> do
+          serveRedirect urlStr (Just "public, max-age=3600") res
           liftEffect $ Metrics.incCoverRequest slug name "fetch"
+          when shouldCache $ startCacheFill s3cfg urlStr s3Key
           pure true
 
-  checkS3 s3cfg s3Key
-    | not cfg.coverCacheEnabled = pure false
+  checkS3 canCache s3cfg s3Key
+    | not canCache = pure false
     | otherwise = do
         result <- try $ existsInS3 s3cfg s3Key
         pure $ case result of
           Right b -> b
           Left _ -> false
 
-  serveS3Redirect s3cfg s3Key response = do
-    presignedUrl <- getPresignedUrl s3cfg s3Key
+  serveRedirect redirectUrl mCacheControl response =
     liftEffect $ do
       setStatusCode 302 response
-      setHeader "Location" presignedUrl (toOutgoingMessage response)
+      setHeader "Location" redirectUrl (toOutgoingMessage response)
+      for_ mCacheControl \cacheControl ->
+        setHeader "Cache-Control" cacheControl (toOutgoingMessage response)
       end (toWriteable (toOutgoingMessage response))
 
-  -- Redirect the client immediately to the upstream URL, then fetch+convert+cache in background.
-  -- This avoids blocking the response on AVIF conversion (which can take hundreds of ms).
-  redirectAndCache s3cfg urlStr s3Key response = do
-    liftEffect $ do
-      setStatusCode 302 response
-      setHeader "Location" urlStr (toOutgoingMessage response)
-      setHeader "Cache-Control" "public, max-age=3600" (toOutgoingMessage response)
-      end (toWriteable (toOutgoingMessage response))
-    when cfg.coverCacheEnabled $ void $ forkAff do
-      let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
-      fetchResult <- try $ fetch urlStr { method: GET, headers }
-      case fetchResult of
-        Right fr | fr.status == 200 -> do
-          let
-            contentType = Map.lookup (CaseInsensitiveString "content-type") fr.headers
-            isAvif = case contentType of
-              Just ct | ct == "image/avif" -> true
-              _ -> false
-          Log.info $ "Caching image: " <> urlStr
-          ab <- fr.arrayBuffer
-          avifAb <- if isAvif then pure ab else convertToAvif ab
-          avifBuf <- liftEffect $ fromArrayBuffer avifAb
-          uploadResult <- try $ uploadToS3 s3cfg s3Key avifBuf "image/avif"
-          case uploadResult of
-            Right _ -> Log.info $ "Uploaded " <> s3Key
-            Left err -> Log.error $ "Failed to upload " <> s3Key <> ": " <> Exception.message err
-        Right fr ->
-          Log.warn $ "Background fetch failed for " <> urlStr <> " with status " <> show fr.status
-        Left err ->
-          Log.error $ "Background fetch error for " <> urlStr <> ": " <> Exception.message err
+  -- Only one request may populate a given S3 object at a time. Concurrent
+  -- misses still redirect immediately; later requests use the cached object.
+  startCacheFill s3cfg urlStr s3Key = do
+    let jobKey = cacheJobKey (fromMaybe "" s3cfg.bucket) s3Key
+    started <- liftEffect $ tryStartCacheFill jobKey
+    when started $ void $ forkAff do
+      _ <- try do
+        let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
+        fetchResult <- try $ withTimeout imageTimeout "Cover image request" $ fetch urlStr { method: GET, headers }
+        case fetchResult of
+          Right fr | fr.status == 200 -> do
+            let
+              contentType = Map.lookup (CaseInsensitiveString "content-type") fr.headers
+              isAvif = case contentType of
+                Just ct | ct == "image/avif" -> true
+                _ -> false
+            Log.info $ "Caching image: " <> urlStr
+            bodyResult <- try $ withTimeout imageTimeout "Cover image download" fr.arrayBuffer
+            case bodyResult of
+              Left err -> Log.error $ "Cover image download failed for " <> urlStr <> ": " <> Exception.message err
+              Right ab -> do
+                bytes <- liftEffect $ arrayBufferByteLength ab
+                if bytes > maxCoverBytes then
+                  Log.warn $ "Skipping oversized cover (" <> show bytes <> " bytes): " <> urlStr
+                else do
+                  avifAb <- if isAvif then pure ab else convertToAvif ab
+                  avifBuf <- liftEffect $ fromArrayBuffer avifAb
+                  uploadResult <- try $ uploadToS3 s3cfg s3Key avifBuf "image/avif"
+                  case uploadResult of
+                    Right _ -> Log.info $ "Uploaded " <> s3Key
+                    Left err -> Log.error $ "Failed to upload " <> s3Key <> ": " <> Exception.message err
+          Right fr ->
+            Log.warn $ "Background fetch failed for " <> urlStr <> " with status " <> show fr.status
+          Left err ->
+            Log.error $ "Background fetch error for " <> urlStr <> ": " <> Exception.message err
+      liftEffect $ finishCacheFill jobKey

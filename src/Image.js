@@ -2,7 +2,7 @@ import sharp from "sharp";
 
 export const convertToAvifImpl = (buffer) => () =>
 	new Promise((resolve, reject) =>
-		sharp(buffer)
+		sharp(buffer, { limitInputPixels: 40_000_000, failOn: "error" })
 			.avif()
 			.toBuffer((err, data) => {
 				if (err) return reject(err);
@@ -11,3 +11,5 @@ export const convertToAvifImpl = (buffer) => () =>
 				);
 			}),
 	);
+
+export const arrayBufferByteLengthImpl = (buffer) => () => buffer.byteLength;

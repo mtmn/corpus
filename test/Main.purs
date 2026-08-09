@@ -7,7 +7,11 @@ import Data.Array (length)
 import Data.Either (Either(..), isRight)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
+import Effect.Aff (delay, try)
 import Effect.Aff.AVar as Avar
+import Effect.Class (liftEffect)
+import Effect.Exception (message)
+import Data.Time.Duration (Milliseconds(..))
 import Test.Spec (describe, it)
 import Test.Spec.Assertions (shouldEqual, fail)
 import Data.String.Regex (regex, parseFlags)
@@ -19,12 +23,19 @@ import Data.Argonaut.Core (Json, toBoolean, toNumber, toString)
 import Foreign.Object as Object
 import Main (submitListenToListen, findUserByToken, sanitizeDate, parseAuthToken, parseBearer, validateTokenJson)
 import Registrations (getById, initRegistrations, insertRegistration, isReservedSlug, listByStatus, setStatus, slugTaken, validSlugFormat)
-import Cover (sanitizeKey)
+import Cover (sanitizeKey, cacheJobKey, coverSources, finishCacheFill, tryStartCacheFill)
 import Sync (listenBrainzUrl, lastfmTrackToListen, parseLastfmResponse)
+import Http (withTimeout)
 
 main :: Effect Unit
 main = runSpecAndExitProcess [ consoleReporter ] do
   describe "Corpus Main Utils" do
+    it "cancels operations that exceed their fetch timeout" do
+      result <- try $ withTimeout (Milliseconds 1.0) "test request" (delay (Milliseconds 20.0))
+      case result of
+        Left err -> message err `shouldEqual` "test request timed out"
+        Right _ -> fail "Expected timeout"
+
     it "should build ListenBrainz URLs correctly" do
       listenBrainzUrl "user1" `shouldEqual` "https://api.listenbrainz.org/1/user/user1/listens"
 
@@ -49,6 +60,70 @@ main = runSpecAndExitProcess [ consoleReporter ] do
       sanitizeKey "a...b" `shouldEqual` "a...b"
       sanitizeKey "UPPER lower" `shouldEqual` "UPPER_lower"
 
+    it "scopes concurrent cover-cache jobs to their S3 bucket and key" do
+      cacheJobKey "covers-a" "covers/caa/release.avif" `shouldEqual` "covers-a:covers/caa/release.avif"
+      cacheJobKey "covers-b" "covers/caa/release.avif" `shouldEqual` "covers-b:covers/caa/release.avif"
+
+    it "coalesces duplicate cover-cache jobs and releases their key on completion" do
+      let key = cacheJobKey "test-bucket" "covers/caa/release.avif"
+      first <- liftEffect $ tryStartCacheFill key
+      second <- liftEffect $ tryStartCacheFill key
+      liftEffect $ finishCacheFill key
+      third <- liftEffect $ tryStartCacheFill key
+      liftEffect $ finishCacheFill key
+      first `shouldEqual` true
+      second `shouldEqual` false
+      third `shouldEqual` true
+
+    it "limits background cover-cache fills across distinct keys" do
+      one <- liftEffect $ tryStartCacheFill "capacity-1"
+      two <- liftEffect $ tryStartCacheFill "capacity-2"
+      three <- liftEffect $ tryStartCacheFill "capacity-3"
+      four <- liftEffect $ tryStartCacheFill "capacity-4"
+      five <- liftEffect $ tryStartCacheFill "capacity-5"
+      liftEffect $ finishCacheFill "capacity-1"
+      liftEffect $ finishCacheFill "capacity-2"
+      liftEffect $ finishCacheFill "capacity-3"
+      liftEffect $ finishCacheFill "capacity-4"
+      one `shouldEqual` true
+      two `shouldEqual` true
+      three `shouldEqual` true
+      four `shouldEqual` true
+      five `shouldEqual` false
+
+    describe "cover sources" do
+      let
+        coverConfig =
+          { listenbrainzUser: Nothing
+          , lastfmUser: Nothing
+          , lastfmApiKey: Nothing
+          , discogsToken: Nothing
+          , cosineApiKey: Nothing
+          , databaseFile: ""
+          , s3Bucket: Nothing
+          , s3Region: ""
+          , awsAccessKeyId: Nothing
+          , awsSecretAccessKey: Nothing
+          , awsEndpointUrl: Nothing
+          , awsS3AddressingStyle: Nothing
+          , coverCacheEnabled: false
+          , backupEnabled: false
+          , backupIntervalHours: 0
+          }
+
+      it "prefers CAA and uses source-specific cache keys" do
+        let sources = coverSources "release/id" "The Artist" "The Release" coverConfig
+        map _.name sources `shouldEqual` [ "caa", "discogs", "lastfm" ]
+        map _.s3Key sources `shouldEqual`
+          [ "covers/caa/release_id.avif"
+          , "covers/discogs/The_Artist-The_Release.avif"
+          , "covers/lastfm/The_Artist-The_Release.avif"
+          ]
+
+      it "omits CAA when no release MBID is available" do
+        let sources = coverSources "" "The Artist" "The Release" coverConfig
+        map _.name sources `shouldEqual` [ "discogs", "lastfm" ]
+
     describe "fromString" do
       it "maps all valid field names" do
         fromString "artist" `shouldEqual` Just FilterArtist
@@ -56,6 +131,7 @@ main = runSpecAndExitProcess [ consoleReporter ] do
         fromString "label" `shouldEqual` Just FilterLabel
         fromString "year" `shouldEqual` Just FilterYear
         fromString "genre" `shouldEqual` Just FilterGenre
+        fromString "track" `shouldEqual` Just FilterTrack
 
       it "returns Nothing for unknown or empty input" do
         fromString "unknown" `shouldEqual` Nothing
@@ -200,6 +276,7 @@ main = runSpecAndExitProcess [ consoleReporter ] do
       parseAuthToken Nothing `shouldEqual` Nothing
       parseAuthToken (Just "Bearer abc-123") `shouldEqual` Nothing
       parseAuthToken (Just "token abc-123") `shouldEqual` Nothing
+      parseAuthToken (Just "Token ") `shouldEqual` Nothing
 
     it "builds a valid-token response with the user name" do
       let body = validateTokenJson (Just "User One")
@@ -548,6 +625,33 @@ main = runSpecAndExitProcess [ consoleReporter ] do
         listensNone <- getScrobbles conn 10 0 (Just { field: FilterYear, value: "1999" }) Nothing
         length listensNone `shouldEqual` 0
 
+      it "filters by track and searches across track, artist, release, and label" do
+        conn <- connect ":memory:"
+        initDb conn
+        initReleaseMetadata conn
+        upsertScrobble conn
+          ( Listen
+              { listenedAt: Just 300
+              , trackMetadata: TrackMetadata
+                  { trackName: Just "Neon Skyline"
+                  , artistName: Just "Andy Shauf"
+                  , releaseName: Just "The Neon Skyline"
+                  , mbidMapping: Just (MbidMapping { releaseMbid: Just "search-mbid", caaReleaseMbid: Nothing })
+                  , genre: Nothing
+                  , label: Nothing
+                  }
+              }
+          )
+        upsertReleaseMetadata conn "search-mbid" Nothing (Just "Anti-") (Just 2020)
+        exact <- getScrobbles conn 10 0 (Just { field: FilterTrack, value: "Neon Skyline" }) Nothing
+        byArtist <- getScrobbles conn 10 0 Nothing (Just "andy")
+        byRelease <- getScrobbles conn 10 0 Nothing (Just "the neon")
+        byLabel <- getScrobbles conn 10 0 Nothing (Just "anti-")
+        length exact `shouldEqual` 1
+        length byArtist `shouldEqual` 1
+        length byRelease `shouldEqual` 1
+        length byLabel `shouldEqual` 1
+
     describe "getOldestTs" do
       let
         listenAt ts = Listen
@@ -774,6 +878,11 @@ main = runSpecAndExitProcess [ consoleReporter ] do
           Nothing -> do
             fail "Should have parsed numeric totalPages"
 
+      it "rejects malformed responses" do
+        case parseLastfmResponse (parseTrack "{ \"recenttracks\": {} }") of
+          Nothing -> pure unit
+          Just _ -> fail "Malformed response should not parse"
+
     describe "lastfmTrackToListen" do
       it "parses a valid track with MBID" do
         let
@@ -897,6 +1006,7 @@ main = runSpecAndExitProcess [ consoleReporter ] do
       parseBearer (Just "Bearer secret") `shouldEqual` Just "secret"
       parseBearer (Just "Token secret") `shouldEqual` Nothing
       parseBearer Nothing `shouldEqual` Nothing
+      parseBearer (Just "Bearer ") `shouldEqual` Nothing
 
   describe "Registrations" do
     it "validates slug format" do

@@ -21,28 +21,18 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (Pattern(..), stripPrefix)
 import Data.Time.Duration (Milliseconds(..))
 import Db (Connection, checkExists, getOldestTs, upsertScrobble, withTransaction)
-import Effect.Aff (Aff, delay, launchAff_, makeAff, nonCanceler, throwError, try)
+import Effect.Aff (Aff, delay, throwError, try)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.Retry (RetryStatus(..), exponentialBackoff, limitRetries, recovering)
-import Effect (Effect)
 import Effect.Class (liftEffect)
-import Effect.Exception (Error, error, message)
-import Effect.Ref as Ref
-import Effect.Uncurried (mkEffectFn1)
+import Effect.Exception (error, message)
 import Fetch (fetch, Method(GET))
 import Fetch.Argonaut.Json (fromJson)
 import JSURI (encodeURIComponent)
+import Http (apiTimeout, withTimeout)
 import Log as Log
 import Metrics as Metrics
-import Node.EventEmitter (EventHandle(..), on_)
-import Node.HTTP.ClientRequest as Client
-import Node.HTTP.IncomingMessage as IM
-import Node.HTTPS as HTTPS
-import Node.Stream.Aff (readableToStringUtf8)
 import Types (Listen(..), ListenBrainzResponse(..), MbidMapping(..), Payload(..), TrackMetadata(..), LastfmResponse(..), LastfmRecentTracks(..), LastfmAttr(..), LastfmTracks(..), LastfmArtist(..), LastfmAlbum(..), LastfmDate(..), LastfmTrack(..))
--- | Cast required due to a gap in the node-http FFI bindings:
--- | the request object lacks an "error" event emitter type.
-import Unsafe.Coerce (unsafeCoerce)
 
 -- | Result of processing a batch of listens/scrobbles.
 type SyncResult =
@@ -71,11 +61,6 @@ processTracks conn listens trackMinTs = do
     Log.warn "Skipping scrobble without timestamp"
     pure s
 
--- | Wraps unsafeCoerce for attaching error handlers to HTTP requests.
--- | This is the only legitimate use of unsafeCoerce in this module.
-castRequestForError :: forall a. a -> a
-castRequestForError = unsafeCoerce
-
 listenBrainzUrl :: String -> String
 listenBrainzUrl username = "https://api.listenbrainz.org/1/user/" <> username <> "/listens"
 
@@ -101,43 +86,13 @@ withRetry label action = recovering policy [ \_ err -> pure $ isTransientError e
     Nothing -> false
 
 fetchListenBrainzUrl :: String -> Aff String
-fetchListenBrainzUrl url = withRetry "ListenBrainz fetch" $ makeAff \callback -> do
-  -- One-shot gate: the response handler and the error handler both race to
-  -- resolve this Aff. The first invocation wins; any subsequent (late) event
-  -- is logged so silent socket errors after a successful response aren't lost.
-  done <- Ref.new false
-  let
-    once :: Either Error String -> Effect Unit
-    once result = do
-      already <- Ref.read done
-      if already then
-        case result of
-          Left err ->
-            Log.warn $ "ListenBrainz: dropped late error after response: " <> message err
-          Right _ ->
-            pure unit
-      else do
-        Ref.write true done
-        callback result
-
-  req <- HTTPS.get url
-
-  req # on_ Client.responseH \res -> do
-    launchAff_ do
-      result <- try $ readableToStringUtf8 (IM.toReadable res)
-      liftEffect $ case result of
-        Left err ->
-          once (Left err)
-        Right body ->
-          if IM.statusCode res == 200 then
-            once (Right body)
-          else
-            once (Left $ error $ "ListenBrainz API returned status " <> show (IM.statusCode res))
-
-  let errorH = EventHandle "error" mkEffectFn1
-  on_ errorH (\err -> once (Left err)) (castRequestForError req)
-
-  pure nonCanceler
+fetchListenBrainzUrl url = withRetry "ListenBrainz fetch" do
+  let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
+  fr <- withTimeout apiTimeout "ListenBrainz fetch" $ fetch url { method: GET, headers }
+  if fr.status == 200 then
+    withTimeout apiTimeout "ListenBrainz response" fr.text
+  else
+    throwError $ error $ "ListenBrainz API returned status " <> show fr.status
 
 fetchLastfmPage :: String -> String -> Int -> Maybe Int -> Aff { tracks :: Array Json, totalPages :: Int }
 fetchLastfmPage apiKey lfmUser page mTo = withRetry "Last.fm fetch" do
@@ -152,7 +107,7 @@ fetchLastfmPage apiKey lfmUser page mTo = withRetry "Last.fm fetch" do
       <> toParam
     url = baseUrl <> "&api_key=" <> apiKey
   let headers = { "User-Agent": "corpus/1.0 (+https://sr.ht/~mtmn/corpus)" }
-  fr <- fetch url { method: GET, headers }
+  fr <- withTimeout apiTimeout "Last.fm sync fetch" $ fetch url { method: GET, headers }
   if fr.status == 200 then do
     json <- fromJson fr.json
     case parseLastfmResponse json of

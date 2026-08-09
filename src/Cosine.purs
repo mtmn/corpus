@@ -19,6 +19,7 @@ import Effect.Exception as Exception
 import Fetch (fetch, Method(GET))
 import Foreign.Object as Object
 import JSURI (encodeURIComponent)
+import Http (apiTimeout, withTimeout)
 import Log as Log
 import Metrics as Metrics
 import Node.Encoding (Encoding(UTF8))
@@ -46,7 +47,7 @@ fetchCosineSimilar slug cfg query = do
     let headers = { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus", "Authorization": "Bearer " <> apiKey }
     let searchUrl = "https://cosine.club/api/v1/search?q=" <> (fromMaybe "" $ encodeURIComponent query) <> "&limit=1"
     Log.info $ "Cosine Club: searching for: " <> query
-    searchResult <- try $ fetch searchUrl { method: GET, headers: headers }
+    searchResult <- try $ withTimeout apiTimeout "Cosine Club search" $ fetch searchUrl { method: GET, headers: headers }
     case searchResult of
       Left err -> do
         liftEffect $ Metrics.incCosineRequest slug "error"
@@ -61,7 +62,7 @@ fetchCosineSimilar slug cfg query = do
           liftEffect $ Metrics.incCosineRequest slug "error"
           throwError (Exception.error "Search API error")
         else do
-          searchBody <- searchRes.text
+          searchBody <- withTimeout apiTimeout "Cosine Club search response" searchRes.text
           let
             mTrackId = do
               json <- hush $ parseJson searchBody
@@ -78,7 +79,7 @@ fetchCosineSimilar slug cfg query = do
             Just trackId -> do
               let similarUrl = "https://cosine.club/api/v1/tracks/" <> trackId <> "/similar?limit=10"
               Log.info $ "Cosine Club: fetching similar for ID " <> trackId
-              similarResult <- try $ fetch similarUrl { method: GET, headers: headers }
+              similarResult <- try $ withTimeout apiTimeout "Cosine Club similar lookup" $ fetch similarUrl { method: GET, headers: headers }
               case similarResult of
                 Left err -> do
                   liftEffect $ Metrics.incCosineRequest slug "error"
@@ -94,7 +95,7 @@ fetchCosineSimilar slug cfg query = do
                     throwError (Exception.error "Similar API error")
                   else do
                     liftEffect $ Metrics.incCosineRequest slug "success"
-                    similarRes.text
+                    withTimeout apiTimeout "Cosine Club similar response" similarRes.text
 
 serveSimilar
   :: (Response -> String -> Effect Unit)

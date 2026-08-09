@@ -29,6 +29,7 @@ import Fetch (fetch, Method(GET))
 import Fetch.Argonaut.Json (fromJson)
 import Foreign.Object as Object
 import JSURI (encodeURIComponent)
+import Http (apiTimeout, withTimeout)
 import Log as Log
 import Metrics as Metrics
 
@@ -43,7 +44,7 @@ type GenreSource =
 fetchMusicBrainzRelease :: String -> Aff (Maybe MbData)
 fetchMusicBrainzRelease mbid = do
   let url = "https://musicbrainz.org/ws/2/release/" <> mbid <> "?inc=genres+labels+release-groups&fmt=json"
-  result <- try $ fetch url { method: GET, headers: { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus" } }
+  result <- try $ withTimeout apiTimeout "MusicBrainz metadata lookup" $ fetch url { method: GET, headers: { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus" } }
   case result of
     Left err -> do
       Log.error $ "MusicBrainz fetch error for " <> mbid <> ": " <> Exception.message err
@@ -91,7 +92,7 @@ fetchLastfmGenre Nothing _ _ = do
 fetchLastfmGenre (Just k) artist release = do
   let searchUrl = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&artist=" <> (fromMaybe "" $ encodeURIComponent artist) <> "&album=" <> (fromMaybe "" $ encodeURIComponent release) <> "&format=json" <> "&api_key=" <> k
   Log.info $ "Fetching Last.fm genre for: " <> artist <> " - " <> release
-  result <- try $ fetch searchUrl { method: GET }
+  result <- try $ withTimeout apiTimeout "Last.fm genre lookup" $ fetch searchUrl { method: GET }
   case result of
     Right fetchRes | fetchRes.status == 200 -> do
       jsonResult <- try $ fromJson fetchRes.json
@@ -122,7 +123,7 @@ fetchDiscogsGenre (Just t) artist release = do
   let queryStr = artist <> " " <> release
   let searchUrl = "https://api.discogs.com/database/search?q=" <> (fromMaybe "" $ encodeURIComponent queryStr) <> "&type=release&per_page=1"
   Log.info $ "Fetching Discogs genre for: " <> queryStr
-  result <- try $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus", "Authorization": "Discogs token=" <> t } }
+  result <- try $ withTimeout apiTimeout "Discogs genre lookup" $ fetch searchUrl { method: GET, headers: { "User-Agent": "corpus/1.0 +https://sr.ht/~mtmn/corpus", "Authorization": "Discogs token=" <> t } }
   case result of
     Right fetchRes | fetchRes.status == 200 -> do
       jsonResult <- try $ fromJson fetchRes.json
@@ -179,8 +180,10 @@ enrichMetadata conn cfg slug = forever do
           liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "error"
         Right Nothing -> do
           liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "retry"
-          upsertReleaseMetadata conn mbid Nothing Nothing Nothing
-          touchGenreCheckedAt conn mbid
+          -- Nothing represents a transient request failure. Do not create an
+          -- empty metadata row or mark the release checked: both would hide it
+          -- from the enrichment queue and turn a retry into a week-long skip.
+          Log.warn $ "Deferring metadata enrichment for " <> mbid <> " after transient MusicBrainz failure"
         Right (Just mbdata) -> do
           liftEffect $ Metrics.incEnrichmentFetch slug "musicbrainz" "success"
           case mbdata.genre of
