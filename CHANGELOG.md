@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.3.1] - 2026-08-28
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v3.3.0..v3.3.1)
+
+### Housekeeping
+
+- Bump all deps ([`0f17064`](https://git.sr.ht/~mtmn/corpus/commit/0f170641937f9133bac271aa79f1bf5148f3f55e))
+
 ## [3.3.0] - 2026-08-09
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v3.2.0..v3.3.0)
@@ -16,6 +24,7 @@
 ### Housekeeping
 
 - Update elm to 0.19.2, bump deps ([`577c9ee`](https://git.sr.ht/~mtmn/corpus/commit/577c9eec7965171905c73384070f08d10f3fcc7a))
+- Release v3.3.0 ([`3cbe1fe`](https://git.sr.ht/~mtmn/corpus/commit/3cbe1fee9d9f3da9806e0a93a30b6dbed7b68db2))
 
 ## [3.2.0] - 2026-08-08
 
