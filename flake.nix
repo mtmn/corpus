@@ -43,15 +43,15 @@
     spagoRegistry = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry";
-      rev = "454a785222d3b1135e9f7cf9b728e7dbb90b2567";
-      hash = "sha256-vhjAOKl7smLtsez/BQmek3LEJGYqxdxAWBPGwx2cycI=";
+      rev = "d3cde815fc7ab4d8f23c52304d30cf8143c0973e";
+      hash = "sha256-eNoa4IyrRScfPx+kaR3lbDvvprEINtMiF86LtsWrk7A=";
     };
 
     spagoRegistryIndex = pkgs.fetchFromGitHub {
       owner = "purescript";
       repo = "registry-index";
-      rev = "4e9cfafc36f5319f0864ba818754412ce5740b49";
-      hash = "sha256-lu+uwoXeQjtQfB/92J+Un+EDoCPAkixRKcKnDgTAQkE=";
+      rev = "0fb8ec80711105ca8ed8d30cf88e2ae714ce8b51";
+      hash = "sha256-zMl+HfDcX3JZrI2duvt0UUyskvIhRu9R6BXhujsw88U=";
     };
 
     registryDat = generateRegistryDat {elmLock = ./elm.lock;};
@@ -75,7 +75,7 @@
         name = "corpus-pnpm-source";
       };
       pname = "corpus";
-      hash = "sha256-SeTg/ccTki9R9sNZGFPPu6lzBAmwrHABcTU12Z554JQ=";
+      hash = "sha256-lpAlDrwLH9pZp6DZTGeNNImEL/HQ7PyV8kUpC+OJDGA=";
       fetcherVersion = 4;
     };
 
@@ -205,7 +205,6 @@
         elm2nix.packages.${system}.default
         pkgs.nodejs
         elm
-        pkgs.elmPackages.elm-analyse
         pkgs.elmPackages.elm-format
         pkgs.elmPackages.elm-json
         pkgs.pnpm
