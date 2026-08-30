@@ -59,7 +59,7 @@ digraph corpus {
         color="#d2aa35"
         fontcolor="#ffffff"
         Storage [
-            label="DuckDB files — one per user\nscrobbles · release metadata · API tokens\n\nregistrations.db — shared registration state\n\nS3-compatible bucket\ncover cache · database backups"
+            label="DuckDB files: one per user\nscrobbles · release metadata · API tokens\n\nregistrations.db: shared registration state\n\nS3-compatible bucket\ncover cache · database backups"
             shape=cylinder
             fillcolor="#473d15"
         ]
@@ -77,10 +77,26 @@ digraph corpus {
         ]
     }
 
-    Clients -> Corpus [label="SPA, listen submission, admin, /metrics"]
-    Corpus -> Storage [label="per-user data, registrations, cached covers, backups"]
-    Corpus -> External [
-        dir=both
+    // Model labels as nodes so connection lines cannot cross their text.
+    node [
+        shape=box
+        style="rounded,filled"
+        color="#4b5563"
+        fillcolor="#111827"
+        fontcolor="#ffffff"
+        fontsize=8
+        margin="0.1,0.06"
+    ]
+    ClientFlow [label="SPA, listen submission, admin, /metrics"]
+    StorageFlow [label="per-user data, registrations, cached covers, backups"]
+    ExternalFlow [
         label="sync · enrichment · cover lookup\nCAA → Discogs → Last.fm · similar tracks · email"
     ]
+
+    Clients -> ClientFlow [arrowhead=none]
+    ClientFlow -> Corpus
+    Corpus -> StorageFlow [arrowhead=none]
+    StorageFlow -> Storage
+    Corpus -> ExternalFlow [dir=back]
+    ExternalFlow -> External
 }

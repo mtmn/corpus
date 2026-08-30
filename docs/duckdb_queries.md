@@ -1,25 +1,22 @@
-- `listened_at`: BIGINT (Unix timestamp)
-- `track_name`: VARCHAR
-- `artist_name`: VARCHAR
-- `release_name`: VARCHAR
-- `release_mbid`: VARCHAR
-- `caa_release_mbid`: VARCHAR
+# Example DuckDB queries
 
-## General Statistics
+Run these queries against a Corpus user database with the DuckDB command-line interface or another compatible tool.
 
-### Total number of scrobbles
+## General statistics
+
+### Total scrobbles
 ```sql
 SELECT count(*) FROM scrobbles;
 ```
 
-### Artist diversity (Total unique artists)
+### Total unique artists
 ```sql
 SELECT count(DISTINCT artist_name) FROM scrobbles;
 ```
 
-## Top Lists
+## Top lists
 
-### Top 10 Artists
+### Top 10 artists
 ```sql
 SELECT artist_name, count(*) as play_count
 FROM scrobbles
@@ -28,7 +25,7 @@ ORDER BY play_count DESC
 LIMIT 10;
 ```
 
-### Top 10 Tracks
+### Top 10 tracks
 ```sql
 SELECT artist_name, track_name, count(*) as play_count
 FROM scrobbles
@@ -37,7 +34,7 @@ ORDER BY play_count DESC
 LIMIT 10;
 ```
 
-### Top 10 Albums
+### Top 10 albums
 ```sql
 SELECT artist_name, release_name, count(*) as play_count
 FROM scrobbles
@@ -47,7 +44,7 @@ ORDER BY play_count DESC
 LIMIT 10;
 ```
 
-### Top 10 Labels
+### Top 10 labels
 ```sql
 SELECT rm.label, count(*) as play_count
 FROM scrobbles s
@@ -58,9 +55,9 @@ ORDER BY play_count DESC
 LIMIT 10;
 ```
 
-## Time-based Analysis
+## Time-based analysis
 
-### Scrobbles per day (Last 30 days)
+### Scrobbles per day for the last 30 days
 ```sql
 SELECT
     to_timestamp(listened_at)::DATE as date,
@@ -101,9 +98,9 @@ GROUP BY day, dayofweek(to_timestamp(listened_at))
 ORDER BY dayofweek(to_timestamp(listened_at));
 ```
 
-## Maintenance & Integrity
+## Maintenance and integrity
 
-### Find duplicate scrobbles (Same artist, track, and timestamp)
+### Find duplicate scrobbles
 ```sql
 SELECT listened_at, artist_name, track_name, count(*)
 FROM scrobbles

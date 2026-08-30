@@ -1,58 +1,68 @@
-# Corpus Architecture
+# Corpus architecture
 
-Corpus is a self-hosted music listening history dashboard and analytics service. It supports multiple users, synchronizing scrobbles from ListenBrainz and Last.fm and providing a performant web interface for data exploration and statistics.
+Corpus is a self-hosted listening history dashboard. It synchronises ListenBrainz and Last.fm scrobbles for multiple users.
 
-## System Components
+## System components
 
-### Web Server
-The server is built with PureScript running on Node.js. It handles several core responsibilities:
-- **HTTP API**: Serves the frontend, scrobble data (with filtering/pagination), statistics, and similar tracks (via [cosine.club](https://cosine.club)). It also provides a **ListenBrainz-compatible scrobble submission endpoint**.
-- **ListenBrainz Sync**: A background process that polls the ListenBrainz API every 60 seconds to fetch new scrobbles.
-- **Last.fm Sync**: A background process that polls the Last.fm API every 60 seconds to fetch new scrobbles. Both syncs write to the same `scrobbles` table; duplicate timestamps are silently ignored.
-- **Metadata Enrichment**: A background process that identifies scrobbles with missing metadata (genres, labels, release years) and fetches information from MusicBrainz, Last.fm, and Discogs.
-- **Cover Art Proxy**: A specialized endpoint that redirects to cover art and caches it in the background, using the fallback strategy Cover Art Archive → Discogs → Last.fm.
-- **Registration and administration**: An optional public registration flow with authenticated approval, user provisioning, and SMTP notifications.
-- **Observability**: Optional Prometheus metrics exposed at `/metrics`.
+### Web server
+The PureScript server runs on Node.js. It:
+
+- serves the frontend, scrobble data, statistics and similar tracks from [cosine.club](https://cosine.club)
+- accepts ListenBrainz-compatible scrobble submissions
+- polls ListenBrainz and Last.fm every 60 seconds
+- deduplicates matching timestamps using the `listened_at` primary key
+- enriches missing genres, labels and release years from MusicBrainz, Last.fm and Discogs
+- redirects and caches cover art, trying Cover Art Archive, Discogs and then Last.fm
+- provides optional registration, administration, email and Prometheus metrics
+
+External API requests time out after 10 seconds. Image requests time out after 20 seconds.
 
 ### Frontend
-A Single Page Application (SPA) built with [Elm](https://elm-lang.org).
-- **Real-time Updates**: Periodically refreshes the scrobble list.
-- **Filtering & Search**: Supports deep filtering by genre, label, or release year.
-- **Search Functionality**: Global search across tracks, artists, albums, and labels with real-time results.
-- **About Page**: Provides system information, feature list, and links to related resources.
-- **Clickable Metadata**: Track name, artist, album, and label in listen entries are all clickable for quick filtering.
-- **Responsive UI**: Designed for both desktop and mobile viewing with a "retro-modern" aesthetic.
+The Elm single-page application:
+
+- refreshes the scrobble list periodically
+- filters by genre, label or release year
+- searches tracks, artists, albums and labels
+- links listen metadata to matching filters
+- works on desktop and mobile
 
 ### Database
-Corpus uses **DuckDB** for its primary data storage. Each user has their own database file.
-- **Schema**:
-    - `scrobbles`: Stores the core listening history (timestamp, track, artist, album, MBIDs). The `listened_at` Unix timestamp is the primary key — scrobbles from ListenBrainz and Last.fm deduplicate naturally.
-    - `release_metadata`: Stores enriched metadata indexed by MusicBrainz Release ID (MBID), including genre, label, and release year.
-    - `api_tokens`: Stores hashed user API tokens for scrobble submission. Tokens are hashed with SHA-256 before storage.
-- **Performance**: DuckDB's columnar storage allows for extremely fast analytical queries across large listening histories.
+Corpus stores each user's data in a separate DuckDB file:
+
+- `scrobbles` stores listening history with `listened_at` as its primary key
+- `release_metadata` stores genre, label and release year by MusicBrainz release ID
+- `api_tokens` stores SHA-256 hashes of submission tokens
+
+DuckDB's columnar storage supports analytical queries over large listening histories.
 
 ### Storage
-Uses an S3-compatible bucket for cover art and optional database backups.
-- **Cover cache**: Cached images are converted to AVIF and stored in S3. Cache hits redirect to a presigned S3 URL; cache misses redirect to the upstream image and populate the cache in the background.
-- **Backups**: When enabled per user, the server checkpoints that user's DuckDB database and uploads timestamped snapshots to S3.
-- **Registration data**: Pending, approved, denied, and revoked self-registration requests are stored separately in the shared `registrations.db` database.
+Corpus uses an S3-compatible bucket when you enable cover caching or backups:
 
-## Multi-User Support
+- the cover cache stores AVIF images and redirects hits to presigned S3 URLs
+- backups checkpoint a user's DuckDB file and upload timestamped snapshots
+- the shared `registrations.db` file stores pending, approved, denied and revoked registrations
 
-Corpus runs as a single server process serving multiple users. User configuration is defined in `users.json`, managed via the built-in CLI commands.
+## Multi-user support
 
-### Routing
-- `/` and `/u/<slug>` — serve the Elm SPA for the root user and named users respectively
-- `/proxy?user=<slug>`, `/stats?user=<slug>`, `/cover?user=<slug>`, `/similar?user=<slug>` — shared API endpoints, user selected via query parameter
-- `/healthz?user=<slug>` — liveness check; pings the user's DuckDB connection
-- `/1/validate-token` — ListenBrainz-compatible token validation endpoint
-- `/1/submit-listens` — ListenBrainz-compatible scrobble submission endpoint (requires `Authorization: Token <token>` header)
-- `/register` and `/admin` — registration and administration UI; registration is enabled with `REGISTRATION_ENABLED=true`, while admin API routes additionally require `ADMIN_TOKEN`
-- `/metrics` — Prometheus metrics (no user parameter; covers all users; only available when `METRICS_ENABLED=true`)
+Corpus serves multiple users from one process. Use the command-line interface to manage static users in `users.json`.
 
-### User Management
+### Routes
 
-Users are managed via built-in CLI commands. The server must not be running when modifying `users.json`.
+Corpus provides these routes:
+
+- `/` and `/u/<slug>`: serve the Elm application for the root user and named users
+- `/proxy?user=<slug>`, `/stats?user=<slug>`, `/cover?user=<slug>`, `/similar?user=<slug>`: select a user through the query parameter
+- `/healthz?user=<slug>`: checks the user's DuckDB connection
+- `/1/validate-token`: validates a ListenBrainz-compatible token
+- `/1/submit-listens`: accepts ListenBrainz-compatible submissions with an `Authorization: Token <token>` header
+- `/register` and `/admin`: serve registration and administration pages
+- `/metrics`: returns metrics for all users when `METRICS_ENABLED=true`
+
+Set `REGISTRATION_ENABLED=true` to enable registration. Set `ADMIN_TOKEN` to enable the administration APIs.
+
+### User management
+
+Stop Corpus before using these commands to change `users.json`:
 
 ```sh
 # Add a new user (creates the DB, prints the API token once)
@@ -69,105 +79,107 @@ node server.js list-users
 node server.js reset-token --slug filip
 ```
 
-The API token is only printed once on creation or reset — store it securely. It is used for the `/1/submit-listens` endpoint via `Authorization: Token <token>`.
+Corpus prints the API token once when you create or reset a user. Store it securely. Send it to `/1/submit-listens` as `Authorization: Token <token>`.
 
 ### Configuration
-User configuration is split into two layers:
+User configuration has 2 layers:
 
-1. **`users.json`** (non-sensitive): defines user slugs, source usernames, database filenames, and feature flags. Managed via CLI (`add-user`, `reset-token`, `list-users`). The server reads this file at startup from the path in `CORPUS_USERS_FILE` (defaults to `users.json`).
+1. `users.json` defines user slugs, source usernames, database filenames and feature flags. The CLI manages this file. Corpus reads it at startup from `CORPUS_USERS_FILE`, which defaults to `users.json`.
+2. Environment variables provide shared API keys and S3 credentials at runtime.
 
-2. **Environment variables** (runtime, sensitive): shared API keys and S3 credentials are read from the environment at startup and applied to all users.
+Each user has a separate DuckDB connection, sync loop and write lock. The lock runs ListenBrainz and Last.fm sync transactions in sequence. HTTP reads use DuckDB snapshots without taking the lock.
 
-Each user gets their own `UserContext` with an independent DuckDB connection, sync loop, and write lock (`AVar Unit`). The write lock serializes all sync transactions — if a user has both ListenBrainz and Last.fm configured, their transactions are queued rather than run concurrently. HTTP reads do not acquire the lock; DuckDB's MVCC provides consistent snapshots.
+Corpus provisions approved registrations immediately and reloads them from `registrations.db` at startup. It does not change `users.json`. A `users.json` entry takes precedence over a registration with the same slug.
 
-Approved self-registered users are provisioned immediately and loaded at startup from `registrations.db`; `users.json` is not changed. A user defined in `users.json` takes precedence over an approved registration with the same slug.
+### Remove registered users
 
-### Removing Registered Users
+An administrator can remove a self-registered user without restarting Corpus. Corpus stops their background work, closes and deletes their DuckDB file, then revokes the registration. Administrators cannot use this process for users defined in `users.json`.
 
-An administrator can remove a self-registered user without restarting the server. Corpus stops that user's recurring sync, enrichment, and backup fibers; removes the live user context; closes and deletes the user's DuckDB file; and marks the registration as revoked. Users defined in `users.json` are managed manually and cannot be removed through this flow.
+## Configuration reference
 
-## Configuration Reference
-
-### Environment Variables
+### Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `CORPUS_USERS_FILE` | `users.json` | Path to the compiled users config |
+| `CORPUS_USERS_FILE` | `users.json` | Path to the user configuration file |
 | `DATABASE_PATH` | _(cwd)_ | Root directory for all user database files |
-| `LASTFM_API_KEY` | — | Last.fm API key (required if any user has `lastfmUser`) |
-| `DISCOGS_TOKEN` | — | Discogs token for cover/genre fallback |
-| `S3_BUCKET` | — | S3 bucket for cover art cache |
+| `LASTFM_API_KEY` | not set | Last.fm API key (required if any user has `lastfmUser`) |
+| `DISCOGS_TOKEN` | not set | Discogs token for cover and genre fallback |
+| `S3_BUCKET` | not set | S3 bucket for cover art cache |
 | `S3_REGION` | `us-east-1` | S3 region |
-| `AWS_ACCESS_KEY_ID` | — | S3 credentials |
-| `AWS_SECRET_ACCESS_KEY` | — | S3 credentials |
-| `AWS_ENDPOINT_URL` | — | S3 endpoint (for S3-compatible storage) |
-| `AWS_S3_ADDRESSING_STYLE` | — | `virtual` or `path` |
-| `COSINE_API_KEY` | — | [cosine.club](https://cosine.club) API key for similar tracks |
+| `AWS_ACCESS_KEY_ID` | not set | S3 credentials |
+| `AWS_SECRET_ACCESS_KEY` | not set | S3 credentials |
+| `AWS_ENDPOINT_URL` | not set | S3-compatible endpoint |
+| `AWS_S3_ADDRESSING_STYLE` | not set | `virtual` or `path` |
+| `COSINE_API_KEY` | not set | [cosine.club](https://cosine.club) API key for similar tracks |
 | `PORT` | `8000` | HTTP listen port |
 | `HOST` | `127.0.0.1` | HTTP listen host |
-| `METRICS_ENABLED` | `false` | Set to `true` to enable the Prometheus `/metrics` endpoint |
+| `METRICS_ENABLED` | `false` | Set to `true` to enable `/metrics` |
 | `CORS_ORIGIN` | `*` | Value of `Access-Control-Allow-Origin` on `/proxy` responses |
 | `REGISTRATION_ENABLED` | `false` | Set to `true` to enable public registration at `/register` |
-| `ADMIN_TOKEN` | — | Bearer token required by `/admin/*` API routes; when unset, they return 404 |
-| `ADMIN_EMAIL` | — | Address notified of new registration requests |
+| `ADMIN_TOKEN` | not set | Bearer token for `/admin/*`; these routes return 404 when unset |
+| `ADMIN_EMAIL` | not set | Address notified of new registration requests |
 | `CORPUS_REGISTRATIONS_DB` | `registrations.db` | Shared DuckDB file for registration state |
-| `SMTP_HOST` | — | SMTP server host; email is skipped when unset |
+| `SMTP_HOST` | not set | SMTP server host; Corpus skips email when unset |
 | `SMTP_PORT` | `587` | SMTP port (STARTTLS) |
-| `SMTP_USER` | — | SMTP username |
-| `SMTP_PASS` | — | SMTP password |
-| `SMTP_FROM` | — | Sender address |
+| `SMTP_USER` | not set | SMTP username |
+| `SMTP_PASS` | not set | SMTP password |
+| `SMTP_FROM` | not set | Sender address |
 
-### users.json Fields
+Set `LASTFM_API_KEY` when any user has `lastfmUser`. Cover caching and backups require `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_ENDPOINT_URL`.
+
+### `users.json` fields
+
+`slug` and `name` belong to each item in `users`. Put the other fields in its `config` object. Only `name`, `listenbrainzUser` and `lastfmUser` are optional.
 
 | Field | Type | Purpose |
 |---|---|---|
-| `slug` | `Text` | URL slug (`""` for root user, `"filip"` for `/u/filip`) |
-| `name` | `Optional Text` | Display name for the user (defaults to slug if not provided) |
-| `listenbrainzUser` | `Optional Text` | ListenBrainz username |
-| `lastfmUser` | `Optional Text` | Last.fm username |
-| `databaseFile` | `Text` | DuckDB filename (relative to `DATABASE_PATH`) |
-| `coverCacheEnabled` | `Bool` | Enable S3 cover art caching |
-| `backupEnabled` | `Bool` | Enable periodic S3 database backups |
-| `backupIntervalHours` | `Natural` | Backup frequency |
+| `slug` | string | URL slug (`""` for the root user, `"filip"` for `/u/filip`) |
+| `name` | optional string | Display name, which defaults to the slug |
+| `listenbrainzUser` | optional string | ListenBrainz username |
+| `lastfmUser` | optional string | Last.fm username |
+| `databaseFile` | string | DuckDB filename, relative to `DATABASE_PATH` |
+| `coverCacheEnabled` | boolean | Enables S3 cover caching |
+| `backupEnabled` | boolean | Enables periodic S3 database backups |
+| `backupIntervalHours` | integer | Hours between backups |
 
-## Data Flow
+## Data flow
 
-### Scrobble Synchronization
+### Scrobble synchronisation
 
-Both sync processes follow the same pattern: fetch the most recent page, insert any new scrobbles, and paginate backwards through history until an already-known timestamp is encountered.
+Both sync processes fetch the newest page, insert new scrobbles and move backwards until they find a known timestamp.
 
-**ListenBrainz** (timestamp-based pagination):
+ListenBrainz uses timestamp-based pagination:
 1. Fetch latest 100 scrobbles from the ListenBrainz API.
-2. Insert new scrobbles; stop if an existing timestamp is found.
+2. Insert new scrobbles. Stop if an existing timestamp is found.
 3. Paginate backwards using `max_ts` until fully caught up.
 
-**Last.fm** (page-based pagination):
+Last.fm uses page-based pagination:
 1. Fetch page 1 (most recent 200 scrobbles) from the Last.fm API.
-2. Insert new scrobbles; stop if an existing timestamp is found.
+2. Insert new scrobbles. Stop if an existing timestamp is found.
 3. Paginate through subsequent pages using `totalPages` from the API response until fully caught up.
 
-Both processes run every 60 seconds per user. On subsequent syncs they stop at the first known timestamp, making incremental updates efficient.
+Both processes run every 60 seconds for each user. Later syncs stop at the first known timestamp.
 
-### Metadata Enrichment
-1. Background task identifies MBIDs in `scrobbles` that are not in `release_metadata`.
-2. Queries MusicBrainz API for release details.
-3. If MusicBrainz lacks genre information, falls back to Last.fm and Discogs APIs.
-4. Updates `release_metadata` with found information.
+### Metadata enrichment
 
-### Cover Art Retrieval
-When a cover is requested:
-1. Check S3 cache.
-2. If not found:
-    - Try **Cover Art Archive (CAA)** using the Release MBID.
-    - Fallback to **Discogs** using Artist/Album name.
-    - Final fallback to **Last.fm** using Artist/Album name.
-3. The client is redirected to the selected source immediately. If caching is enabled, Corpus fetches, converts, and uploads the image to S3 in the background.
+1. Corpus finds release MBIDs that do not have metadata.
+2. It requests release details from MusicBrainz.
+3. If MusicBrainz has no genre, it tries Last.fm and Discogs.
+4. It updates `release_metadata` with any details found.
+
+### Cover art retrieval
+When a client requests a cover:
+
+1. Corpus checks the S3 cache.
+2. On a miss, Corpus tries Cover Art Archive, Discogs and then Last.fm.
+3. Corpus redirects the client immediately. If caching is enabled, it converts and uploads the image in the background.
 
 ## Observability
 
-### Prometheus Metrics
+### Prometheus metrics
 
-Prometheus metrics are **disabled by default**. Set `METRICS_ENABLED=true` to enable them. When enabled, all HTTP requests are instrumented via `Metrics.wrapRequest` and background work is tracked with dedicated counters and gauges. When disabled, the `/metrics` endpoint returns 404 and all metric-increment calls are no-ops with no runtime overhead.
+Prometheus metrics are disabled by default. Set `METRICS_ENABLED=true` to record HTTP requests and background work. When disabled, `/metrics` returns 404 and metric calls do nothing.
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
@@ -183,29 +195,30 @@ Prometheus metrics are **disabled by default**. Set `METRICS_ENABLED=true` to en
 | `corpus_db_backup_runs_total` | Counter | `user`, `result` | Database backup runs |
 | `corpus_db_backup_last_success_seconds` | Gauge | `user` | Timestamp of last successful backup |
 
-Node.js default metrics (GC, event loop, memory) are also collected via `prom-client`'s `collectDefaultMetrics`.
+`prom-client` also collects Node.js garbage collection, event loop and memory metrics.
 
-## Tech Stack
+## Tech stack
 
-- **Language**: [PureScript](https://purescript.org) (server), [Elm](https://elm-lang.org) (frontend)
-- **Runtime**: [Node.js](https://nodejs.org)
-- **Database**: [DuckDB](https://duckdb.org) (one file per user)
-- **Config**: JSON (`users.json`, managed via CLI)
-- **Bundling**: [spago](https://github.com/purescript/spago) + [esbuild](https://esbuild.github.io/) (server), [elm make](https://guide.elm-lang.org/install/elm.html) (frontend)
-- **Environment**: [Nix](https://nixos.org) for reproducible development shells and container builds
+- server language: [PureScript](https://purescript.org)
+- frontend language: [Elm](https://elm-lang.org)
+- runtime: [Node.js](https://nodejs.org)
+- database: [DuckDB](https://duckdb.org), with one file for each user
+- configuration: JSON in `users.json`, managed through the command-line interface
+- bundling: [Spago](https://github.com/purescript/spago), [esbuild](https://esbuild.github.io/) and [elm make](https://guide.elm-lang.org/install/elm.html)
+- build environment: [Nix](https://nixos.org)
 
-## Foreign Function Interface (FFI)
+## Foreign function interface
 
-Corpus relies on FFI to interact with the Node.js ecosystem where native PureScript wrappers are unavailable. Key FFI integrations:
+Corpus uses JavaScript modules where no PureScript wrapper is available:
 
-- **Database (`Db.js`)**: Interface to the `@duckdb/node-api` library. Includes BigInt → Number conversion for JSON compatibility.
-- **Cloud Storage (`S3.js`)**: AWS SDK (`@aws-sdk/client-s3`) for cover art caching. Takes explicit config structs rather than reading `process.env`.
-- **System Utilities (`Main.js`)**: Bridges PureScript with Node.js — `dotenv` loading and request helpers.
-- **Config (`Config.js`)**: Reads and parses `users.json` from the path given by `CORPUS_USERS_FILE`.
-- **Observability (`Metrics.js`)**: Initialises `prom-client` (Prometheus). Exports metric-increment helpers called from PureScript and the `wrapRequest` function that records metrics and logs each HTTP request.
+- `Db.js` uses `@duckdb/node-api` and converts JavaScript `BigInt` values to `Number` for JSON
+- `S3.js` uses `@aws-sdk/client-s3` for cover caching
+- `Main.js` loads `.env` files and provides request helpers
+- `Config.js` reads and parses the file set by `CORPUS_USERS_FILE`
+- `Metrics.js` uses `prom-client` to record HTTP and background-work metrics
 
-## System Flow
+## System flow
 
 See [`architecture.dot`](architecture.dot) (render with `just docs`).
 
-![System Flow](architecture.svg)
+![System flow](architecture.svg)

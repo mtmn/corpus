@@ -6,8 +6,8 @@ A self-hosted ListenBrainz and Last.fm listening-history dashboard. Corpus store
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) — components, routing, data flows, configuration, and operations.
-- [DuckDB](docs/duckdb.md) — schema and analytical queries.
+- [Architecture](docs/architecture.md): components, routes, data flows, configuration and operations
+- [DuckDB](docs/duckdb.md): schema and analytical queries
 
 ## Quick start
 
@@ -31,9 +31,9 @@ pnpm spago run
 
 ## Scrobbling API
 
-Corpus accepts ListenBrainz-compatible submissions at `POST /1/submit-listens`. Send `Authorization: Token <token>` and a standard ListenBrainz payload. Clients may first validate a token with `GET /1/validate-token` using the same header.
+Send ListenBrainz-compatible submissions to `POST /1/submit-listens`. Include `Authorization: Token <token>` and a standard ListenBrainz payload. Validate a token with `GET /1/validate-token` and the same header.
 
-Tokens are shown once when a user is created, reset, or approved through self-registration. Store them securely.
+Corpus shows tokens once when you create, reset or approve a user. Store them securely.
 
 ## Configuration
 
@@ -49,4 +49,4 @@ Tokens are shown once when a user is created, reset, or approved through self-re
 | `PORT`, `HOST` | HTTP listener (defaults: `8000`, `127.0.0.1`) |
 | `METRICS_ENABLED` | Enable Prometheus metrics at `/metrics` |
 
-Set `REGISTRATION_ENABLED=true` to allow public registration at `/register`; `ADMIN_TOKEN` enables approval at `/admin`. See the [architecture guide](docs/architecture.md#configuration-reference) for every setting and the full registration workflow.
+Set `REGISTRATION_ENABLED=true` to allow public registration at `/register`. Set `ADMIN_TOKEN` to enable approval at `/admin`. See the [configuration reference](docs/architecture.md#configuration-reference) for all settings and the registration workflow.

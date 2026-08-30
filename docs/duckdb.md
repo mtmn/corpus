@@ -1,13 +1,13 @@
 # DuckDB in Corpus
 
-Corpus uses [DuckDB](https://duckdb.org/) as its primary analytical database. DuckDB's columnar storage and efficient query engine allow Corpus to provide fast filtering, pagination, and statistics over large sets of listening history data.
+Corpus stores each user's listening history in [DuckDB](https://duckdb.org/). Its columnar query engine supports filtering, pagination and statistics over large histories.
 
-## Database Schema
+## Database schema
 
 Each user has an independent DuckDB database file. That database consists of three main tables:
 
 ### `scrobbles`
-Stores the raw listening history synced from ListenBrainz and/or Last.fm.
+Stores listening history from ListenBrainz and Last.fm.
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
@@ -39,50 +39,11 @@ Stores hashed user API tokens for scrobble submission.
 
 Self-registration state is intentionally kept outside the per-user databases in the shared `registrations.db` file. It is managed by the server rather than by the listening-history schema.
 
-## Application Usage
+## Application use
 
-The application interacts with DuckDB via a PureScript FFI layer (`src/Db.js` and `src/Db.purs`).
-- **BigInt Handling**: Since DuckDB returns `BIGINT` as JavaScript `BigInt`, the FFI layer converts these to `Number` to ensure compatibility with standard JSON serialization.
-- **Background Enrichment**: The server identifies "unenriched" scrobbles (those with an MBID but no metadata) and performs background updates to the `release_metadata` table.
+Corpus accesses DuckDB through `src/Db.purs` and `src/Db.js`:
 
-## Common Analytical Queries
+- the JavaScript layer converts DuckDB `BIGINT` values to `Number` for JSON serialisation
+- the server finds scrobbles with a release MBID but no metadata, then updates `release_metadata`
 
-You can run these queries directly against your `corpus.db` file using the DuckDB CLI or any compatible tool.
-
-### Top 10 Artists of All Time
-```sql
-SELECT artist_name, count(*) as play_count
-FROM scrobbles
-GROUP BY artist_name
-ORDER BY play_count DESC
-LIMIT 10;
-```
-
-### Listening Activity by Hour
-```sql
-SELECT
-    extract('hour' from to_timestamp(listened_at)) as hour,
-    count(*) as count
-FROM scrobbles
-GROUP BY hour
-ORDER BY hour;
-```
-
-### Genre Distribution
-```sql
-SELECT rm.genre, count(*) as count
-FROM scrobbles s
-JOIN release_metadata rm ON s.release_mbid = rm.release_mbid
-WHERE rm.genre IS NOT NULL
-GROUP BY rm.genre
-ORDER BY count DESC;
-```
-
-### MBID Enrichment Coverage
-```sql
-SELECT
-    count(*) as total,
-    count(release_mbid) FILTER (WHERE release_mbid != '') as with_mbid,
-    (count(release_mbid) FILTER (WHERE release_mbid != '')::FLOAT / count(*)) * 100 as percentage
-FROM scrobbles;
-```
+Use the [example DuckDB queries](duckdb_queries.md) with the DuckDB command-line interface or another compatible tool.
