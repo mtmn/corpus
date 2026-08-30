@@ -1,102 +1,209 @@
-digraph corpus {
+digraph corpus_architecture {
     graph [
         rankdir=LR
-        bgcolor="transparent"
-        nodesep=0.7
-        ranksep=1.0
-        pad=0.2
-        fontname="Atkinson Hyperlegible Mono"
-        fontcolor="#e8edf5"
+        bgcolor="#ffffff"
+        pad=0.30
+        nodesep=0.32
+        ranksep=1.15
+        splines=spline
+        compound=true
+        newrank=true
+        outputorder=edgesfirst
+        fontname="Intel Mono"
+        fontcolor="#424242"
     ]
 
     node [
-        fontname="Atkinson Hyperlegible Mono"
-        fontsize=10
         shape=box
         style="rounded,filled"
-        color="#8b97a8"
-        fontcolor="#ffffff"
-        margin="0.18,0.12"
+        color="#424242"
+        fillcolor="#ffffff"
+        fontname="Intel Mono"
+        fontsize=11
+        fontcolor="#424242"
+        margin="0.18,0.10"
+        penwidth=1.0
+        width=1.45
     ]
+
     edge [
-        fontname="Atkinson Hyperlegible Mono"
+        color="#424242"
+        fontcolor="#424242"
+        fontname="Intel Mono"
         fontsize=8
-        color="#aeb8c7"
-        fontcolor="#d5dce7"
-        arrowhead=vee
-        arrowsize=0.7
-        penwidth=1.25
+        arrowsize=0.65
+        penwidth=1.0
     ]
 
     subgraph cluster_clients {
-        label="People and clients"
+        label="CLIENTS"
+        labelloc=t
+        labeljust=l
         style="rounded,filled"
-        fillcolor="#201a35"
-        color="#9879dc"
-        fontcolor="#ffffff"
-        Clients [
-            label="Browser\nElm SPA\n\nScrobbler\nListenBrainz-compatible\n\nAdministrator · Prometheus (optional)"
-            fillcolor="#302550"
-        ]
+        color="#424242"
+        fillcolor="#ffffff"
+        fontcolor="#424242"
+        fontsize=11
+        margin=16
+
+        Browser
+        Scrobbler
+        Operator
+        { rank=same; Browser; Scrobbler; Operator }
+        Browser -> Scrobbler -> Operator [style=invis, weight=30]
     }
 
-    subgraph cluster_server {
-        label="Corpus server  ·  PureScript on Node.js"
+    subgraph cluster_corpus {
+        label="CORPUS  ·  PURESCRIPT / NODE.JS"
+        labelloc=t
+        labeljust=l
         style="rounded,filled"
-        fillcolor="#11291d"
-        color="#59aa76"
-        fontcolor="#ffffff"
-        Corpus [
-            label="HTTP server and API\nSPA · proxy · stats · cover · similar\n\nPer-user background work\nListenBrainz and Last.fm sync\nmetadata enrichment · cover cache · database backup\n\nRegistration/admin workflow · optional metrics"
-            fillcolor="#1b422d"
-        ]
+        color="#424242"
+        fillcolor="#ffffff"
+        fontcolor="#424242"
+        fontsize=11
+        margin=18
+
+        subgraph cluster_interfaces {
+            label="INTERFACES"
+            labelloc=t
+            labeljust=l
+            style="rounded,filled"
+            color="#424242"
+            fillcolor="#ffffff"
+            fontcolor="#424242"
+            fontsize=9
+            margin=12
+
+            Frontend [label="Frontend\nElm"]
+            API [label="API\nHTTP"]
+            CLI
+            { rank=same; Frontend; API; CLI }
+            Frontend -> API -> CLI [style=invis, weight=30]
+        }
+
+        subgraph cluster_services {
+            label="SERVICES"
+            labelloc=t
+            labeljust=l
+            style="rounded,filled"
+            color="#424242"
+            fillcolor="#ffffff"
+            fontcolor="#424242"
+            fontsize=9
+            margin=12
+
+            Synchronizer
+            Query
+            Enricher
+            Artwork
+            Recommender
+            Registrar
+            Archiver
+            { rank=same; Synchronizer; Query; Enricher; Artwork; Recommender; Registrar; Archiver }
+            Synchronizer -> Query -> Enricher -> Artwork -> Recommender -> Registrar -> Archiver [style=invis, weight=30]
+        }
     }
 
-    subgraph cluster_storage {
-        label="Persistent storage"
+    subgraph cluster_persistence {
+        label="PERSISTENCE"
+        labelloc=t
+        labeljust=l
         style="rounded,filled"
-        fillcolor="#302a10"
-        color="#d2aa35"
-        fontcolor="#ffffff"
-        Storage [
-            label="DuckDB files: one per user\nscrobbles · release metadata · API tokens\n\nregistrations.db: shared registration state\n\nS3-compatible bucket\ncover cache · database backups"
-            shape=cylinder
-            fillcolor="#473d15"
-        ]
+        color="#424242"
+        fillcolor="#ffffff"
+        fontcolor="#424242"
+        fontsize=11
+        margin=16
+
+        DuckDB [label="DuckDB\nOLAP"]
+        S3 [label="S3\nObjects"]
+        { rank=same; DuckDB; S3 }
+        DuckDB -> S3 [style=invis, weight=30]
     }
 
-    subgraph cluster_external {
-        label="External services"
+    subgraph cluster_ingestion {
+        label="INGESTION"
+        labelloc=t
+        labeljust=l
         style="rounded,filled"
-        fillcolor="#11243e"
-        color="#6396e7"
-        fontcolor="#ffffff"
-        External [
-            label="ListenBrainz · Last.fm\nMusicBrainz · Discogs\nCover Art Archive\ncosine.club\nSMTP server (optional)"
-            fillcolor="#19365d"
-        ]
+        color="#424242"
+        fillcolor="#ffffff"
+        fontcolor="#424242"
+        fontsize=11
+        margin=16
+
+        ListenBrainz
+        LastFM [label="Last.fm"]
+        { rank=same; ListenBrainz; LastFM }
+        ListenBrainz -> LastFM [style=invis, weight=30]
     }
 
-    // Model labels as nodes so connection lines cannot cross their text.
-    node [
-        shape=box
+    subgraph cluster_catalogs {
+        label="CATALOGS"
+        labelloc=t
+        labeljust=l
         style="rounded,filled"
-        color="#4b5563"
-        fillcolor="#111827"
-        fontcolor="#ffffff"
-        fontsize=8
-        margin="0.1,0.06"
-    ]
-    ClientFlow [label="SPA, listen submission, admin, /metrics"]
-    StorageFlow [label="per-user data, registrations, cached covers, backups"]
-    ExternalFlow [
-        label="sync · enrichment · cover lookup\nCAA → Discogs → Last.fm · similar tracks · email"
-    ]
+        color="#424242"
+        fillcolor="#ffffff"
+        fontcolor="#424242"
+        fontsize=11
+        margin=16
 
-    Clients -> ClientFlow [arrowhead=none]
-    ClientFlow -> Corpus
-    Corpus -> StorageFlow [arrowhead=none]
-    StorageFlow -> Storage
-    Corpus -> ExternalFlow [dir=back]
-    ExternalFlow -> External
+        MusicBrainz
+        Discogs
+        CoverArchive [label="CoverArchive\nCAA"]
+        { rank=same; MusicBrainz; Discogs; CoverArchive }
+        MusicBrainz -> Discogs -> CoverArchive [style=invis, weight=30]
+    }
+
+    subgraph cluster_integrations {
+        label="INTEGRATIONS"
+        labelloc=t
+        labeljust=l
+        style="rounded,filled"
+        color="#424242"
+        fillcolor="#ffffff"
+        fontcolor="#424242"
+        fontsize=11
+        margin=16
+
+        Cosine [label="cosine.club"]
+        SMTP
+        Prometheus
+        { rank=same; Cosine; SMTP; Prometheus }
+        Cosine -> SMTP -> Prometheus [style=invis, weight=30]
+    }
+
+    Browser -> Frontend [label="HTTPS"]
+    Browser -> API [label="JSON"]
+    Scrobbler -> API [label="POST /1/submit-listens"]
+    Operator -> API [label="admin"]
+    Operator -> CLI [label="shell"]
+    Frontend -> API [label="JSON", constraint=false]
+
+    API -> Query [label="queries"]
+    API -> Artwork [label="covers"]
+    API -> Recommender [label="similar"]
+    API -> Registrar [label="accounts"]
+    CLI -> Registrar [label="users"]
+
+    Synchronizer -> ListenBrainz [dir=both]
+    Synchronizer -> LastFM [dir=both]
+    Synchronizer -> DuckDB
+    Query -> DuckDB [dir=both]
+    Enricher -> MusicBrainz [dir=both]
+    Enricher -> Discogs [dir=both]
+    Enricher -> DuckDB
+    Artwork -> CoverArchive
+    Artwork -> Discogs
+    Artwork -> S3 [dir=both]
+    Recommender -> Cosine [dir=both]
+    Registrar -> DuckDB
+    Registrar -> SMTP
+    Archiver -> DuckDB
+    Archiver -> S3
+    Prometheus -> API [label="scrape"]
+
+    { rank=same; DuckDB; S3; ListenBrainz; LastFM; MusicBrainz; Discogs; CoverArchive; Cosine; SMTP; Prometheus }
 }
