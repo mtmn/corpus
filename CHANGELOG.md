@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.3.2] - 2026-08-30
+
+[compare](https://git.sr.ht/~mtmn/corpus/log/v3.3.1..v3.3.2)
+
+### Documentation
+
+- Cleanup, GOV.UK writing style ([`72f44dc`](https://git.sr.ht/~mtmn/corpus/commit/72f44dcb85e8ae0623e927bb0a65c06e636e8005))
+
+### Housekeeping
+
+- Update nix flakes, update arch diagram ([`503e9aa`](https://git.sr.ht/~mtmn/corpus/commit/503e9aac05c8fbfe91124901d16006f2a5bc93ec))
+
 ## [3.3.1] - 2026-08-28
 
 [compare](https://git.sr.ht/~mtmn/corpus/log/v3.3.0..v3.3.1)
@@ -7,6 +19,7 @@
 ### Housekeeping
 
 - Bump all deps ([`0f17064`](https://git.sr.ht/~mtmn/corpus/commit/0f170641937f9133bac271aa79f1bf5148f3f55e))
+- Release v3.3.1 ([`a2fb449`](https://git.sr.ht/~mtmn/corpus/commit/a2fb44947a9c1af9ec01fbf359d8d545945db122))
 
 ## [3.3.0] - 2026-08-09
 
