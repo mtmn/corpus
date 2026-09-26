@@ -1,43 +1,42 @@
 # Changelog
 
-## [3.3.2] - 2026-08-30
+## [3.4.0] - 2026-09-26
 
-[compare](https://git.sr.ht/~mtmn/corpus/log/v3.3.1..v3.3.2)
-
-### Documentation
-
-- Cleanup, GOV.UK writing style ([`72f44dc`](https://git.sr.ht/~mtmn/corpus/commit/72f44dcb85e8ae0623e927bb0a65c06e636e8005))
-
-### Housekeeping
-
-- Update nix flakes, update arch diagram ([`503e9aa`](https://git.sr.ht/~mtmn/corpus/commit/503e9aac05c8fbfe91124901d16006f2a5bc93ec))
-
-## [3.3.1] - 2026-08-28
-
-[compare](https://git.sr.ht/~mtmn/corpus/log/v3.3.0..v3.3.1)
-
-### Housekeeping
-
-- Bump all deps ([`0f17064`](https://git.sr.ht/~mtmn/corpus/commit/0f170641937f9133bac271aa79f1bf5148f3f55e))
-- Release v3.3.1 ([`a2fb449`](https://git.sr.ht/~mtmn/corpus/commit/a2fb44947a9c1af9ec01fbf359d8d545945db122))
-
-## [3.3.0] - 2026-08-09
-
-[compare](https://git.sr.ht/~mtmn/corpus/log/v3.2.0..v3.3.0)
+[compare](https://git.sr.ht/~mtmn/corpus/log/v3.2.0..v3.4.0)
 
 ### Bug Fixes
 
 - Add api docs, reformat and update .tidyrc ([`bfaf5c8`](https://git.sr.ht/~mtmn/corpus/commit/bfaf5c8ea21f19c303e9fb6101d9e75079d5be23))
-- Rewrite elm2nix cache dir ([`73778ad`](https://git.sr.ht/~mtmn/corpus/commit/73778ad38992db73749030e65790cfd17bad48b1))
+- Rewrite elm2nix cache dir ([`da37ce2`](https://git.sr.ht/~mtmn/corpus/commit/da37ce23fc77b22f2ee606dc4578f25b8066b8f2))
+- Prom-client renamed to prometheus-io/client ([`e0ba21a`](https://git.sr.ht/~mtmn/corpus/commit/e0ba21ac37f265f8abc329503e62b533d9dee443))
+- Inconsistent url change ([`998174a`](https://git.sr.ht/~mtmn/corpus/commit/998174ab01e4cabdd399ec3b07d02f8a650d9fc0))
+- Escape user input in the embedded flags payload ([`9617df9`](https://git.sr.ht/~mtmn/corpus/commit/9617df95fe0f86ef2b2be7eb983171e2091fee0d))
+- Report exact next-page availability and bound proxy paging ([`9c95ff8`](https://git.sr.ht/~mtmn/corpus/commit/9c95ff8486c325130003a05ce955116c8e79f0a1))
+- Stats page, cover template tests and url decoders ([`564346b`](https://git.sr.ht/~mtmn/corpus/commit/564346b2591bf5bdb0a9a879c90ee603200ca7d1))
+- Allow manual version in release ([`ee5c4a0`](https://git.sr.ht/~mtmn/corpus/commit/ee5c4a0424d7ef65421dde6a594fbb40c58ccd64))
+
+### Documentation
+
+- Cleanup, GOV.UK writing style ([`985980a`](https://git.sr.ht/~mtmn/corpus/commit/985980adfd2943a57f7dcf5ec8ce78157485b40d))
 
 ### Features
 
 - Add timeouts and metadata improvements ([`a160446`](https://git.sr.ht/~mtmn/corpus/commit/a160446c6caa0bf12a69c4f70ee3e0f6e140f45c))
+- Initialize metrics from AppConfig flag ([`52af8f7`](https://git.sr.ht/~mtmn/corpus/commit/52af8f767bbe17d4f62654e99234c62bdf68943f))
 
 ### Housekeeping
 
-- Update elm to 0.19.2, bump deps ([`577c9ee`](https://git.sr.ht/~mtmn/corpus/commit/577c9eec7965171905c73384070f08d10f3fcc7a))
-- Release v3.3.0 ([`3cbe1fe`](https://git.sr.ht/~mtmn/corpus/commit/3cbe1fee9d9f3da9806e0a93a30b6dbed7b68db2))
+- Update elm to 0.19.2, bump deps ([`d088e5f`](https://git.sr.ht/~mtmn/corpus/commit/d088e5f7d64189bf1f34f4160ebaaee2add78ed1))
+- Release v3.3.0 ([`651ff1b`](https://git.sr.ht/~mtmn/corpus/commit/651ff1b61ab624abcc488d1aedce5fd91f0d6b00))
+- Bump all deps ([`82d7e73`](https://git.sr.ht/~mtmn/corpus/commit/82d7e7319e908da56721969b3a498da8ea9a6709))
+- Release v3.3.1 ([`5e50575`](https://git.sr.ht/~mtmn/corpus/commit/5e505755c98b2cbaefb3d2638b522b29ab0a5c2e))
+- Update nix flakes, update arch diagram ([`ec705df`](https://git.sr.ht/~mtmn/corpus/commit/ec705df730c5c0e65812f0abc7542372ae933a57))
+- Release v3.3.2 ([`75f9a4a`](https://git.sr.ht/~mtmn/corpus/commit/75f9a4a7b1a9945b29eabc89a6eccb1f604157bf))
+- Update deps and docs ([`db506d6`](https://git.sr.ht/~mtmn/corpus/commit/db506d625461714379a77df90fdba039bfa5a5f3))
+
+### Testing
+
+- Add elm-test and wire it into checks ([`a34c599`](https://git.sr.ht/~mtmn/corpus/commit/a34c599ce84264c2d56e21e28da4493a410a1002))
 
 ## [3.2.0] - 2026-08-08
 
