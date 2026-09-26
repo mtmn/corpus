@@ -1,4 +1,4 @@
-module State exposing (init, parsePage, parsePageParam, subscriptions, update)
+module State exposing (init, landingTab, parsePage, parsePageParam, subscriptions, update, userPath)
 
 import Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, fetchUsers, httpErrorToString, removeUser, submitRegistration)
 import Browser
@@ -100,6 +100,45 @@ parsePage url =
 
         _ ->
             MainPage
+
+
+{-| Pick the tab to show after a URL change lands on the main page.
+Arriving from another page keeps the tab the user chose; navigating within
+the main page resets to listens.
+-}
+landingTab : Page -> Tab -> Tab
+landingTab fromPage currentTab =
+    if fromPage == MainPage then
+        ListensTab
+
+    else
+        currentTab
+
+
+userPath : String -> String
+userPath slug =
+    if String.isEmpty slug then
+        "/"
+
+    else
+        "/u/" ++ slug
+
+
+fetchTabData : Model -> Cmd Msg
+fetchTabData model =
+    case model.activeTab of
+        StatsTab ->
+            if model.stats == Nothing then
+                fetchStats model.userSlug model.statsPeriod
+
+            else
+                Cmd.none
+
+        ListensTab ->
+            Cmd.none
+
+        AboutTab ->
+            Cmd.none
 
 
 parsePageParam : Url.Url -> Int
@@ -211,7 +250,7 @@ update msg model =
 
                                         else
                                             model.searchInput
-                                    , activeTab = ListensTab
+                                    , activeTab = landingTab model.page model.activeTab
                                     , loading = True
                                     , page = MainPage
                                 }
@@ -229,7 +268,10 @@ update msg model =
                                     newModel
                         in
                         ( clearedModel
-                        , fetchListens newUserSlug model.limit finalOffset finalFilter finalSearch
+                        , Cmd.batch
+                            [ fetchListens newUserSlug model.limit finalOffset finalFilter finalSearch
+                            , fetchTabData clearedModel
+                            ]
                         )
 
                     else
@@ -329,21 +371,17 @@ update msg model =
             )
 
         SwitchTab tab ->
-            ( { model | activeTab = tab }
-            , case tab of
-                StatsTab ->
-                    if model.stats == Nothing then
-                        fetchStats model.userSlug model.statsPeriod
+            let
+                newModel =
+                    { model | activeTab = tab }
+            in
+            if model.page == MainPage then
+                ( newModel, fetchTabData newModel )
 
-                    else
-                        Cmd.none
-
-                ListensTab ->
-                    Cmd.none
-
-                AboutTab ->
-                    Cmd.none
-            )
+            else
+                -- Leaving /register or /admin: return to the current user's
+                -- page. UrlChanged keeps the chosen tab and loads the listens.
+                ( newModel, Nav.pushUrl model.navKey (userPath model.userSlug) )
 
         SetStatsPeriod period ->
             ( { model

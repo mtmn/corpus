@@ -1,9 +1,9 @@
 module StateTest exposing (suite)
 
 import Expect
-import State exposing (parsePage, parsePageParam)
+import State exposing (landingTab, parsePage, parsePageParam, userPath)
 import Test exposing (Test, describe, test)
-import Types exposing (Page(..))
+import Types exposing (Page(..), Tab(..))
 import Url
 
 
@@ -42,5 +42,24 @@ suite =
             , test "ignores invalid page values" <|
                 \_ ->
                     Expect.equal (parsePageParam (url "http://example.com/?page=xyz")) 1
+            ]
+        , describe "landingTab"
+            [ test "keeps the chosen tab when leaving the register page" <|
+                \_ ->
+                    Expect.equal (landingTab RegisterPage StatsTab) StatsTab
+            , test "keeps the chosen tab when leaving the admin page" <|
+                \_ ->
+                    Expect.equal (landingTab AdminPage AboutTab) AboutTab
+            , test "resets to listens when navigating within the main page" <|
+                \_ ->
+                    Expect.equal (landingTab MainPage StatsTab) ListensTab
+            ]
+        , describe "userPath"
+            [ test "root user maps to /" <|
+                \_ ->
+                    Expect.equal (userPath "") "/"
+            , test "named user maps to /u/slug" <|
+                \_ ->
+                    Expect.equal (userPath "filip") "/u/filip"
             ]
         ]

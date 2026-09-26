@@ -51,11 +51,7 @@ renderNav model =
 
         navTab : String -> Tab -> Html Msg
         navTab label tab =
-            if model.page == MainPage then
-                button [ navClass (model.activeTab == tab), onClick (SwitchTab tab) ] [ text label ]
-
-            else
-                navLink label False "/"
+            button [ navClass (model.page == MainPage && model.activeTab == tab), onClick (SwitchTab tab) ] [ text label ]
     in
     div [ class "bar" ]
         [ navTab "listens" ListensTab
