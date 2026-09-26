@@ -2,6 +2,7 @@ module State exposing (init, landingTab, parsePage, parsePageParam, subscription
 
 import Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, fetchUsers, httpErrorToString, removeUser, submitRegistration)
 import Browser
+import Browser.Events
 import Browser.Navigation as Nav
 import Dict
 import Ports
@@ -50,6 +51,7 @@ init flags url navKey =
       , searchInput = ""
       , activeSearch = Nothing
       , page = page
+      , visibility = Browser.Events.Visible
       , registrationEnabled = flags.registrationEnabled
       , regSlug = ""
       , regName = ""
@@ -278,13 +280,16 @@ update msg model =
                         ( { model | page = MainPage }, Cmd.none )
 
         Tick time ->
-            if model.page == MainPage && not model.loading then
+            if model.page == MainPage && model.activeTab == ListensTab && model.visibility == Browser.Events.Visible && not model.loading then
                 ( { model | currentTime = Just time, loading = True }
                 , fetchListens model.userSlug model.limit model.offset model.activeFilter model.activeSearch
                 )
 
             else
                 ( { model | currentTime = Just time }, Cmd.none )
+
+        VisibilityChanged vis ->
+            ( { model | visibility = vis }, Cmd.none )
 
         GotTime time ->
             ( { model | currentTime = Just time }, Cmd.none )
@@ -763,7 +768,10 @@ patchStatSection section entries stats =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Time.every 30000 Tick
+    Sub.batch
+        [ Time.every 30000 Tick
+        , Browser.Events.onVisibilityChange VisibilityChanged
+        ]
 
 
 

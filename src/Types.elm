@@ -1,6 +1,7 @@
 module Types exposing (ActiveFilter, ApproveResponse, Flags, Listen, Model, Msg(..), Page(..), Period(..), RegField(..), Registration, SimilarState(..), SimilarTrack, Stats, StatsEntry, Tab(..), UserInfo)
 
 import Browser
+import Browser.Events
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
 import Http
@@ -152,6 +153,7 @@ type alias Model =
     , searchInput : String
     , activeSearch : Maybe String
     , page : Page
+    , visibility : Browser.Events.Visibility
     , registrationEnabled : Bool
 
     -- Registration form
@@ -219,6 +221,7 @@ type Msg
     | CancelRemoveUser
     | RemoveUser String
     | GotRemoveResult (Result String ())
+    | VisibilityChanged Browser.Events.Visibility
     | UrlRequested Browser.UrlRequest
     | UrlChanged Url.Url
 

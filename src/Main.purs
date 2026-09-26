@@ -16,6 +16,7 @@ import Command as Command
 import Config (AppConfig, loadConfig)
 import Data.Array (drop, elem, filter, length, null, uncons) as Array
 import Data.Either (Either(..))
+import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Traversable (traverse)
 import Data.Tuple (fst)
@@ -102,8 +103,18 @@ main = do
             approvedResults <- traverse (startUser true) approvedEntries
             let contexts = jsonContexts <> map fst approvedResults
             contextsRef <- liftEffect $ Ref.new contexts
+            tokenCacheRef <- liftEffect $ Ref.new Map.empty
+            assetCacheRef <- liftEffect $ Ref.new Map.empty
             regLock <- Avar.new unit
-            let env = { contextsRef, regConn, regLock, appConfig }
+            let
+              env =
+                { contextsRef
+                , tokenCacheRef
+                , assetCacheRef
+                , regConn
+                , regLock
+                , appConfig
+                }
             liftEffect $ do
               server <- createServer
               server # on_ Server.requestH (handleRequest env)

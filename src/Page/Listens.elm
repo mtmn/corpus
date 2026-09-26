@@ -4,6 +4,7 @@ import Dict exposing (Dict)
 import Html exposing (Html, a, button, div, img, input, p, span, strong, table, tbody, td, text, tr)
 import Html.Attributes as Attr exposing (class, disabled, href, placeholder, src, target, type_, value)
 import Html.Events exposing (on, onClick, onInput)
+import Html.Lazy exposing (lazy6)
 import Json.Decode as D
 import Page.Common exposing (onEnter)
 import Set exposing (Set)
@@ -108,7 +109,7 @@ renderContent model =
                                     key =
                                         String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ trackName
                                 in
-                                renderListen model.userSlug model.failedCovers model.hoveredCover model.similarStates idx listen
+                                lazy6 renderListen model.userSlug model.failedCovers (model.hoveredCover == Just idx) (Dict.member key model.similarStates) idx listen
                                     :: renderSimilarRow key model.similarStates
                             )
                             model.listens
@@ -117,8 +118,12 @@ renderContent model =
                     ]
 
 
-renderListen : String -> Set String -> Maybe Int -> Dict String SimilarState -> Int -> Listen -> Html Msg
-renderListen userSlug failedCovers hoveredCover similarStates idx listen =
+{-| Render one listen row. Kept lazy-friendly: only primitive or rarely
+changing arguments, so hover and similar-track toggles re-render just the
+affected rows instead of the whole table.
+-}
+renderListen : String -> Set String -> Bool -> Bool -> Int -> Listen -> Html Msg
+renderListen userSlug failedCovers isZoomed isActive idx listen =
     let
         artist =
             Maybe.withDefault "" listen.artistName
@@ -128,9 +133,6 @@ renderListen userSlug failedCovers hoveredCover similarStates idx listen =
 
         release =
             Maybe.withDefault "" listen.releaseName
-
-        key =
-            String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ trackName
 
         mbid =
             case listen.caaReleaseMbid of
@@ -154,12 +156,6 @@ renderListen userSlug failedCovers hoveredCover similarStates idx listen =
                         Nothing ->
                             ""
                    )
-
-        isZoomed =
-            hoveredCover == Just idx
-
-        isActive =
-            Dict.member key similarStates
     in
     tr [ class "listen-row" ]
         [ td [ class "d" ]
@@ -180,6 +176,7 @@ renderListen userSlug failedCovers hoveredCover similarStates idx listen =
                             )
                         , src coverUrl
                         , Attr.alt release
+                        , Attr.attribute "loading" "lazy"
                         , on "error" (D.succeed (ImageError coverUrl))
                         , onClick
                             (if isZoomed then

@@ -3,6 +3,7 @@ module Page.Stats exposing (renderPeriodSelector, renderStatsView)
 import Html exposing (Html, button, div, h2, input, span, table, tbody, td, text, th, thead, tr)
 import Html.Attributes as Attr exposing (class, placeholder, style, type_, value)
 import Html.Events exposing (onClick, onInput)
+import Html.Lazy exposing (lazy3)
 import Page.Common exposing (formatScrobbleCount)
 import Set exposing (Set)
 import Types exposing (Model, Msg(..), Period(..), Stats, StatsEntry)
@@ -93,7 +94,7 @@ renderStatSection expandedSections loadedSections mField title entries =
                         , th [ class "stats-count-header" ] [ text "plays" ]
                         ]
                     ]
-                , tbody [] (List.map (renderStatEntry maxCount mField) visible)
+                , tbody [] (List.map (lazy3 renderStatEntry maxCount mField) visible)
                 ]
         , footer
         ]

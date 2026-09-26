@@ -41,10 +41,14 @@ getStats conn mPeriod mFrom mTo mSection = do
         Nothing ->
           { timeFilter: "", params: [] }
     { timeFilter, params: buildTimeParams } = buildTimeFilterAndParams
+    -- Section requests are bounded at 1000 rows: an unbounded all-time
+    -- "show all" over a large scrobble history produces huge JSON payloads
+    -- and thousands of DOM rows in the client.
     fetch name q extraParams = case mSection of
       Nothing -> queryAll conn (q <> " LIMIT 50")
         (buildTimeParams <> extraParams)
-      Just s | s == name -> queryAll conn q (buildTimeParams <> extraParams)
+      Just s | s == name -> queryAll conn (q <> " LIMIT 1000")
+        (buildTimeParams <> extraParams)
       Just _ -> pure []
   genreRows <- fetch "genre"
     ( "SELECT rm.genre as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.genre IS NOT NULL AND rm.genre != ''"
@@ -76,9 +80,13 @@ getStats conn mPeriod mFrom mTo mSection = do
         <> " GROUP BY s.artist_name, s.track_name ORDER BY count DESC"
     )
     []
-  totalRows <- queryAll conn
-    ("SELECT COUNT(*) as count FROM scrobbles s WHERE 1 = 1" <> timeFilter)
-    buildTimeParams
+  -- The total count is only used by the full stats view; section requests
+  -- discard it, so skip the extra table scan.
+  totalRows <- case mSection of
+    Nothing -> queryAll conn
+      ("SELECT COUNT(*) as count FROM scrobbles s WHERE 1 = 1" <> timeFilter)
+      buildTimeParams
+    Just _ -> pure []
   pure $ Stats
     { totalScrobbles: fromMaybe 0 (totalRows !! 0 >>= rowToCount)
     , genres: mapMaybe rowToEntry genreRows
