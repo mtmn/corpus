@@ -68,9 +68,9 @@ docs:
 # Run quality and security checks
 check:
     pnpm spago build --strict
-    pnpm exec purs-tidy check "src/**/*.purs"
-    elm-analyse
-    statix check .
+    pnpm exec purs-tidy check "src/**/*.purs" "test/**/*.purs"
+    pnpm exec elm make src/Client.elm --output=/tmp/corpus-client.js
+    pnpm exec elm-test
 
 # Manage the container image (build, load, push)
 oci command:
