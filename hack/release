@@ -11,14 +11,36 @@ require jq
 
 # --- pre-flight ---
 
+if [ "$#" -gt 1 ]; then
+	echo "usage: hack/release [version]"
+	exit 1
+fi
+
+manual=${1:-}
+if [ -n "$manual" ]; then
+	manual=${manual#v}
+	[[ $manual =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+		echo "error: invalid version '$manual' (expected e.g. 3.4.0)"
+		exit 1
+	}
+fi
+
 if [ -n "$(git status --porcelain)" ]; then
 	echo "error: working tree is dirty"
 	exit 1
 fi
 
-next=$(git-cliff --bumped-version 2>/dev/null | sed 's/^v//')
+if [ -n "$manual" ]; then
+	next=$manual
+else
+	next=$(git-cliff --bumped-version 2>/dev/null | sed 's/^v//')
+fi
 
 if git tag | grep -qx "v$next"; then
+	if [ -n "$manual" ]; then
+		echo "error: tag v$next already exists"
+		exit 1
+	fi
 	echo "no releasable commits since v$next"
 	exit 0
 fi
