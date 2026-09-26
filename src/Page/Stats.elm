@@ -17,19 +17,46 @@ renderStatsView expandedSections loadedSections mStats =
 
         Just stats ->
             div []
-                [ renderStatSection expandedSections loadedSections (Just "artist") "top artists" stats.artists
-                , renderStatSection expandedSections loadedSections Nothing "top tracks" stats.tracks
-                , renderStatSection expandedSections loadedSections (Just "genre") "genres" stats.genres
-                , renderStatSection expandedSections loadedSections (Just "label") "labels" stats.labels
-                , renderStatSection expandedSections loadedSections (Just "year") "years" stats.years
+                [ renderStatSection expandedSections loadedSections
+                    { key = "artist", field = Just "artist", title = "top artists" }
+                    stats.artists
+                , renderStatSection expandedSections loadedSections
+                    { key = "track", field = Nothing, title = "top tracks" }
+                    stats.tracks
+                , renderStatSection expandedSections loadedSections
+                    { key = "genre", field = Just "genre", title = "genres" }
+                    stats.genres
+                , renderStatSection expandedSections loadedSections
+                    { key = "label", field = Just "label", title = "labels" }
+                    stats.labels
+                , renderStatSection expandedSections loadedSections
+                    { key = "year", field = Just "year", title = "years" }
+                    stats.years
                 ]
 
 
-renderStatSection : Set String -> Set String -> Maybe String -> String -> List StatsEntry -> Html Msg
-renderStatSection expandedSections loadedSections mField title entries =
+{-| Identifies a stats table: the key used for expand state and section
+fetching, plus the filter field its rows link to. Rows show a composite label
+for tracks, which no filter accepts, so their field stays absent.
+-}
+type alias SectionRef =
+    { key : String
+    , field : Maybe String
+    , title : String
+    }
+
+
+renderStatSection : Set String -> Set String -> SectionRef -> List StatsEntry -> Html Msg
+renderStatSection expandedSections loadedSections section entries =
     let
         sectionKey =
-            Maybe.withDefault title mField
+            section.key
+
+        mField =
+            section.field
+
+        title =
+            section.title
 
         expanded =
             Set.member sectionKey expandedSections

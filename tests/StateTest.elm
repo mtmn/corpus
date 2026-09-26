@@ -1,11 +1,10 @@
 module StateTest exposing (suite)
 
 import Expect
-import State exposing (landingTab, parsePage, parsePageParam, userPath)
+import State exposing (buildQuery, landingTab, parsePage, parsePageParam, parseQuery, similarKey, userPath)
 import Test exposing (Test, describe, test)
 import Types exposing (Page(..), Tab(..))
 import Url
-
 
 url : String -> Url.Url
 url raw =
@@ -53,6 +52,53 @@ suite =
             , test "resets to listens when navigating within the main page" <|
                 \_ ->
                     Expect.equal (landingTab MainPage StatsTab) ListensTab
+            ]
+        , describe "parseQuery"
+            [ test "defaults to page 1 and the listens tab" <|
+                \_ ->
+                    Expect.equal (parseQuery (url "http://example.com/"))
+                        { page = 1, filterField = Nothing, filterValue = Nothing, search = Nothing, tab = ListensTab }
+            , test "reads filter, search and tab" <|
+                \_ ->
+                    Expect.equal
+                        (parseQuery (url "http://example.com/?page=2&filterField=artist&filterValue=Andy&search=neon&tab=stats"))
+                        { page = 2, filterField = Just "artist", filterValue = Just "Andy", search = Just "neon", tab = StatsTab }
+            , test "ignores an unknown tab" <|
+                \_ ->
+                    Expect.equal (parseQuery (url "http://example.com/?tab=sideways"))
+                        { page = 1, filterField = Nothing, filterValue = Nothing, search = Nothing, tab = ListensTab }
+            ]
+        , describe "buildQuery"
+            [ test "round-trips through parseQuery" <|
+                \_ ->
+                    let
+                        q =
+                            { page = 3, filterField = Just "genre" , filterValue = Just "jazz", search = Just "a b", tab = AboutTab }
+
+                        rendered =
+                            buildQuery "filip" q
+                    in
+                    Expect.equal (parseQuery (url ("http://example.com" ++ rendered))) q
+            , test "uses / for the root user and /u/slug otherwise" <|
+                \_ ->
+                    let
+                        q =
+                            { page = 1, filterField = Nothing, filterValue = Nothing, search = Nothing, tab = ListensTab }
+                    in
+                    Expect.equal (buildQuery "" q) "/?page=1&tab=listens"
+                        |> (\_ ->
+                                Expect.equal (buildQuery "filip" q) "/u/filip?page=1&tab=listens"
+                           )
+            ]
+        , describe "similarKey"
+            [ test "keys a panel by artist and track, not row position" <|
+                \_ ->
+                    Expect.equal (similarKey "Artist" "Song")
+                        (similarKey "Artist" "Song")
+            , test "does not collide across artists with the same track name" <|
+                \_ ->
+                    Expect.notEqual (similarKey "Artist A" "Song")
+                        (similarKey "Artist B" "Song")
             ]
         , describe "userPath"
             [ test "root user maps to /" <|

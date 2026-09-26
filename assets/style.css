@@ -215,15 +215,10 @@ td {
 th {
 	background-color: var(--bg-dark);
 	color: var(--fg);
-	cursor: pointer;
 	user-select: none;
 	position: sticky;
 	top: 0;
 	white-space: nowrap;
-}
-
-th:hover {
-	background-color: var(--highlight);
 }
 
 tbody tr:nth-child(even) {
@@ -314,6 +309,65 @@ tbody tr:hover {
 	position: absolute;
 	bottom: 0;
 	right: 0;
+}
+
+.genre-link {
+	background: none;
+	border: none;
+	padding: 0;
+	color: var(--green);
+	font: inherit;
+	cursor: pointer;
+}
+
+.genre-link:hover {
+	color: var(--cyan);
+	background: none;
+	border: none;
+}
+
+/* Search bar on the listens tab. */
+.search-input,
+.search-btn,
+.filter-clear,
+.page-btn,
+.period-btn {
+	background-color: var(--bg-alt);
+	border: solid 0.1em var(--border);
+	color: var(--fg);
+	font: inherit;
+	padding: var(--space-xs) var(--space-sm);
+}
+
+.search-btn:hover,
+.filter-clear:hover,
+.page-btn:hover,
+.period-btn:hover {
+	background-color: var(--highlight);
+	border-color: var(--cyan);
+}
+
+.filter-clear {
+	color: var(--fg-alt);
+}
+
+.listen-row {
+	/* Named so row-level styling has a hook without changing table defaults. */
+}
+
+.admin-item-meta {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-xs);
+	flex: 1;
+	min-width: 0;
+}
+
+.admin-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-sm);
+	align-items: center;
 }
 
 .cover-cell {

@@ -1,4 +1,4 @@
-module Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, fetchUsers, httpErrorToString, listensDecoder, removeUser, sectionEntriesDecoder, similarTracksDecoder, statsDecoder, statsUrl, submitRegistration)
+module Api exposing (approveRegistration, denyRegistration, fetchListens, fetchRegistrations, fetchSectionData, fetchSimilarTracks, fetchStats, fetchUsers, httpErrorToString, listensDecoder, listensPageDecoder, removeUser, sectionEntriesDecoder, similarTracksDecoder, statsDecoder, statsUrl, submitRegistration)
 
 import Http
 import Json.Decode as D exposing (Decoder)
@@ -31,7 +31,7 @@ fetchListens userSlug limit offset mFilter mSearch =
     in
     Http.get
         { url = url
-        , expect = Http.expectJson GotListens listensDecoder
+        , expect = Http.expectJson GotListens listensPageDecoder
         }
 
 
@@ -76,11 +76,11 @@ statsUrl userSlug period mSection =
     "/stats?user=" ++ userSlug ++ periodPart ++ sectionPart
 
 
-fetchSimilarTracks : Int -> String -> String -> Cmd Msg
-fetchSimilarTracks idx artist track =
+fetchSimilarTracks : String -> String -> Cmd Msg
+fetchSimilarTracks artist track =
     Http.get
         { url = "/similar?artist=" ++ Url.percentEncode artist ++ "&track=" ++ Url.percentEncode track
-        , expect = Http.expectJson (FetchSimilarTracks idx artist track) similarTracksDecoder
+        , expect = Http.expectJson (FetchSimilarTracks artist track) similarTracksDecoder
         }
 
 
@@ -231,6 +231,17 @@ httpErrorToString err =
 listensDecoder : Decoder (List Listen)
 listensDecoder =
     D.at [ "payload", "listens" ] (D.list listenDecoder)
+
+
+{-| A listens page plus whether the server holds another page after it.
+Exact, unlike comparing the page length against the requested limit.
+-}
+listensPageDecoder : Decoder { listens : List Listen, hasMore : Bool }
+listensPageDecoder =
+    D.map2
+        (\pageListens pageHasMore -> { listens = pageListens, hasMore = pageHasMore })
+        listensDecoder
+        (D.oneOf [ D.at [ "payload", "hasMore" ] D.bool, D.succeed False ])
 
 
 listenDecoder : Decoder Listen

@@ -75,6 +75,12 @@ renderMain model =
             StatsTab ->
                 div []
                     [ Page.Stats.renderPeriodSelector model.statsPeriod model.showCustomInput model.customInput model.customError model.stats
+                    , case model.error of
+                        Just err ->
+                            div [ class "error" ] [ text err ]
+
+                        Nothing ->
+                            text ""
                     , Page.Stats.renderStatsView model.expandedSections model.loadedSections model.stats
                     ]
 

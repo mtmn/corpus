@@ -1,6 +1,6 @@
 module ApiTest exposing (suite)
 
-import Api exposing (listensDecoder, statsDecoder)
+import Api exposing (listensDecoder, listensPageDecoder, statsDecoder)
 import Expect
 import Json.Decode as D
 import Test exposing (Test, describe, test)
@@ -80,6 +80,24 @@ suite =
                             ]
                     in
                     Expect.equal (D.decodeString listensDecoder json) (Ok expected)
+            ]
+        , describe "listensPageDecoder"
+            [ test "reads hasMore from the payload" <|
+                \_ ->
+                    let
+                        json =
+                            """{"payload":{"listens":[],"hasMore":true}}"""
+                    in
+                    Expect.equal (D.decodeString listensPageDecoder json)
+                        (Ok { listens = [], hasMore = True })
+            , test "defaults hasMore to False when the server omits it" <|
+                \_ ->
+                    let
+                        json =
+                            """{"payload":{"listens":[]}}"""
+                    in
+                    Expect.equal (D.decodeString listensPageDecoder json)
+                        (Ok { listens = [], hasMore = False })
             ]
         , describe "statsDecoder"
             [ test "decodes a stats response" <|

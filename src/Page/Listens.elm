@@ -8,6 +8,7 @@ import Html.Lazy exposing (lazy6)
 import Json.Decode as D
 import Page.Common exposing (onEnter)
 import Set exposing (Set)
+import State exposing (similarKey)
 import Types exposing (Listen, Model, Msg(..), SimilarState(..), SimilarTrack, Tab(..))
 import Url
 
@@ -22,7 +23,8 @@ renderMain model =
                         [ input
                             [ type_ "search"
                             , class "search-input"
-                            , placeholder ""
+                            , placeholder "search tracks, artists, albums"
+                            , Attr.attribute "aria-label" "Search listens"
                             , value model.searchInput
                             , onInput UpdateSearchInput
                             , onEnter SubmitSearch
@@ -62,7 +64,7 @@ renderMain model =
                             [ text ("Page " ++ String.fromInt (model.offset // model.limit + 1)) ]
                         , button
                             [ class "page-btn"
-                            , disabled (List.length model.listens < model.limit || model.loading)
+                            , disabled (not model.hasMoreListens || model.loading)
                             , onClick NextPage
                             ]
                             [ text "Next" ]
@@ -107,7 +109,7 @@ renderContent model =
                                         Maybe.withDefault "" listen.trackName
 
                                     key =
-                                        String.fromInt idx ++ "\t" ++ artist ++ "\t" ++ trackName
+                                        similarKey artist trackName
                                 in
                                 lazy6 renderListen model.userSlug model.failedCovers (model.hoveredCover == Just idx) (Dict.member key model.similarStates) idx listen
                                     :: renderSimilarRow key model.similarStates
@@ -202,7 +204,7 @@ renderListen userSlug failedCovers isZoomed isActive idx listen =
                                         ""
                                    )
                             )
-                        , onClick (FetchSimilar idx artist trackName)
+                        , onClick (FetchSimilar artist trackName)
                         ]
                         [ text "similar" ]
 
@@ -227,7 +229,8 @@ renderListen userSlug failedCovers isZoomed isActive idx listen =
                     )
                 , case listen.genre of
                     Just g ->
-                        div [ class "genre-tag" ] [ text g ]
+                        div [ class "genre-tag" ]
+                            [ button [ class "genre-link", onClick (FilterBy "genre" g) ] [ text g ] ]
 
                     Nothing ->
                         text ""

@@ -15,6 +15,7 @@ import Data.Argonaut.Core (Json, toBoolean, toNumber, toString)
 import Data.Array (length)
 import Data.Either (Either(..), isRight)
 import Data.Maybe (Maybe(..))
+import Data.String (Pattern(..), contains)
 import Data.String.Regex (parseFlags, regex)
 import Data.Time.Duration (Milliseconds(..))
 import Db
@@ -62,6 +63,7 @@ import Registrations
   )
 import Stats (getStats)
 import Sync (lastfmTrackToListen, listenBrainzUrl, parseLastfmResponse)
+import Templates (indexHtml)
 import Test.Spec (describe, it)
 import Test.Spec.Assertions (fail, shouldEqual)
 import Test.Spec.Reporter.Console (consoleReporter)
@@ -956,6 +958,18 @@ main = runSpecAndExitProcess [ consoleReporter ] do
         dbBaseName "/tmp/test/mymusic.db" `shouldEqual` "mymusic"
       it "returns the name without extension for a bare filename" do
         dbBaseName "corpus.db" `shouldEqual` "corpus"
+
+  describe "Templates" do
+    it "escapes angle brackets so flags cannot break out of the script tag" do
+      let html = indexHtml true "</script><script>alert(1)</script>" []
+      contains (Pattern "</script><script>") html `shouldEqual` false
+      contains (Pattern "u003c/script") html `shouldEqual` true
+
+    it "keeps an ordinary slug and user list intact" do
+      let
+        html = indexHtml false "filip" [ { slug: "filip", name: "Filip" } ]
+      contains (Pattern "filip") html `shouldEqual` true
+      contains (Pattern "registrationEnabled") html `shouldEqual` true
 
   describe "Last.fm Support" do
     let

@@ -16,7 +16,7 @@ renderRegister model =
           else if model.regSubmitted then
             div []
                 [ p [ class "reg-success" ]
-                    [ text "Thanks — your request has been submitted. You'll get an email once it's reviewed." ]
+                    [ text "Thanks. Your request has been submitted. You'll get an email once it's reviewed." ]
                 , p [] [ a [ href "/", class "about-link" ] [ text "back home" ] ]
                 ]
 
@@ -24,7 +24,7 @@ renderRegister model =
             div [ class "reg-form" ]
                 [ regField "username" "lowercase letters, numbers, dashes" FSlug model.regSlug
                 , regField "name" "display name" FName model.regName
-                , regField "email" "you will notified here" FEmail model.regEmail
+                , regField "email" "you will be notified here" FEmail model.regEmail
                 , regField "listenbrainz user (optional)" "" FLbUser model.regLbUser
                 , regField "last.fm user (optional)" "" FLfUser model.regLfUser
                 , case model.regError of

@@ -132,6 +132,7 @@ type alias Model =
     { navKey : Nav.Key
     , listens : List Listen
     , stats : Maybe Stats
+    , hasMoreListens : Bool
     , error : Maybe String
     , loading : Bool
     , currentTime : Maybe Time.Posix
@@ -178,7 +179,7 @@ type alias Model =
 
 
 type Msg
-    = GotListens (Result Http.Error (List Listen))
+    = GotListens (Result Http.Error { listens : List Listen, hasMore : Bool })
     | GotStats (Result Http.Error Stats)
     | GotSectionData String (Result Http.Error (List StatsEntry))
     | Tick Time.Posix
@@ -199,8 +200,8 @@ type Msg
     | ExpandSection String
     | ShowAllSection String
     | CollapseSection String
-    | FetchSimilar Int String String
-    | FetchSimilarTracks Int String String (Result Http.Error (List SimilarTrack))
+    | FetchSimilar String String
+    | FetchSimilarTracks String String (Result Http.Error (List SimilarTrack))
     | UpdateSearchInput String
     | SubmitSearch
     | ClearSearch
