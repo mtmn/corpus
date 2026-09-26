@@ -75,7 +75,7 @@
         name = "corpus-pnpm-source";
       };
       pname = "corpus";
-      hash = "sha256-cRt/78gzOcFX7xCUc02eDRPsZqfRavS5pLTUeaXC7r4=";
+      hash = "sha256-3dF7TJo2Bm52QUekTN6VObfZF1t3o70sH3nkIt5Kbmw=";
       fetcherVersion = 4;
     };
 
@@ -83,7 +83,7 @@
       name = "corpus-spago-deps";
       outputHashAlgo = "sha256";
       outputHashMode = "recursive";
-      outputHash = "sha256-E3mqZ1f/fXM7JMcJ0PKKvSE04m1U4fM7a8h+uCbrVnE=";
+      outputHash = "sha256-Roj/G7HhLjA6PKNBt7YA9LIxP0jLc6BdnIpKDgSJvPo=";
 
       src = pkgs.lib.cleanSourceWith {
         src = self;

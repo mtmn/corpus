@@ -10,20 +10,23 @@ The PureScript server runs on Node.js. It:
 - serves the frontend, scrobble data, statistics and similar tracks from [cosine.club](https://cosine.club)
 - accepts ListenBrainz-compatible scrobble submissions
 - polls ListenBrainz and Last.fm every 60 seconds
+- backfills Last.fm history older than the oldest stored scrobble
 - deduplicates matching timestamps using the `listened_at` primary key
 - enriches missing genres, labels and release years from MusicBrainz, Last.fm and Discogs
 - redirects and caches cover art, trying Cover Art Archive, Discogs and then Last.fm
 - provides optional registration, administration, email and Prometheus metrics
 
-External API requests time out after 10 seconds. Image requests time out after 20 seconds.
+External API requests time out after 10 seconds. Image requests time out after 20 seconds. Corpus retries temporary sync failures up to 5 times, waiting longer each time. It does not retry responses it cannot parse.
 
 ### Frontend
 The Elm single-page application:
 
-- refreshes the scrobble list periodically
-- filters by genre, label or release year
+- refreshes the scrobble list every 30 seconds
+- filters by artist, album, track, label, genre or release year
 - searches tracks, artists, albums and labels
 - links listen metadata to matching filters
+- shows listening statistics
+- provides the registration and administration pages
 - works on desktop and mobile
 
 ### Database
@@ -33,18 +36,22 @@ Corpus stores each user's data in a separate DuckDB file:
 - `release_metadata` stores genre, label and release year by MusicBrainz release ID
 - `api_tokens` stores SHA-256 hashes of submission tokens
 
-DuckDB's columnar storage supports analytical queries over large listening histories.
+A shared DuckDB file, `registrations.db`, stores pending, approved, denied and revoked registrations.
+
+DuckDB's columnar storage supports analytical queries over large listening histories. See [DuckDB in Corpus](duckdb.md) for the full schema.
 
 ### Storage
 Corpus uses an S3-compatible bucket when you enable cover caching or backups:
 
-- the cover cache stores AVIF images and redirects hits to presigned S3 URLs
-- backups checkpoint a user's DuckDB file and upload timestamped snapshots
-- the shared `registrations.db` file stores pending, approved, denied and revoked registrations
+- the cover cache stores AVIF images under `covers/<source>/` and redirects hits to presigned S3 URLs that expire after 24 hours
+- backups checkpoint a user's DuckDB file and upload timestamped snapshots under `backups/`
 
 ## Multi-user support
 
-Corpus serves multiple users from one process. Use the command-line interface to manage static users in `users.json`.
+Corpus serves multiple users from one process. Each user is either:
+
+- a static user, defined in `users.json` and managed through the command-line interface
+- a registered user, created when an administrator approves a registration
 
 ### Routes
 
@@ -55,10 +62,13 @@ Corpus provides these routes:
 - `/healthz?user=<slug>`: checks the user's DuckDB connection
 - `/1/validate-token`: validates a ListenBrainz-compatible token
 - `/1/submit-listens`: accepts ListenBrainz-compatible submissions with an `Authorization: Token <token>` header
-- `/register` and `/admin`: serve registration and administration pages
+- `/register`: serves the registration page, and accepts registration requests as `POST`
+- `/admin`: serves the administration page
+- `/admin/registrations`, `/admin/registrations/approve`, `/admin/registrations/deny`: list, approve and deny pending registrations
+- `/admin/users` and `/admin/users/remove`: list and remove registered users
 - `/metrics`: returns metrics for all users when `METRICS_ENABLED=true`
 
-Set `REGISTRATION_ENABLED=true` to enable registration. Set `ADMIN_TOKEN` to enable the administration APIs.
+Set `REGISTRATION_ENABLED=true` to enable registration. Set `ADMIN_TOKEN` to enable the `/admin/*` APIs. Send the token as `Authorization: Bearer <token>`.
 
 ### User management
 
@@ -79,17 +89,34 @@ node server.js list-users
 node server.js reset-token --slug filip
 ```
 
+The `just add-user`, `just list-users` and `just reset-token` recipes run the same commands.
+
 Corpus prints the API token once when you create or reset a user. Store it securely. Send it to `/1/submit-listens` as `Authorization: Token <token>`.
 
 ### Configuration
 User configuration has 2 layers:
 
 1. `users.json` defines user slugs, source usernames, database filenames and feature flags. The CLI manages this file. Corpus reads it at startup from `CORPUS_USERS_FILE`, which defaults to `users.json`.
-2. Environment variables provide shared API keys and S3 credentials at runtime.
+2. Environment variables provide shared API keys and S3 credentials at runtime. Corpus also loads them from a `.env` file.
 
 Each user has a separate DuckDB connection, sync loop and write lock. The lock runs ListenBrainz and Last.fm sync transactions in sequence. HTTP reads use DuckDB snapshots without taking the lock.
 
-Corpus provisions approved registrations immediately and reloads them from `registrations.db` at startup. It does not change `users.json`. A `users.json` entry takes precedence over a registration with the same slug.
+### Registration
+
+When registration is enabled:
+
+1. A visitor submits a username, name and email address at `/register`. They can also add ListenBrainz and Last.fm usernames.
+2. Corpus rejects usernames that are taken, reserved for a route, or not made of lowercase letters, numbers and dashes.
+3. Corpus stores the request as pending and emails `ADMIN_EMAIL`, if set.
+4. An administrator approves or denies the request at `/admin`.
+5. On approval, Corpus creates `corpus-<slug>.db` in `DATABASE_PATH`, starts the user's background work and returns their API token. It also emails the token to the user.
+6. On denial, Corpus emails the user.
+
+Registered users have cover caching and backups turned off.
+
+Corpus reloads approved registrations from `registrations.db` at startup. It does not change `users.json`. A `users.json` entry takes precedence over a registration with the same slug.
+
+Corpus sends email only when `SMTP_HOST` is set. If sending fails, Corpus logs the error and continues.
 
 ### Remove registered users
 
@@ -102,10 +129,10 @@ An administrator can remove a self-registered user without restarting Corpus. Co
 | Variable | Default | Purpose |
 |---|---|---|
 | `CORPUS_USERS_FILE` | `users.json` | Path to the user configuration file |
-| `DATABASE_PATH` | _(cwd)_ | Root directory for all user database files |
-| `LASTFM_API_KEY` | not set | Last.fm API key (required if any user has `lastfmUser`) |
-| `DISCOGS_TOKEN` | not set | Discogs token for cover and genre fallback |
-| `S3_BUCKET` | not set | S3 bucket for cover art cache |
+| `DATABASE_PATH` | current directory | Directory for all user database files |
+| `LASTFM_API_KEY` | not set | Last.fm API key for sync, genre and cover fallbacks |
+| `DISCOGS_TOKEN` | not set | Discogs token for genre and cover fallbacks |
+| `S3_BUCKET` | not set | S3 bucket for cover caching and backups |
 | `S3_REGION` | `us-east-1` | S3 region |
 | `AWS_ACCESS_KEY_ID` | not set | S3 credentials |
 | `AWS_SECRET_ACCESS_KEY` | not set | S3 credentials |
@@ -119,14 +146,17 @@ An administrator can remove a self-registered user without restarting Corpus. Co
 | `REGISTRATION_ENABLED` | `false` | Set to `true` to enable public registration at `/register` |
 | `ADMIN_TOKEN` | not set | Bearer token for `/admin/*`; these routes return 404 when unset |
 | `ADMIN_EMAIL` | not set | Address notified of new registration requests |
-| `CORPUS_REGISTRATIONS_DB` | `registrations.db` | Shared DuckDB file for registration state |
+| `CORPUS_REGISTRATIONS_DB` | `registrations.db` | Shared DuckDB file for registration state, relative to `DATABASE_PATH` |
 | `SMTP_HOST` | not set | SMTP server host; Corpus skips email when unset |
 | `SMTP_PORT` | `587` | SMTP port (STARTTLS) |
 | `SMTP_USER` | not set | SMTP username |
 | `SMTP_PASS` | not set | SMTP password |
-| `SMTP_FROM` | not set | Sender address |
+| `SMTP_FROM` | `SMTP_USER` | Sender address |
 
-Set `LASTFM_API_KEY` when any user has `lastfmUser`. Cover caching and backups require `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_ENDPOINT_URL`.
+Corpus does not start if a user needs a variable that is not set:
+
+- any user with `lastfmUser` needs `LASTFM_API_KEY`
+- any user with `coverCacheEnabled` or `backupEnabled` needs `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_ENDPOINT_URL`
 
 ### `users.json` fields
 
@@ -147,33 +177,42 @@ Set `LASTFM_API_KEY` when any user has `lastfmUser`. Cover caching and backups r
 
 ### Scrobble synchronisation
 
-Both sync processes fetch the newest page, insert new scrobbles and move backwards until they find a known timestamp.
+Corpus syncs each user once at startup, then every 60 seconds. Both sync processes fetch the newest page, insert new scrobbles and move backwards until they find a known timestamp.
 
 ListenBrainz uses timestamp-based pagination:
-1. Fetch latest 100 scrobbles from the ListenBrainz API.
+1. Fetch the latest 100 scrobbles from the ListenBrainz API.
 2. Insert new scrobbles. Stop if an existing timestamp is found.
-3. Paginate backwards using `max_ts` until fully caught up.
+3. Page backwards using `max_ts` until caught up.
 
 Last.fm uses page-based pagination:
-1. Fetch page 1 (most recent 200 scrobbles) from the Last.fm API.
+1. Fetch page 1 (the most recent 200 scrobbles) from the Last.fm API.
 2. Insert new scrobbles. Stop if an existing timestamp is found.
-3. Paginate through subsequent pages using `totalPages` from the API response until fully caught up.
+3. Page through later pages using `totalPages` from the API response until caught up.
+4. Request scrobbles older than the oldest stored scrobble, and insert any it finds.
 
-Both processes run every 60 seconds for each user. Later syncs stop at the first known timestamp.
+The last step imports older Last.fm history, for example from before a user started using ListenBrainz.
 
 ### Metadata enrichment
 
-1. Corpus finds release MBIDs that do not have metadata.
-2. It requests release details from MusicBrainz.
-3. If MusicBrainz has no genre, it tries Last.fm and Discogs.
-4. It updates `release_metadata` with any details found.
+Corpus enriches up to 10 releases without metadata and 10 releases without a genre at a time:
+
+1. Corpus requests release details from MusicBrainz, one request every 1.1 seconds.
+2. If MusicBrainz has no genre, it tries Last.fm and then Discogs.
+3. It updates `release_metadata` with any details found.
+4. If no source has a genre, it records the time in `genre_checked_at` and tries again after 7 days.
+
+If a MusicBrainz request fails, Corpus tries the release again in the next batch. When no releases need enrichment, Corpus waits 60 seconds before checking again.
 
 ### Cover art retrieval
-When a client requests a cover:
+When a client requests a cover, Corpus tries these sources in order:
 
-1. Corpus checks the S3 cache.
-2. On a miss, Corpus tries Cover Art Archive, Discogs and then Last.fm.
-3. Corpus redirects the client immediately. If caching is enabled, it converts and uploads the image in the background.
+1. Cover Art Archive, if the scrobble has a release MBID.
+2. Discogs, if `DISCOGS_TOKEN` is set.
+3. Last.fm, if `LASTFM_API_KEY` is set.
+
+For each source, Corpus checks the S3 cache first, then asks the source. It redirects the client to the first image it finds.
+
+If caching is enabled, Corpus converts the image to AVIF and uploads it in the background. It skips images larger than 10 MB and fills at most 4 cache entries at a time.
 
 ## Observability
 
@@ -211,14 +250,18 @@ Prometheus metrics are disabled by default. Set `METRICS_ENABLED=true` to record
 
 Corpus uses JavaScript modules where no PureScript wrapper is available:
 
-- `Db.js` uses `@duckdb/node-api` and converts JavaScript `BigInt` values to `Number` for JSON
-- `S3.js` uses `@aws-sdk/client-s3` for cover caching
-- `Main.js` loads `.env` files and provides request helpers
-- `Config.js` reads and parses the file set by `CORPUS_USERS_FILE`
+- `Db.js` uses `@duckdb/node-api`, converts JavaScript `BigInt` values to `Number` for JSON and hashes tokens with SHA-256
+- `S3.js` uses `@aws-sdk/client-s3` to upload covers and backups, and to create presigned cover URLs
+- `Image.js` uses `sharp` to convert covers to AVIF
+- `Cover.js` limits how many covers Corpus caches at the same time
+- `Mail.js` uses `nodemailer` to send registration emails
 - `Metrics.js` uses `@prometheus-io/client` to record HTTP and background-work metrics
+- `Config.js` reads and parses the file set by `CORPUS_USERS_FILE`
+- `Command.js` formats `users.json` when the CLI writes it
+- `Main.js` loads `.env` files
 
 ## System flow
 
-See [`architecture.dot`](architecture.dot) (render with `just docs`).
+See the [system flow diagram source](architecture.dot). Render it with `just docs`.
 
 ![System flow](architecture.svg)

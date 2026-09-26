@@ -100,12 +100,13 @@ ORDER BY dayofweek(to_timestamp(listened_at));
 
 ## Maintenance and integrity
 
-### Find duplicate scrobbles
+### Releases waiting for metadata
 ```sql
-SELECT listened_at, artist_name, track_name, count(*)
-FROM scrobbles
-GROUP BY listened_at, artist_name, track_name
-HAVING count(*) > 1;
+SELECT DISTINCT s.artist_name, s.release_name, s.release_mbid
+FROM scrobbles s
+LEFT JOIN release_metadata rm ON s.release_mbid = rm.release_mbid
+WHERE s.release_mbid != ''
+  AND (rm.release_mbid IS NULL OR rm.genre IS NULL OR rm.genre = '');
 ```
 
 ### Recent scrobbles with human-readable timestamps
