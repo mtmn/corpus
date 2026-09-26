@@ -24,7 +24,7 @@ import Auth
 import Cosine (serveSimilar)
 import Cover (serveCover)
 import Data.Argonaut (decodeJson, encodeJson, parseJson, stringify)
-import Data.Array (find, length, mapMaybe) as Array
+import Data.Array (find, length, mapMaybe, take) as Array
 import Data.Either (Either(..))
 import Data.Foldable (traverse_)
 import Data.Int as Int
@@ -333,8 +333,13 @@ serveProxy corsOrigin db url res = do
   setHeader "Access-Control-Allow-Origin" corsOrigin (toOutgoingMessage res)
 
   launchAff_ do
-    let limit = fromMaybe 25 (getQueryParam "limit" url >>= Int.fromString)
-    let offset = fromMaybe 0 (getQueryParam "offset" url >>= Int.fromString)
+    let
+      requestedLimit = fromMaybe 25
+        (getQueryParam "limit" url >>= Int.fromString)
+    let limit = max 1 (min 100 requestedLimit)
+    let
+      offset = max 0
+        (fromMaybe 0 (getQueryParam "offset" url >>= Int.fromString))
     let
       mFilter = do
         field <- getQueryParam "filterField" url >>= fromString
@@ -342,8 +347,14 @@ serveProxy corsOrigin db url res = do
         pure { field, value }
 
     let mSearch = getQueryParam "search" url
-    listens <- getScrobbles db limit offset mFilter mSearch
-    let responseBody = stringify $ encodeJson { payload: { listens: listens } }
+    -- Fetch one extra row to learn whether another page exists. Relying on a
+    -- short page alone cannot tell "exactly limit rows left" from "no more".
+    listens <- getScrobbles db (limit + 1) offset mFilter mSearch
+    let hasMore = Array.length listens > limit
+    let page = Array.take limit listens
+    let
+      responseBody = stringify $ encodeJson
+        { payload: { listens: page, hasMore } }
 
     liftEffect $ do
       setStatusCode 200 res
