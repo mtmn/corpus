@@ -210,6 +210,20 @@ recordSyncSuccess slug source n = do
   when (n > 0) $ liftEffect $ Metrics.incSyncScrobbles slug source n
   liftEffect $ Metrics.setSyncLastSuccess slug source
 
+-- | True when every track in the batch was already present.
+syncBatchDone :: Array Listen -> Int -> Boolean
+syncBatchDone listens hitCount =
+  hitCount == length listens && not (null listens)
+
+-- | Log the result of processing one sync batch.
+logSyncBatch :: String -> Int -> SyncResult -> Aff Unit
+logSyncBatch source batchNum result =
+  Log.info $ source <> " batch " <> show batchNum <> ": added "
+    <> show result.added
+    <> ", "
+    <> show result.hitCount
+    <> " already present."
+
 -- | Perform one ListenBrainz synchronization pass.
 lbSync :: Connection -> String -> String -> AVar Unit -> Aff Unit
 lbSync conn username slug writeLock = void do
@@ -227,21 +241,15 @@ lbSync conn username slug writeLock = void do
           liftEffect $ Metrics.incSyncRuns slug "listenbrainz" "error"
         Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
           syncResult <- withTransaction conn writeLock (processListens listens)
-          let
-            added = syncResult.added
-            minTs = syncResult.minTs
-            hitCount = syncResult.hitCount
-          Log.info $ "ListenBrainz batch 1: added " <> show added <> ", "
-            <> show hitCount
-            <> " already present."
-          let allExist = hitCount == length listens && not (null listens)
+          logSyncBatch "ListenBrainz" 1 syncResult
+          let allExist = syncBatchDone listens syncResult.hitCount
           if allExist || null listens then do
-            when (added > 0) $ Log.info $ "ListenBrainz sync complete. Added "
-              <> show added
-              <> " new scrobbles."
-            recordSyncSuccess slug "listenbrainz" added
+            when (syncResult.added > 0) $ Log.info $
+              "ListenBrainz sync complete. Added " <> show syncResult.added <>
+                " new scrobbles."
+            recordSyncSuccess slug "listenbrainz" syncResult.added
           else do
-            total <- paginateUntilDone 2 minTs added
+            total <- paginateUntilDone 2 syncResult.minTs syncResult.added
             Log.info $ "ListenBrainz sync complete. Added " <> show total <>
               " new scrobbles."
             recordSyncSuccess slug "listenbrainz" total
@@ -267,20 +275,13 @@ lbSync conn username slug writeLock = void do
             Right (ListenBrainzResponse { payload: Payload { listens } }) -> do
               syncResult <- withTransaction conn writeLock
                 (processListens listens)
-              let
-                added = syncResult.added
-                newMinTs = syncResult.minTs
-                hitCount = syncResult.hitCount
-              Log.info $ "ListenBrainz batch " <> show batchNum <> ": added "
-                <> show added
-                <> ", "
-                <> show hitCount
-                <> " already present."
-              let allExist = hitCount == length listens && not (null listens)
+              logSyncBatch "ListenBrainz" batchNum syncResult
+              let allExist = syncBatchDone listens syncResult.hitCount
               if allExist || null listens then
-                pure (acc + added)
+                pure (acc + syncResult.added)
               else
-                paginateUntilDone (batchNum + 1) newMinTs (acc + added)
+                paginateUntilDone (batchNum + 1) syncResult.minTs
+                  (acc + syncResult.added)
 
   processListens listens = processTracks conn listens true
 
@@ -305,24 +306,16 @@ lfSync conn apiKey lfmUser slug writeLock = do
         liftEffect $ Metrics.incSyncRuns slug "lastfm" "error"
       Right { tracks, totalPages } -> do
         result <- withTransaction conn writeLock (processLastfmTracks tracks)
-        let
-          added = result.added
-          hitCount = result.hitCount
-        Log.info $ "Last.fm page 1/" <> show totalPages <> ": added "
-          <> show added
-          <> ", "
-          <> show hitCount
-          <> " already present."
-        let
-          validTracks = mapMaybe lastfmTrackToListen tracks
-          allExist = hitCount == length validTracks && not (null validTracks)
+        let validTracks = mapMaybe lastfmTrackToListen tracks
+        logSyncBatch "Last.fm" 1 result
+        let allExist = syncBatchDone validTracks result.hitCount
         if allExist || totalPages <= 1 then do
-          when (added > 0) $ Log.info $ "Last.fm sync complete. Added "
-            <> show added
-            <> " new scrobbles."
-          recordSyncSuccess slug "lastfm" added
+          when (result.added > 0) $ Log.info $
+            "Last.fm sync complete. Added " <> show result.added <>
+              " new scrobbles."
+          recordSyncSuccess slug "lastfm" result.added
         else do
-          total <- paginateLastfmUntilDone 2 totalPages Nothing added
+          total <- paginateLastfmUntilDone 2 totalPages Nothing result.added
           Log.info $ "Last.fm sync complete. Added " <> show total <>
             " new scrobbles."
           recordSyncSuccess slug "lastfm" total
@@ -341,21 +334,12 @@ lfSync conn apiKey lfmUser slug writeLock = do
           Right { tracks } -> do
             result <- withTransaction conn writeLock
               (processLastfmTracks tracks)
-            let
-              added = result.added
-              hitCount = result.hitCount
-            Log.info $ "Last.fm page" <> show page <> "/" <> show totalPages
-              <> ": added "
-              <> show added
-              <> ", "
-              <> show hitCount
-              <> " already present."
-            let
-              validTracks = mapMaybe lastfmTrackToListen tracks
-              allExist = hitCount == length validTracks && not
-                (null validTracks)
-            if allExist || null tracks then pure (acc + added)
-            else paginateLastfmUntilDone (page + 1) totalPages mTo (acc + added)
+            let validTracks = mapMaybe lastfmTrackToListen tracks
+            logSyncBatch "Last.fm" page result
+            let allExist = syncBatchDone validTracks result.hitCount
+            if allExist || null tracks then pure (acc + result.added)
+            else paginateLastfmUntilDone (page + 1) totalPages mTo
+              (acc + result.added)
 
   performLastfmBackfill = do
     mOldest <- getOldestTs conn
@@ -375,17 +359,9 @@ lfSync conn apiKey lfmUser slug writeLock = do
               <> show oldestTs
             result <- withTransaction conn writeLock
               (processLastfmTracks tracks)
-            let
-              added = result.added
-              hitCount = result.hitCount
-            Log.info $ "Last.fm backfill page 1/" <> show totalPages
-              <> ": added "
-              <> show added
-              <> ", "
-              <> show hitCount
-              <> " already present."
+            logSyncBatch "Last.fm backfill" 1 result
             total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1))
-              added
+              result.added
             Log.info $ "Last.fm backfill complete. Added " <> show total <>
               " older scrobbles."
 

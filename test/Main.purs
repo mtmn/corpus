@@ -2,6 +2,7 @@ module Test.Main where
 
 import Prelude
 
+import Backup (dbBaseName)
 import Cover
   ( cacheJobKey
   , coverSources
@@ -20,14 +21,12 @@ import Db
   ( FilterField(..)
   , checkExists
   , connect
-  , dbBaseName
   , fromString
   , getArtistReleasesByMbids
   , getEmptyGenreMbids
   , getOldestTs
   , getOrCreateToken
   , getScrobbles
-  , getStats
   , getTokenUser
   , getUnenrichedMbids
   , initDb
@@ -61,6 +60,7 @@ import Registrations
   , slugTaken
   , validSlugFormat
   )
+import Stats (getStats)
 import Sync (lastfmTrackToListen, listenBrainzUrl, parseLastfmResponse)
 import Test.Spec (describe, it)
 import Test.Spec.Assertions (fail, shouldEqual)

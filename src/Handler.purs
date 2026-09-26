@@ -5,6 +5,7 @@ module Handler
   , serveUnauthorized
   , serveInternalError
   , serveBadRequest
+  , serveConflict
   , serveError
   , respond
   ) where
@@ -48,6 +49,10 @@ serveInternalError = respond "text/plain" 500 "Internal Server Error"
 -- | Write a 400 response with a caller-supplied message.
 serveBadRequest :: Response -> String -> Effect Unit
 serveBadRequest res message = respond "text/plain" 400 message res
+
+-- | Write a 409 response with a caller-supplied message.
+serveConflict :: Response -> String -> Effect Unit
+serveConflict res message = respond "text/plain" 409 message res
 
 -- | Write an error response with an explicit status and status name.
 serveError :: Response -> Int -> String -> String -> Effect Unit

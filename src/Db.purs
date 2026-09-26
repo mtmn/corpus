@@ -1,18 +1,16 @@
 module Db
   ( Connection
   , FilterField(..)
-  , backupDb
   , checkExists
+  , checkpoint
   , closeConnection
   , connect
-  , dbBaseName
   , fromString
   , getArtistReleasesByMbids
   , getEmptyGenreMbids
   , getOldestTs
   , getOrCreateToken
   , getScrobbles
-  , getStats
   , getTokenUser
   , getUnenrichedMbids
   , initDb
@@ -29,43 +27,31 @@ module Db
 
 import Prelude
 
-import Config (S3Config)
 import Control.Monad.Error.Class (throwError)
-import Control.Monad.Rec.Class (forever)
 import Data.Argonaut.Core (Json, toNumber, toObject, toString)
-import Data.Array (last, length, mapMaybe, null, replicate, (!!))
+import Data.Array (length, mapMaybe, null, replicate, (!!))
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.Formatter.DateTime (formatDateTime)
 import Data.Function.Uncurried (Fn2, Fn4, runFn2, runFn4)
 import Data.Generic.Rep (class Generic)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Nullable (Nullable, toMaybe, toNullable)
 import Data.Show.Generic (genericShow)
-import Data.String (Pattern(..), split, stripSuffix)
 import Data.String.Common (joinWith)
-import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (Tuple(..))
 import Data.UUID (genUUID, toString) as UUID
 import Effect (Effect)
-import Effect.Aff (Aff, bracket, delay, makeAff, nonCanceler, try)
+import Effect.Aff (Aff, bracket, makeAff, nonCanceler, try)
 import Effect.Aff.AVar (AVar)
 import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
-import Effect.Exception (Error, error, message)
-import Effect.Now (nowDateTime)
+import Effect.Exception (Error, error)
 import Foreign (Foreign)
 import Foreign.Object as Object
-import Log as Log
-import Metrics as Metrics
-import Node.FS.Aff as FSA
-import S3 as S3
 import Types
   ( Listen(..)
   , MbidMapping(..)
-  , Stats(..)
-  , StatsEntry(..)
   , TrackMetadata(..)
   )
 import Unsafe.Coerce (unsafeCoerce)
@@ -163,42 +149,6 @@ closeConnection conn = makeAff \cb -> do
       Just e -> cb (Left e)
       Nothing -> cb (Right unit)
   pure nonCanceler
-
--- | Derive the backup-safe database filename from a path.
-dbBaseName :: String -> String
-dbBaseName path =
-  let
-    parts = split (Pattern "/") path
-    name = fromMaybe path (last parts)
-  in
-    fromMaybe name (stripSuffix (Pattern ".db") name)
-
-performBackup :: Connection -> String -> S3Config -> String -> Aff Unit
-performBackup conn dbFile s3cfg slug = do
-  checkpoint conn
-  dt <- liftEffect nowDateTime
-  let
-    ts = case formatDateTime "YYYY-MM-DDTHH:mm:ss" dt of
-      Right s -> s
-      Left _ -> "unknown"
-  let key = "backups/" <> dbBaseName dbFile <> "-" <> ts <> ".db"
-  buf <- FSA.readFile dbFile
-  S3.uploadToS3 s3cfg key buf "application/octet-stream"
-  Log.info $ "Backup uploaded to S3: " <> key
-  liftEffect $ Metrics.setDbBackupLastSuccess slug
-  liftEffect $ Metrics.incDbBackupRun slug "success"
-
--- | Upload a database backup when the configured interval has elapsed.
-backupDb :: Connection -> String -> S3Config -> Number -> String -> Aff Unit
-backupDb conn dbFile s3cfg intervalMs slug = forever do
-  delay (Milliseconds intervalMs)
-  result <- try $ performBackup conn dbFile s3cfg slug
-  case result of
-    Left err -> do
-      Log.error $ "Backup failed: " <> message err
-      liftEffect $ Metrics.incDbBackupRun slug "error"
-    Right _ ->
-      pure unit
 
 -- Acquires the write lock, runs the action inside a transaction, then releases.
 -- Uses bracket to guarantee lock release even on fiber kill, preventing deadlocks.
@@ -428,92 +378,6 @@ touchGenreCheckedAt conn mbid = do
   run conn
     "UPDATE release_metadata SET genre_checked_at = CAST(epoch(now()) AS INTEGER) WHERE release_mbid = ?"
     [ toParam mbid ]
-
--- | Compute aggregated listening statistics for the requested period and section.
-getStats
-  :: Connection
-  -> Maybe String
-  -> Maybe String
-  -> Maybe String
-  -> Maybe String
-  -> Aff Stats
-getStats conn mPeriod mFrom mTo mSection = do
-  let
-    buildTimeFilterAndParams
-      :: { timeFilter :: String, params :: Array Foreign }
-    buildTimeFilterAndParams = case mFrom, mTo of
-      Just from, Just to ->
-        { timeFilter:
-            " AND s.listened_at >= CAST(epoch(CAST(? || ' 00:00:00' AS TIMESTAMP)) AS INTEGER) AND s.listened_at < CAST(epoch(CAST(? || ' 00:00:00' AS TIMESTAMP)) AS INTEGER) + 86400"
-        , params: [ toParam from, toParam to ]
-        }
-      _, _ -> case mPeriod >>= Int.fromString of
-        Just days ->
-          { timeFilter:
-              " AND s.listened_at >= CAST(epoch(now()) AS INTEGER) - ?"
-          , params: [ toParam (days * 86400) ]
-          }
-        Nothing ->
-          { timeFilter: "", params: [] }
-    { timeFilter, params: buildTimeParams } = buildTimeFilterAndParams
-    fetch name q extraParams = case mSection of
-      Nothing -> queryAll conn (q <> " LIMIT 50")
-        (buildTimeParams <> extraParams)
-      Just s | s == name -> queryAll conn q (buildTimeParams <> extraParams)
-      Just _ -> pure []
-  genreRows <- fetch "genre"
-    ( "SELECT rm.genre as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.genre IS NOT NULL AND rm.genre != ''"
-        <> timeFilter
-        <> " GROUP BY rm.genre ORDER BY count DESC"
-    )
-    []
-  labelRows <- fetch "label"
-    ( "SELECT rm.label as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.label IS NOT NULL AND rm.label != ''"
-        <> timeFilter
-        <> " GROUP BY rm.label ORDER BY count DESC"
-    )
-    []
-  yearRows <- fetch "year"
-    ( "SELECT CAST(rm.release_year AS VARCHAR) as name, COUNT(*) as count FROM scrobbles s JOIN release_metadata rm ON s.release_mbid = rm.release_mbid WHERE rm.release_year IS NOT NULL"
-        <> timeFilter
-        <> " GROUP BY rm.release_year ORDER BY rm.release_year DESC"
-    )
-    []
-  artistRows <- fetch "artist"
-    ( "SELECT s.artist_name as name, COUNT(*) as count FROM scrobbles s WHERE s.artist_name != ''"
-        <> timeFilter
-        <> " GROUP BY s.artist_name ORDER BY count DESC"
-    )
-    []
-  trackRows <- fetch "track"
-    ( "SELECT s.artist_name || ' — ' || s.track_name as name, COUNT(*) as count FROM scrobbles s WHERE s.track_name != '' AND s.artist_name != ''"
-        <> timeFilter
-        <> " GROUP BY s.artist_name, s.track_name ORDER BY count DESC"
-    )
-    []
-  totalRows <- queryAll conn
-    ("SELECT COUNT(*) as count FROM scrobbles s WHERE 1 = 1" <> timeFilter)
-    buildTimeParams
-  pure $ Stats
-    { totalScrobbles: fromMaybe 0 (totalRows !! 0 >>= rowToCount)
-    , genres: mapMaybe rowToEntry genreRows
-    , labels: mapMaybe rowToEntry labelRows
-    , years: mapMaybe rowToEntry yearRows
-    , artists: mapMaybe rowToEntry artistRows
-    , tracks: mapMaybe rowToEntry trackRows
-    }
-
-rowToEntry :: Json -> Maybe StatsEntry
-rowToEntry json = do
-  obj <- toObject json
-  name <- Object.lookup "name" obj >>= toString
-  count <- map Int.round $ Object.lookup "count" obj >>= toNumber
-  pure $ StatsEntry { name, count }
-
-rowToCount :: Json -> Maybe Int
-rowToCount json = do
-  obj <- toObject json
-  map Int.round $ Object.lookup "count" obj >>= toNumber
 
 -- | Map release MBIDs to their locally known artist and release names.
 getArtistReleasesByMbids
