@@ -2,18 +2,28 @@ module Templates (indexHtml) where
 
 import Prelude
 
-import Data.String.Common (joinWith)
+import Data.Argonaut.Core (stringify)
+import Data.Argonaut.Encode (encodeJson)
+import Data.String.Common (replaceAll)
+import Data.String.Pattern (Pattern(..), Replacement(..))
 
 -- | Render the HTML shell and embed the initial frontend configuration.
+-- User-supplied values are JSON-encoded, then the angle brackets are escaped
+-- as JSON escapes so the payload cannot close the containing script element
+-- or open an HTML comment.
 indexHtml
   :: Boolean -> String -> Array { slug :: String, name :: String } -> String
 indexHtml registrationEnabled userSlug allUsers =
   let
-    encodeUser { slug, name } = "{\"slug\":\"" <> slug <> "\",\"name\":\""
-      <> name
-      <> "\"}"
-    usersJson = "[" <> joinWith "," (map encodeUser allUsers) <> "]"
-    registrationEnabledJson = if registrationEnabled then "true" else "false"
+    flagsJson = escapeForScript
+      ( stringify
+          ( encodeJson
+              { userSlug: userSlug
+              , allUsers: allUsers
+              , registrationEnabled: registrationEnabled
+              }
+          )
+      )
   in
     """<!DOCTYPE html>
 <html lang="en">
@@ -26,28 +36,21 @@ indexHtml registrationEnabled userSlug allUsers =
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Intel+One+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css">
+</head>
 <body>
     <div id="app"></div>
+    <script id="flags" type="application/json">""" <> flagsJson
+      <>
+        """</script>
     <script src="/client.js"></script>
     <script>
-        var userSlug = '""" <> userSlug
-      <>
-        """';
-        var allUsers = """
-      <> usersJson
-      <>
-        """;
-        var registrationEnabled = """
-      <> registrationEnabledJson
-      <>
-        """;
-        var adminToken = window.localStorage.getItem('corpusAdminToken') || '';
+        var flags = JSON.parse(document.getElementById('flags').textContent);
         var app = Elm.Client.init({
             flags: {
-                userSlug: userSlug,
-                allUsers: allUsers,
-                registrationEnabled: registrationEnabled,
-                adminToken: adminToken
+                userSlug: flags.userSlug,
+                allUsers: flags.allUsers,
+                registrationEnabled: flags.registrationEnabled,
+                adminToken: window.localStorage.getItem('corpusAdminToken') || ''
             }
         });
         if (app.ports && app.ports.saveAdminToken) {
@@ -58,3 +61,9 @@ indexHtml registrationEnabled userSlug allUsers =
     </script>
 </body>
 </html>"""
+
+-- | Neutralise the sequences that can terminate an inline script element.
+escapeForScript :: String -> String
+escapeForScript =
+  replaceAll (Pattern ">") (Replacement "\\u003e")
+    <<< replaceAll (Pattern "<") (Replacement "\\u003c")
