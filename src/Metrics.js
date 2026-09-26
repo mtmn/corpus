@@ -4,7 +4,7 @@ import {
 	Gauge,
 	Histogram,
 	collectDefaultMetrics,
-} from "prom-client";
+} from "@prometheus-io/client";
 
 // ---------------------------------------------------------------------------
 // Prometheus metrics — only active when METRICS_ENABLED=true

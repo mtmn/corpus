@@ -195,7 +195,7 @@ Prometheus metrics are disabled by default. Set `METRICS_ENABLED=true` to record
 | `corpus_db_backup_runs_total` | Counter | `user`, `result` | Database backup runs |
 | `corpus_db_backup_last_success_seconds` | Gauge | `user` | Timestamp of last successful backup |
 
-`prom-client` also collects Node.js garbage collection, event loop and memory metrics.
+`@prometheus-io/client` also collects Node.js garbage collection, event loop and memory metrics.
 
 ## Tech stack
 
@@ -215,7 +215,7 @@ Corpus uses JavaScript modules where no PureScript wrapper is available:
 - `S3.js` uses `@aws-sdk/client-s3` for cover caching
 - `Main.js` loads `.env` files and provides request helpers
 - `Config.js` reads and parses the file set by `CORPUS_USERS_FILE`
-- `Metrics.js` uses `prom-client` to record HTTP and background-work metrics
+- `Metrics.js` uses `@prometheus-io/client` to record HTTP and background-work metrics
 
 ## System flow
 
