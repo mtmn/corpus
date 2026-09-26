@@ -27,6 +27,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception as Exception
 import Effect.Ref as Ref
 import Log as Log
+import Metrics as Metrics
 import Node.EventEmitter (on_)
 import Node.HTTP (createServer)
 import Node.HTTP.Server as Server
@@ -79,6 +80,7 @@ main = do
               Exception.message err
             liftEffect $ Exception.throwException err
           Right (appConfig :: AppConfig) -> do
+            liftEffect $ Metrics.initializeMetrics appConfig.metricsEnabled
             Log.info $ "Loaded " <> show (Array.length appConfig.users)
               <> " user(s) from "
               <> configFile

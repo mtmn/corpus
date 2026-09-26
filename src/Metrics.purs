@@ -5,6 +5,7 @@ module Metrics
   , incCoverRequest
   , incDbBackupRun
   , incEnrichmentFetch
+  , initializeMetrics
   , incSyncRuns
   , incSyncScrobbles
   , setDbBackupLastSuccess
@@ -21,6 +22,10 @@ import Effect (Effect)
 import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Exception (error)
 import Node.HTTP.Types (IMServer, IncomingMessage, ServerResponse)
+
+-- | Create the Prometheus registry (or a no-op implementation) based on the
+-- | runtime configuration flag. Call once at startup before recording metrics.
+foreign import initializeMetrics :: Boolean -> Effect Unit
 
 -- | Async: serialises all registered metrics to Prometheus text format.
 foreign import getMetricsImpl

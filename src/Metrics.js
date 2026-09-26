@@ -136,14 +136,15 @@ const makeNoOpMetrics = () => ({
 	setDbBackupLastSuccess: noOp,
 });
 
-const activeMetrics =
-	process.env.METRICS_ENABLED === "true"
-		? makeActiveMetrics()
-		: makeNoOpMetrics();
+let activeMetrics = makeNoOpMetrics();
 
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
+
+export const initializeMetrics = (enabled) => () => {
+	activeMetrics = enabled ? makeActiveMetrics() : makeNoOpMetrics();
+};
 
 export const getMetricsImpl = (onSuccess, onError) => () => {
 	activeMetrics.getMetrics().then(
