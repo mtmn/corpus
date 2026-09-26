@@ -18,11 +18,12 @@ import Data.Array (length, mapMaybe, null)
 import Data.Either (Either(..))
 import Data.Foldable (foldM, for_)
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Set as Set
 import Data.String (Pattern(..), stripPrefix)
 import Data.Time.Duration (Milliseconds(..))
 import Db
   ( Connection
-  , checkExists
+  , getExistingTimestamps
   , getOldestTs
   , upsertScrobble
   , withTransaction
@@ -37,6 +38,8 @@ import Effect.Aff.Retry
   )
 import Effect.Class (liftEffect)
 import Effect.Exception (error, message)
+import Effect.Ref (Ref)
+import Effect.Ref as Ref
 import Fetch (Method(GET), fetch)
 import Fetch.Argonaut.Json (fromJson)
 import Http (apiTimeout, withTimeout)
@@ -68,20 +71,42 @@ type SyncResult =
 
 -- | Process a batch of listens: check existence, insert new ones, track stats.
 -- | When trackMinTs is true, the minimum timestamp is tracked (for cursor-based pagination).
+-- | Existence is checked with one batch query up front instead of one query
+-- | per listen; `seen` also guards against duplicate timestamps within a batch.
 processTracks :: Connection -> Array Listen -> Boolean -> Aff SyncResult
 processTracks conn listens trackMinTs = do
-  foldM step { added: 0, hitCount: 0, minTs: Nothing } listens
+  existing <- getExistingTimestamps conn
+    (mapMaybe (\(Listen l) -> l.listenedAt) listens)
+  acc <- foldM step
+    { added: 0, hitCount: 0, minTs: Nothing, seen: existing }
+    listens
+  pure { added: acc.added, hitCount: acc.hitCount, minTs: acc.minTs }
   where
-  step :: SyncResult -> Listen -> Aff SyncResult
-  step s l@(Listen { listenedAt: Just ts }) = do
-    exists <- checkExists conn ts
-    if exists then do
-      let nextMinTs = if trackMinTs then Just ts else s.minTs
-      pure $ s { added = s.added, hitCount = s.hitCount + 1, minTs = nextMinTs }
-    else do
-      upsertScrobble conn l
-      let nextMinTs = if trackMinTs then Just ts else s.minTs
-      pure $ s { added = s.added + 1, hitCount = s.hitCount, minTs = nextMinTs }
+  step
+    :: { added :: Int
+       , hitCount :: Int
+       , minTs :: Maybe Int
+       , seen :: Set.Set Int
+       }
+    -> Listen
+    -> Aff
+         { added :: Int
+         , hitCount :: Int
+         , minTs :: Maybe Int
+         , seen :: Set.Set Int
+         }
+  step s l@(Listen { listenedAt: Just ts })
+    | Set.member ts s.seen = do
+        let nextMinTs = if trackMinTs then Just ts else s.minTs
+        pure $ s { hitCount = s.hitCount + 1, minTs = nextMinTs }
+    | otherwise = do
+        upsertScrobble conn l
+        let nextMinTs = if trackMinTs then Just ts else s.minTs
+        pure $ s
+          { added = s.added + 1
+          , minTs = nextMinTs
+          , seen = Set.insert ts s.seen
+          }
   step s (Listen { listenedAt: Nothing }) = do
     Log.warn "Skipping scrobble without timestamp"
     pure s
@@ -292,8 +317,17 @@ lbSyncLoop conn username slug writeLock = forever do
   lbSync conn username slug writeLock
 
 -- | Perform one Last.fm synchronization and optional history backfill.
-lfSync :: Connection -> String -> String -> String -> AVar Unit -> Aff Unit
-lfSync conn apiKey lfmUser slug writeLock = do
+-- | backfillDoneRef is set once the backfill finds no older history, so the
+-- | hourly-needless Last.fm probe stops instead of running every minute forever.
+lfSync
+  :: Connection
+  -> String
+  -> String
+  -> String
+  -> AVar Unit
+  -> Ref Boolean
+  -> Aff Unit
+lfSync conn apiKey lfmUser slug writeLock backfillDoneRef = do
   void performLastfmSync
   void performLastfmBackfill
   where
@@ -305,8 +339,9 @@ lfSync conn apiKey lfmUser slug writeLock = do
         Log.error $ "Last.fm sync fetch error: " <> message err
         liftEffect $ Metrics.incSyncRuns slug "lastfm" "error"
       Right { tracks, totalPages } -> do
-        result <- withTransaction conn writeLock (processLastfmTracks tracks)
         let validTracks = mapMaybe lastfmTrackToListen tracks
+        result <- withTransaction conn writeLock
+          (processLastfmTracks validTracks)
         logSyncBatch "Last.fm" 1 result
         let allExist = syncBatchDone validTracks result.hitCount
         if allExist || totalPages <= 1 then do
@@ -332,9 +367,9 @@ lfSync conn apiKey lfmUser slug writeLock = do
             Log.error $ "Last.fm sync fetch error: " <> message err
             pure acc
           Right { tracks } -> do
-            result <- withTransaction conn writeLock
-              (processLastfmTracks tracks)
             let validTracks = mapMaybe lastfmTrackToListen tracks
+            result <- withTransaction conn writeLock
+              (processLastfmTracks validTracks)
             logSyncBatch "Last.fm" page result
             let allExist = syncBatchDone validTracks result.hitCount
             if allExist || null tracks then pure (acc + result.added)
@@ -342,35 +377,45 @@ lfSync conn apiKey lfmUser slug writeLock = do
               (acc + result.added)
 
   performLastfmBackfill = do
-    mOldest <- getOldestTs conn
-    for_ mOldest \oldestTs -> do
-      Log.info $ "Checking for Last.fm history before " <> show oldestTs <>
-        "..."
-      res <- try $ fetchLastfmPage apiKey lfmUser 1 (Just (oldestTs - 1))
-      case res of
-        Left err ->
-          Log.error $ "Last.fm backfill fetch error: " <> message err
-        Right { tracks, totalPages } ->
-          if null tracks then
-            Log.info "No older Last.fm history found."
-          else do
-            Log.info $ "Backfilling " <> show totalPages
-              <> " pages of Last.fm history before "
-              <> show oldestTs
-            result <- withTransaction conn writeLock
-              (processLastfmTracks tracks)
-            logSyncBatch "Last.fm backfill" 1 result
-            total <- paginateLastfmUntilDone 2 totalPages (Just (oldestTs - 1))
-              result.added
-            Log.info $ "Last.fm backfill complete. Added " <> show total <>
-              " older scrobbles."
+    done <- liftEffect $ Ref.read backfillDoneRef
+    unless done do
+      mOldest <- getOldestTs conn
+      for_ mOldest \oldestTs -> do
+        Log.info $ "Checking for Last.fm history before " <> show oldestTs <>
+          "..."
+        res <- try $ fetchLastfmPage apiKey lfmUser 1 (Just (oldestTs - 1))
+        case res of
+          Left err ->
+            Log.error $ "Last.fm backfill fetch error: " <> message err
+          Right { tracks, totalPages } ->
+            if null tracks then do
+              liftEffect $ Ref.write true backfillDoneRef
+              Log.info "No older Last.fm history found."
+            else do
+              Log.info $ "Backfilling " <> show totalPages
+                <> " pages of Last.fm history before "
+                <> show oldestTs
+              let validTracks = mapMaybe lastfmTrackToListen tracks
+              result <- withTransaction conn writeLock
+                (processLastfmTracks validTracks)
+              logSyncBatch "Last.fm backfill" 1 result
+              total <- paginateLastfmUntilDone 2 totalPages
+                (Just (oldestTs - 1))
+                result.added
+              Log.info $ "Last.fm backfill complete. Added " <> show total <>
+                " older scrobbles."
 
-  processLastfmTracks tracks = processTracks conn
-    (mapMaybe lastfmTrackToListen tracks)
-    false
+  processLastfmTracks validTracks = processTracks conn validTracks false
 
 -- | Run Last.fm synchronization every minute.
-lfSyncLoop :: Connection -> String -> String -> String -> AVar Unit -> Aff Unit
-lfSyncLoop conn apiKey lfmUser slug writeLock = forever do
+lfSyncLoop
+  :: Connection
+  -> String
+  -> String
+  -> String
+  -> AVar Unit
+  -> Ref Boolean
+  -> Aff Unit
+lfSyncLoop conn apiKey lfmUser slug writeLock backfillDoneRef = forever do
   delay (Milliseconds 60000.0)
-  lfSync conn apiKey lfmUser slug writeLock
+  lfSync conn apiKey lfmUser slug writeLock backfillDoneRef

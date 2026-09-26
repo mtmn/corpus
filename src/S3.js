@@ -5,6 +5,7 @@ import {
 	GetObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createReadStream, statSync } from "fs";
 
 const makeClient = (cfg) =>
 	new S3Client({
@@ -34,6 +35,24 @@ export const uploadToS3Impl = (cfg, key, body, contentType, cb) => () => {
 		.then(() => cb(null)())
 		.catch((err) => cb(err)());
 };
+
+export const uploadFileToS3Impl =
+	(cfg, key, filePath, contentType, cb) => () => {
+		const client = makeClient(cfg);
+		const { size } = statSync(filePath);
+		const command = new PutObjectCommand({
+			Bucket: cfg.bucket,
+			Key: key,
+			Body: createReadStream(filePath),
+			ContentType: contentType,
+			ContentLength: size,
+		});
+
+		client
+			.send(command)
+			.then(() => cb(null)())
+			.catch((err) => cb(err)());
+	};
 
 export const existsInS3Impl = (cfg, key, cb) => () => {
 	const client = makeClient(cfg);

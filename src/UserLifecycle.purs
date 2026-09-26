@@ -16,7 +16,9 @@ import Data.Tuple (Tuple(..))
 import Db (connect, getOrCreateToken, initDb, initReleaseMetadata)
 import Effect.Aff (Aff, forkAff, killFiber, try)
 import Effect.Aff.AVar as Avar
+import Effect.Class (liftEffect)
 import Effect.Exception as Exception
+import Effect.Ref as Ref
 import Log as Log
 import Metadata (enrichMetadata)
 import Server (UserContext)
@@ -30,6 +32,7 @@ startUser isRegistered { slug, name, config } = do
   initDb conn
   initReleaseMetadata conn
   writeLock <- Avar.new unit
+  backfillDoneRef <- liftEffect $ Ref.new false
 
   mToken <- getOrCreateToken conn slug
   for_ mToken \token ->
@@ -48,6 +51,7 @@ startUser isRegistered { slug, name, config } = do
       , case config.lastfmUser, config.lastfmApiKey of
           Just lfmUser, Just apiKey -> Just $ lfSync conn apiKey lfmUser slug
             writeLock
+            backfillDoneRef
           _, _ -> Nothing
       ] # Array.mapMaybe identity
 
@@ -60,13 +64,14 @@ startUser isRegistered { slug, name, config } = do
           Just lfmUser, Just apiKey -> Just $ lfSyncLoop conn apiKey lfmUser
             slug
             writeLock
+            backfillDoneRef
           _, _ -> Nothing
       ] # Array.mapMaybe identity
 
   enrichMetadataFiber <- forkAff $ enrichMetadata conn config slug
   backupFiber <-
     if config.backupEnabled then Just <$> forkAff
-      ( backupDb conn config.databaseFile (s3ConfigFromUser config)
+      ( backupDb conn writeLock config.databaseFile (s3ConfigFromUser config)
           (Int.toNumber config.backupIntervalHours * 3600000.0)
           slug
       )

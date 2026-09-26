@@ -1,5 +1,6 @@
 module Auth
   ( findUserByToken
+  , findUserByTokenCached
   , parseAuthToken
   , parseBearer
   , sanitizeDate
@@ -12,11 +13,17 @@ import Prelude
 import Data.Argonaut (encodeJson, stringify)
 import Data.Array as Array
 import Data.Either (hush)
+import Data.Foldable (for_)
+import Data.Map (Map)
+import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(..), stripPrefix)
 import Data.String.Regex (Regex, parseFlags, regex, replace)
-import Db (getTokenUser)
+import Db (getTokenUser, sha256)
 import Effect.Aff (Aff)
+import Effect.Class (liftEffect)
+import Effect.Ref (Ref)
+import Effect.Ref as Ref
 import Server (UserContext)
 import Types
   ( Listen(..)
@@ -63,6 +70,28 @@ findUserByToken contexts tokenValue = case Array.uncons contexts of
         pure (Just ctx)
       _ ->
         findUserByToken rest tokenValue
+
+-- | Find the owning user for an API token, consulting a process-local cache
+-- | of hashed-token to slug before falling back to the per-user database scan.
+-- | Cache entries that point at a removed user miss the context lookup and
+-- | fall through to the scan, so no explicit invalidation is needed.
+findUserByTokenCached
+  :: Ref (Map String String)
+  -> Array UserContext
+  -> String
+  -> Aff (Maybe UserContext)
+findUserByTokenCached cacheRef contexts tokenValue = do
+  let hashed = sha256 tokenValue
+  cache <- liftEffect $ Ref.read cacheRef
+  case Map.lookup hashed cache of
+    Just slug
+      | Just ctx <- Array.find (\c -> c.slug == slug) contexts ->
+          pure (Just ctx)
+    _ -> do
+      result <- findUserByToken contexts tokenValue
+      for_ result \ctx ->
+        liftEffect $ Ref.modify_ (Map.insert hashed ctx.slug) cacheRef
+      pure result
 
 -- | Retain only ISO-date characters accepted by the statistics API.
 sanitizeDate :: String -> String

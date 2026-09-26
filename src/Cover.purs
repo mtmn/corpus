@@ -46,6 +46,8 @@ import Web.URL.URLSearchParams as URLSearchParams
 
 foreign import tryStartCacheFillImpl :: String -> Effect Boolean
 foreign import finishCacheFillImpl :: String -> Effect Unit
+foreign import checkCoverMissImpl :: String -> Effect Boolean
+foreign import recordCoverMissImpl :: String -> Effect Unit
 
 -- | Claim a cache-fill job when it is not already running or capacity is free.
 tryStartCacheFill :: String -> Effect Boolean
@@ -54,6 +56,14 @@ tryStartCacheFill = tryStartCacheFillImpl
 -- | Release a previously claimed cache-fill job.
 finishCacheFill :: String -> Effect Unit
 finishCacheFill = finishCacheFillImpl
+
+-- | True when a recent lookup found no cover for this key at any source.
+checkCoverMiss :: String -> Effect Boolean
+checkCoverMiss = checkCoverMissImpl
+
+-- | Remember that no source had a cover for this key.
+recordCoverMiss :: String -> Effect Unit
+recordCoverMiss = recordCoverMissImpl
 
 type Response = ServerResponse
 
@@ -242,7 +252,7 @@ serveCover serveNotFound cfg slug url res = do
       presigned <- try $ getPresignedUrl s3cfg s3Key
       case presigned of
         Right presignedUrl -> do
-          serveRedirect presignedUrl Nothing res
+          serveRedirect presignedUrl (Just "public, max-age=3600") res
           pure true
         Left err -> do
           Log.warn $ "Failed to sign cached cover " <> s3Key <> ": " <>
@@ -253,19 +263,25 @@ serveCover serveNotFound cfg slug url res = do
 
     where
     tryUpstream shouldCache = do
-      found <- try findUrl
-      case found of
-        Left err -> do
-          Log.warn $ "Cover lookup failed for " <> name <> ": " <>
-            Exception.message err
-          pure false
-        Right Nothing ->
-          pure false
-        Right (Just urlStr) -> do
-          serveRedirect urlStr (Just "public, max-age=3600") res
-          liftEffect $ Metrics.incCoverRequest slug name "fetch"
-          when shouldCache $ startCacheFill s3cfg urlStr s3Key
-          pure true
+      missed <- liftEffect $ checkCoverMiss s3Key
+      if missed then do
+        liftEffect $ Metrics.incCoverRequest slug name "known_miss"
+        pure false
+      else do
+        found <- try findUrl
+        case found of
+          Left err -> do
+            Log.warn $ "Cover lookup failed for " <> name <> ": " <>
+              Exception.message err
+            pure false
+          Right Nothing -> do
+            liftEffect $ recordCoverMiss s3Key
+            pure false
+          Right (Just urlStr) -> do
+            serveRedirect urlStr (Just "public, max-age=3600") res
+            liftEffect $ Metrics.incCoverRequest slug name "fetch"
+            when shouldCache $ startCacheFill s3cfg urlStr s3Key
+            pure true
 
   checkS3 canCache s3cfg s3Key
     | not canCache = pure false

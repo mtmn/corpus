@@ -8,6 +8,7 @@ module Db
   , fromString
   , getArtistReleasesByMbids
   , getEmptyGenreMbids
+  , getExistingTimestamps
   , getOldestTs
   , getOrCreateToken
   , getScrobbles
@@ -18,6 +19,7 @@ module Db
   , ping
   , queryAll
   , run
+  , sha256
   , toParam
   , touchGenreCheckedAt
   , upsertReleaseMetadata
@@ -37,6 +39,8 @@ import Data.Generic.Rep (class Generic)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Nullable (Nullable, toMaybe, toNullable)
+import Data.Set (Set)
+import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Data.String.Common (joinWith)
 import Data.Tuple (Tuple(..))
@@ -199,6 +203,23 @@ getOrCreateToken conn slug = do
       run conn "INSERT INTO api_tokens (slug, hashed_token) VALUES (?, ?)"
         [ toParam slug, toParam hashedToken ]
       pure $ Just token
+
+-- | Return the subset of the given timestamps already stored, in one query.
+getExistingTimestamps :: Connection -> Array Int -> Aff (Set Int)
+getExistingTimestamps _ tsList | null tsList = pure Set.empty
+getExistingTimestamps conn tsList = do
+  let placeholders = joinWith "," (replicate (length tsList) "?")
+  rows <- queryAll conn
+    ( "SELECT listened_at FROM scrobbles WHERE listened_at IN (" <> placeholders
+        <> ")"
+    )
+    (map toParam tsList)
+  pure $ Set.fromFoldable $ mapMaybe extractTs rows
+  where
+  extractTs json = do
+    obj <- toObject json
+    n <- Object.lookup "listened_at" obj >>= toNumber
+    pure $ Int.round n
 
 -- | Test whether a scrobble timestamp already exists.
 checkExists :: Connection -> Int -> Aff Boolean

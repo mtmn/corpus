@@ -14,13 +14,14 @@ import Data.Maybe (fromMaybe)
 import Data.String (Pattern(..), split, stripSuffix)
 import Data.Time.Duration (Milliseconds(..))
 import Db (Connection, checkpoint)
-import Effect.Aff (Aff, delay, try)
+import Effect.Aff (Aff, bracket, delay, try)
+import Effect.Aff.AVar (AVar)
+import Effect.Aff.AVar as Avar
 import Effect.Class (liftEffect)
 import Effect.Exception (message)
 import Effect.Now (nowDateTime)
 import Log as Log
 import Metrics as Metrics
-import Node.FS.Aff as FSA
 import S3 as S3
 
 -- | Derive the backup-safe database filename from a path.
@@ -32,26 +33,36 @@ dbBaseName path =
   in
     fromMaybe name (stripSuffix (Pattern ".db") name)
 
-performBackup :: Connection -> String -> S3Config -> String -> Aff Unit
-performBackup conn dbFile s3cfg slug = do
-  checkpoint conn
-  dt <- liftEffect nowDateTime
-  let
-    ts = case formatDateTime "YYYY-MM-DDTHH:mm:ss" dt of
-      Right s -> s
-      Left _ -> "unknown"
-  let key = "backups/" <> dbBaseName dbFile <> "-" <> ts <> ".db"
-  buf <- FSA.readFile dbFile
-  S3.uploadToS3 s3cfg key buf "application/octet-stream"
-  Log.info $ "Backup uploaded to S3: " <> key
-  liftEffect $ Metrics.setDbBackupLastSuccess slug
-  liftEffect $ Metrics.incDbBackupRun slug "success"
+-- The write lock is held for the whole backup so the checkpoint cannot race
+-- a sync commit and the file is not mutated while it streams to S3.
+performBackup
+  :: Connection -> AVar Unit -> String -> S3Config -> String -> Aff Unit
+performBackup conn lock dbFile s3cfg slug =
+  bracket (Avar.take lock) (\_ -> Avar.put unit lock) \_ -> do
+    checkpoint conn
+    dt <- liftEffect nowDateTime
+    let
+      ts = case formatDateTime "YYYY-MM-DDTHH:mm:ss" dt of
+        Right s -> s
+        Left _ -> "unknown"
+    let key = "backups/" <> dbBaseName dbFile <> "-" <> ts <> ".db"
+    S3.uploadFileToS3 s3cfg key dbFile "application/octet-stream"
+    Log.info $ "Backup uploaded to S3: " <> key
+    liftEffect $ Metrics.setDbBackupLastSuccess slug
+    liftEffect $ Metrics.incDbBackupRun slug "success"
 
 -- | Upload a database backup when the configured interval has elapsed.
-backupDb :: Connection -> String -> S3Config -> Number -> String -> Aff Unit
-backupDb conn dbFile s3cfg intervalMs slug = forever do
+backupDb
+  :: Connection
+  -> AVar Unit
+  -> String
+  -> S3Config
+  -> Number
+  -> String
+  -> Aff Unit
+backupDb conn lock dbFile s3cfg intervalMs slug = forever do
   delay (Milliseconds intervalMs)
-  result <- try $ performBackup conn dbFile s3cfg slug
+  result <- try $ performBackup conn lock dbFile s3cfg slug
   case result of
     Left err -> do
       Log.error $ "Backup failed: " <> message err

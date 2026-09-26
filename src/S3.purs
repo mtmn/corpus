@@ -1,4 +1,4 @@
-module S3 (existsInS3, getPresignedUrl, uploadToS3) where
+module S3 (existsInS3, getPresignedUrl, uploadFileToS3, uploadToS3) where
 
 import Prelude
 
@@ -35,6 +35,10 @@ foreign import uploadToS3Impl
   :: Fn5 S3ConfigJs String Buffer String (Nullable Error -> Effect Unit)
        (Effect Unit)
 
+foreign import uploadFileToS3Impl
+  :: Fn5 S3ConfigJs String String String (Nullable Error -> Effect Unit)
+       (Effect Unit)
+
 foreign import existsInS3Impl
   :: Fn3 S3ConfigJs String (Nullable Error -> Boolean -> Effect Unit)
        (Effect Unit)
@@ -47,6 +51,17 @@ foreign import getPresignedUrlImpl
 uploadToS3 :: S3Config -> String -> Buffer -> String -> Aff Unit
 uploadToS3 cfg key body contentType = makeAff \cb -> do
   runFn5 uploadToS3Impl (toJs cfg) key body contentType \err ->
+    case toMaybe err of
+      Just e -> cb (Left e)
+      Nothing -> cb (Right unit)
+  pure nonCanceler
+
+-- | Stream a local file to S3-compatible object storage without loading it
+-- | into memory. ContentLength is set from the file size so the upload works
+-- | with S3-compatible stores that reject chunked encoding.
+uploadFileToS3 :: S3Config -> String -> String -> String -> Aff Unit
+uploadFileToS3 cfg key filePath contentType = makeAff \cb -> do
+  runFn5 uploadFileToS3Impl (toJs cfg) key filePath contentType \err ->
     case toMaybe err of
       Just e -> cb (Left e)
       Nothing -> cb (Right unit)
