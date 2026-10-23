@@ -194,9 +194,12 @@
     dockerImage = pkgs.dockerTools.buildLayeredImage {
       name = "corpus";
       tag = corpus.version;
-      contents = [corpus];
+      contents = [corpus pkgs.cacert pkgs.dockerTools.fakeNss];
       extraCommands = "mkdir -p tmp";
-      config.Cmd = ["${corpus}/bin/corpus-server"];
+      config = {
+        Cmd = ["${corpus}/bin/corpus-server"];
+        Env = ["SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"];
+      };
     };
   in {
     devShells.${system}.default = pkgs.mkShell {
@@ -210,6 +213,8 @@
         pkgs.pnpm
         pkgs.statix
         pkgs.git-cliff
+        pkgs.flyctl
+        pkgs.skopeo
       ];
     };
 

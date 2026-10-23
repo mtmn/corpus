@@ -1,3 +1,9 @@
+set lazy
+
+# Tagged with the Nix store hash, so every distinct image gets its own tag
+fly_tag := `git describe --tags --always` + "-" + `basename "$(nix eval --raw .#container.outPath)" | cut -c1-8`
+fly_image := "registry.fly.io/" + env("FLY_APP") + ":" + fly_tag
+
 help:
     @just --list
 
@@ -86,3 +92,15 @@ oci command:
         echo "Unknown container command: {{ command }}"; \
         exit 1; \
     fi
+
+# Build the container image and push it to the Fly.io registry
+fly-push: (oci "build")
+    flyctl auth docker
+    skopeo copy --dest-precompute-digests docker-archive:result docker://{{ fly_image }}
+
+# Deploy the container image for the current source to Fly.io
+fly-deploy:
+    flyctl deploy --ha=false --image {{ fly_image }}
+
+# Push and deploy to Fly.io
+fly: fly-push fly-deploy
