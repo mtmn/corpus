@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [3.4.1] - 2026-10-23
+
+[compare](https://github.com/mtmn/corpus/compare/v3.4.0..v3.4.1)
+
+### Bug Fixes
+
+- Point changelog to github ([`7eced4e`](https://github.com/mtmn/corpus/commit/7eced4e67d970840c516086fe265c0aa22933724))
 
 ### Documentation
 
