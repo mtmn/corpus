@@ -1,7 +1,5 @@
 # corpus
 
-[![builds.sr.ht status](https://builds.sr.ht/~mtmn/corpus.svg)](https://builds.sr.ht/~mtmn/corpus?)
-
 Corpus is a self-hosted listening history dashboard for ListenBrainz and Last.fm. It stores scrobbles in DuckDB, adds release metadata, caches cover art and serves an Elm web interface.
 
 ## Documentation
