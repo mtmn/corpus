@@ -5,7 +5,7 @@ body = """
 ## [{{ version | trim_start_matches(pat="v") }}]{% if previous.version %} - {{ timestamp | date(format="%Y-%m-%d") }}{% endif %}
 
 {% if previous.version -%}
-[compare](https://git.sr.ht/~mtmn/corpus/log/{{ previous.version }}..{{ version }})
+[compare](https://github.com/mtmn/corpus/compare/{{ previous.version }}..{{ version }})
 
 {% endif -%}
 {% else -%}
@@ -19,7 +19,7 @@ body = """
 - {% if commit.breaking %}**breaking:** {% endif -%}
 {% if commit.scope %}**{{ commit.scope }}:** {% endif -%}
 {{ commit.message | upper_first }} \
-([`{{ commit.id | truncate(length=7, end="") }}`](https://git.sr.ht/~mtmn/corpus/commit/{{ commit.id }}))
+([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/mtmn/corpus/commit/{{ commit.id }}))
 {% endfor %}
 {% endfor %}
 """
